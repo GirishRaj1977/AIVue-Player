@@ -266,7 +266,7 @@ local user_opts = {
     playlist_next_mbtn_right_command = "script-binding select/select-playlist; script-message-to modernz osc-hide",
 
     -- fullscreen button mouse actions
-    fullscreen_mbtn_left_command = "print-text electron-fullscreen-toggle",
+    fullscreen_mbtn_left_command = "cycle fullscreen",
     fullscreen_mbtn_right_command = "cycle window-maximized",
 
     -- info button mouse actions
@@ -2560,11 +2560,7 @@ end
 local function command_callback(command)
     if command ~= "" and command ~= "ignore" then
         return function ()
-            if command == "print-text electron-fullscreen-toggle" then
-                mp.commandv("script-message", "electron-fullscreen-toggle")
-            else
-                mp.command(command)
-            end
+            mp.command(command)
         end
     end
 end
@@ -2635,8 +2631,14 @@ local function osc_init()
 
     -- Maximize: 🗖 /🗗
     ne = new_element("maximize", "button")
-    ne.content = (state.maximized or state.fullscreen) and icons.window.unmaximize or icons.window.maximize
-    ne.eventresponder["mbtn_left_up"] = function () mp.commandv("cycle", (state.fullscreen and "fullscreen" or "window-maximized")) end
+    ne.content = function () return (state.maximized or state.fullscreen) and icons.window.unmaximize or icons.window.maximize end
+    ne.eventresponder["mbtn_left_up"] = function ()
+        if state.fullscreen then
+            mp.commandv("cycle", "fullscreen")
+        else
+            mp.commandv("cycle", "window-maximized")
+        end
+    end
 
     -- Window Title
     ne = new_element("windowtitle", "button")
@@ -4128,18 +4130,6 @@ end)
 
 mp.register_script_message("electron-mouse-leave", function()
     mouse_leave()
-end)
-
-mp.register_script_message("electron-fullscreen-state", function(is_full)
-    state.fullscreen = (is_full == "true")
-    state.marginsREQ = true
-    adjust_subtitles(state.osc_visible)
-    request_init_resize()
-end)
-
-mp.register_script_message("electron-maximize-state", function(is_max)
-    state.maximized = (is_max == "true")
-    request_init_resize()
 end)
 
 mp.register_script_message("update-epg", function(encoded_json)

@@ -188,6 +188,7 @@ let channelMappings = {};
 let savedReminders = JSON.parse(localStorage.getItem('iptv_reminders') || '[]');
 
 function saveReminders() {
+    console.log('[REMINDER] Saving reminders to localStorage');
     localStorage.setItem('iptv_reminders', JSON.stringify(savedReminders));
 }
 
@@ -205,6 +206,7 @@ function toggleReminder(channelTitle, progTitle, startTimeStr, stopTimeStr) {
 }
 
 function showToast(message) {
+    console.log(`[UI] showToast: "${message}"`);
     let toast = document.getElementById('toast-notification');
     if (!toast) {
         toast = document.createElement('div');
@@ -250,6 +252,7 @@ function sortAlphaNum(a, b) {
 }
 
 async function autoMapChannels(showSummaryAlert = false) {
+    console.log('[MAPPING] Starting auto-map process...');
     let mappedCount = 0;
     const epgLookup = {};
     if (epgChannelsData) {
@@ -284,15 +287,18 @@ async function autoMapChannels(showSummaryAlert = false) {
     }
 
     if (mappedCount > 0) {
+        console.log(`[MAPPING] Auto-mapped ${mappedCount} new channels.`);
         updateState();
         renderMappingColumns();
         if (showSummaryAlert) alert(`Successfully auto-mapped ${mappedCount} channels!`);
     } else {
+        console.log('[MAPPING] No new channels could be auto-mapped.');
         if (showSummaryAlert) alert("No new channels could be auto-mapped.");
     }
 }
 
 function updateNavLockState() {
+    console.log('[UI] Updating navigation lock state.');
     const hasPlaylists = savedPlaylists.length > 0;
     const btnLiveTv = document.getElementById('btn-live-tv');
     const btnEpg = document.getElementById('btn-epg');
@@ -325,6 +331,7 @@ function updateNavLockState() {
 }
 
 function renderMappingColumns() {
+    console.log('[MAPPING] Rendering mapping columns.');
     const channelListEl = document.getElementById('mapping-channel-list');
     const epgListEl = document.getElementById('mapping-epg-list');
     const mappedListEl = document.getElementById('mapping-mapped-list');
@@ -539,6 +546,7 @@ function renderMappingColumns() {
 
 async function renderSettings() {
     const settingsView = document.getElementById('settings-view');
+    console.log('[UI] Rendering settings view.');
     if (!settingsView) return;
 
     savedEpgs.sort((a, b) => sortAlphaNum(getEpgName(a), getEpgName(b)));
@@ -652,6 +660,7 @@ async function renderSettings() {
 
     document.getElementById('settings-add-epg-btn').addEventListener('click', () => {
         const val = document.getElementById('settings-new-epg').value.trim();
+        console.log('[SETTINGS] Add EPG button clicked. Value:', val);
         if (val && !savedEpgs.includes(val)) {
             savedEpgs.push(val);
             window.iptvAPI.addExternalEpg(val);
@@ -662,6 +671,7 @@ async function renderSettings() {
     document.querySelectorAll('.refresh-epg-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             const idx = parseInt(e.target.getAttribute('data-idx'));
+            console.log('[SETTINGS] Refresh EPG button clicked for index:', idx);
             const epgSource = savedEpgs[idx];
             
             const originalText = e.target.textContent;
@@ -669,10 +679,12 @@ async function renderSettings() {
             e.target.disabled = true;
 
             // 1. Wipe local file cache and Node.js memory cache for this URL
+            console.log('[API] Calling clearCache for', epgSource);
             await window.iptvAPI.clearCache(epgSource);
 
             // 2. Fetch fresh EPG list (this triggers python to download since cache is gone)
             let allEpgSources = savedEpgs.slice();
+            console.log('[API] Calling getEpgChannels for all sources.');
             savedPlaylists.forEach(p => {
                 if (p.epg && p.epg !== 'Not Configured' && !allEpgSources.includes(p.epg)) {
                     allEpgSources.push(p.epg);
@@ -695,6 +707,7 @@ async function renderSettings() {
     document.querySelectorAll('.remove-epg-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             const idx = parseInt(e.target.getAttribute('data-idx'));
+            console.log('[SETTINGS] Remove EPG button clicked for index:', idx);
             const epgSource = savedEpgs[idx];
             
             // Check if this EPG is still actively used by an imported playlist
@@ -703,6 +716,7 @@ async function renderSettings() {
             // Only wipe the physical cache files if it's completely unused
             if (epgSource && !isUsedByPlaylist) {
                 await window.iptvAPI.clearCache(epgSource);
+                console.log('[API] Cache cleared for unused EPG:', epgSource);
             }
             
             savedEpgs.splice(idx, 1);
@@ -714,6 +728,7 @@ async function renderSettings() {
     document.querySelectorAll('.remove-reminder-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const idx = parseInt(e.currentTarget.getAttribute('data-idx'));
+            console.log('[SETTINGS] Remove reminder button clicked for index:', idx);
             const reminderToRemove = futureReminders[idx];
             const realIdx = savedReminders.findIndex(r => r.channelTitle === reminderToRemove.channelTitle && r.progTitle === reminderToRemove.progTitle && r.startTime === reminderToRemove.startTime);
             if (realIdx > -1) {
@@ -728,6 +743,7 @@ async function renderSettings() {
     const allEpgSources = savedPlaylists.map(p => p.epg).filter(e => e && e !== 'Not Configured');
     savedEpgs.forEach(e => { if (!allEpgSources.includes(e)) allEpgSources.push(e); });
     const combinedEpgs = allEpgSources.join(',');
+    console.log('[API] Calling getEpgChannels for settings view.');
     
     epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
 
@@ -747,6 +763,7 @@ async function renderSettings() {
 
     document.getElementById('mapping-auto-map-btn').addEventListener('click', async (e) => {
         const btn = e.target;
+        console.log('[SETTINGS] Auto-map button clicked.');
         const originalText = btn.textContent;
         btn.textContent = '⏳';
         btn.disabled = true;
@@ -758,6 +775,7 @@ async function renderSettings() {
     });
 
     document.getElementById('settings-factory-reset-btn').addEventListener('click', async () => {
+        console.log('[SETTINGS] Factory reset button clicked.');
         if (confirm("Are you sure you want to completely wipe all data? The application will restart.")) {
             await window.iptvAPI.factoryReset();
         }
@@ -766,6 +784,7 @@ async function renderSettings() {
     // Mapping Filter Events
     document.getElementById('mapping-playlist-filter').addEventListener('change', (e) => {
         mappingSelectedPlaylist = e.target.value;
+        console.log('[MAPPING] Playlist filter changed to:', mappingSelectedPlaylist);
         mappingSelectedChannel = null;
         renderMappingColumns();
     });
@@ -776,6 +795,7 @@ async function renderSettings() {
 }
 
 async function applySingleMapping(channelTitle, epgId) {
+    console.log('[MAPPING] Applying single mapping:', { channelTitle, epgId });
     if (epgId) channelMappings[channelTitle] = epgId;
     else delete channelMappings[channelTitle];
     
@@ -803,6 +823,7 @@ async function applySingleMapping(channelTitle, epgId) {
 
 // Populates the group filter dropdown dynamically based on the current playlist
 function updateGroupFilterOptions() {
+    console.log('[UI] Updating group filter options.');
     const groupFilter = document.getElementById('group-filter');
     const filterSelect = document.getElementById('playlist-filter');
     
@@ -836,6 +857,7 @@ function updateGroupFilterOptions() {
 }
 
 function updateState() {
+    console.log('[STATE] Updating global state and re-rendering.');
     allChannels = [];
     
     savedPlaylists.sort((a, b) => sortAlphaNum(a.name, b.name));
@@ -920,7 +942,9 @@ function updateState() {
 }
 
 async function addPlaylist(source, customName, epgSource, editIndex = -1) {
+    console.log('[PLAYLIST] Adding/editing playlist:', { source, customName, epgSource, editIndex });
     try {
+        console.log('[API] Calling parseM3u for new playlist.');
         const result = await window.iptvAPI.parseM3u(source);
         if (result && result.error) {
             alert(`Failed to import.\nReason: ${result.error}`);
@@ -957,6 +981,7 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                 allEpgSources.push(finalEpgSource);
             }
             if (allEpgSources.length > 0) {
+                console.log('[API] Calling updateEpg after adding playlist.');
                 const combinedEpgs = allEpgSources.join(',');
                 await window.iptvAPI.updateEpg(combinedEpgs, null, true);
                 epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
@@ -974,6 +999,7 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                     }
                 });
                 
+                console.log('[API] Calling getEpg to populate new playlist data.');
                 const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch));
                 targetPlaylist.channels.forEach(ch => {
                     const mappedId = channelMappings[ch.title];
@@ -990,6 +1016,7 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
 }
 
 function openManageChannelsModal(playlistIndex) {
+    console.log('[UI] Opening manage channels modal for playlist index:', playlistIndex);
     const playlist = savedPlaylists[playlistIndex];
     if (!playlist || !playlist.channels) return;
 
@@ -1177,6 +1204,7 @@ function openManageChannelsModal(playlistIndex) {
 }
 
 function renderPlaylists() {
+    console.log('[UI] Rendering playlist cards.');
     const container = document.getElementById('playlist-cards');
     if (!container) return;
     container.innerHTML = '';
@@ -1258,6 +1286,7 @@ function renderPlaylists() {
     document.querySelectorAll('.edit-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const idx = parseInt(e.target.getAttribute('data-index'), 10);
+            console.log('[EVENT] Edit playlist button clicked for index:', idx);
             const playlist = savedPlaylists[idx];
             editingPlaylistIndex = idx;
             
@@ -1292,6 +1321,7 @@ function renderPlaylists() {
     document.querySelectorAll('.manage-channels-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const idx = parseInt(e.target.getAttribute('data-index'), 10);
+            console.log('[EVENT] Manage channels button clicked for index:', idx);
             openManageChannelsModal(idx);
         });
     });
@@ -1299,6 +1329,7 @@ function renderPlaylists() {
     document.querySelectorAll('.refresh-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             const idx = e.target.getAttribute('data-index');
+            console.log('[EVENT] Refresh playlist button clicked for index:', idx);
             const source = savedPlaylists[idx].source;
             const epgSource = savedPlaylists[idx].epg !== 'Not Configured' ? savedPlaylists[idx].epg : '';
             
@@ -1311,6 +1342,7 @@ function renderPlaylists() {
 
             if (loadingMsg) loadingMsg.style.display = 'block';
             try {
+                console.log('[API] Calling parseM3u for refresh.');
                 const result = await window.iptvAPI.parseM3u(source, combinedEpgs, mappingsJson, true);
                 if (result && !result.error && (Array.isArray(result) || result.channels)) {
                     const channels = Array.isArray(result) ? result : result.channels;
@@ -1322,6 +1354,7 @@ function renderPlaylists() {
                     
                     // Trigger EPG update and auto-map
                     if (allEpgSources.length > 0) {
+                        console.log('[API] Calling updateEpg after refresh.');
                         await window.iptvAPI.updateEpg(combinedEpgs, null, true);
                         epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
                         await autoMapChannels(false);
@@ -1339,6 +1372,7 @@ function renderPlaylists() {
     document.querySelectorAll('.delete-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const idx = e.target.getAttribute('data-index');
+            console.log('[EVENT] Delete playlist button clicked for index:', idx);
             const playlist = savedPlaylists[idx];
             if (playlist && playlist.source) window.iptvAPI.clearCache(playlist.source);
             savedPlaylists.splice(idx, 1);
@@ -1349,6 +1383,7 @@ function renderPlaylists() {
     document.querySelectorAll('.enable-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const idx = e.target.getAttribute('data-index');
+            console.log('[EVENT] Enable playlist button clicked for index:', idx);
             savedPlaylists[idx].disabled = false;
             updateState();
         });
@@ -1357,6 +1392,7 @@ function renderPlaylists() {
     document.querySelectorAll('.disable-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const idx = e.target.getAttribute('data-index');
+            console.log('[EVENT] Disable playlist button clicked for index:', idx);
             savedPlaylists[idx].disabled = true;
             updateState();
         });
@@ -1364,6 +1400,7 @@ function renderPlaylists() {
 }
 
 function renderChannels() {
+    console.log('[UI] Rendering channel list.');
     const filterSelect = document.getElementById('playlist-filter');
     const filterVal = filterSelect ? filterSelect.value : 'all';
 
@@ -1411,6 +1448,7 @@ function renderChannels() {
 
 const filterElement = document.getElementById('playlist-filter');
 if (filterElement) {
+    console.log('[INIT] Attaching change listener to playlist filter.');
     filterElement.addEventListener('change', () => {
         updateGroupFilterOptions();
         renderChannels();
@@ -1422,6 +1460,7 @@ if (filterElement) {
 
 // Use Event Delegation to handle clicks for all channels efficiently
 channelList.addEventListener('click', (e) => {
+    console.log('[EVENT] Click detected on channel list.');
     const favBtn = e.target.closest('.fav-btn');
     if (favBtn) {
         const index = favBtn.getAttribute('data-fav-index');
@@ -1445,6 +1484,7 @@ let currentImportMode = 'file';
 
 if (btnModeFile) {
     btnModeFile.addEventListener('click', () => {
+        console.log('[EVENT] Import mode changed to file.');
         currentImportMode = 'file';
         btnModeFile.classList.add('active');
         btnModeUrl.classList.remove('active');
@@ -1455,6 +1495,7 @@ if (btnModeFile) {
 
 if (btnModeUrl) {
     btnModeUrl.addEventListener('click', () => {
+        console.log('[EVENT] Import mode changed to url.');
         currentImportMode = 'url';
         btnModeUrl.classList.add('active');
         btnModeFile.classList.remove('active');
@@ -1465,12 +1506,14 @@ if (btnModeUrl) {
 
 if (importBrowseBtn) {
     importBrowseBtn.addEventListener('click', async () => {
+        console.log('[API] Calling openFileDialog.');
         const filePaths = await window.iptvAPI.openFileDialog();
         if (filePaths && filePaths.length > 0) {
             importFilePath.value = filePaths[0];
             const source = filePaths[0];
             if (importEpgInput && !importEpgInput.value.trim()) {
                 try {
+                    console.log('[API] Calling parseM3u to pre-fill EPG from file.');
                     const result = await window.iptvAPI.parseM3u(source);
                     if (result && !result.error && result.epg_url && !importEpgInput.value.trim()) {
                         importEpgInput.value = result.epg_url;
@@ -1486,6 +1529,7 @@ if (importUrlPath) {
         const source = importUrlPath.value.trim();
         if (source && importEpgInput && !importEpgInput.value.trim()) {
             try {
+                console.log('[API] Calling parseM3u to pre-fill EPG from URL.');
                 const result = await window.iptvAPI.parseM3u(source);
                 if (result && !result.error && result.epg_url && !importEpgInput.value.trim()) {
                     importEpgInput.value = result.epg_url;
@@ -1497,6 +1541,7 @@ if (importUrlPath) {
 
 if (importSubmitBtn) {
     importSubmitBtn.addEventListener('click', async () => {
+        console.log('[EVENT] Import/Update submit button clicked.');
         const name = importNameInput.value.trim();
         if (!name) return alert("Playlist name is mandatory.");
 
@@ -1527,6 +1572,7 @@ if (importSubmitBtn) {
 
 if (importCancelBtn) {
     importCancelBtn.addEventListener('click', () => {
+        console.log('[EVENT] Import cancel button clicked.');
         editingPlaylistIndex = -1;
         if (importSubmitBtn) importSubmitBtn.textContent = 'Import';
         if (importCancelBtn) importCancelBtn.style.display = 'none';
@@ -1539,6 +1585,7 @@ if (importCancelBtn) {
 
 if (clearBtn) {
     clearBtn.addEventListener('click', async () => {
+        console.log('[EVENT] Clear all playlists button clicked.');
         savedPlaylists.forEach(p => {
             if (p.source) window.iptvAPI.clearCache(p.source);
         });
@@ -1553,6 +1600,7 @@ if (clearBtn) {
 
 // Listen for live hardware stats from MPV (Resolution display removed)
 window.iptvAPI.onMpvPropChange((name, value) => {
+    console.log('[API RECV] onMpvPropChange', { name, value });
     // Can be used for other MPV properties in the future
     if (name === 'playback-time' && window.pendingEpgUpdate) {
         const encoded = encodeURIComponent(JSON.stringify(window.pendingEpgUpdate));
@@ -1594,6 +1642,7 @@ function getCurrentProgram(programmes) {
 }
 
 function renderEpg(programmes) {
+    console.log('[UI] Rendering sidebar EPG.');
     const container = document.getElementById('epg-container');
     if (!container) return;
     
@@ -1663,6 +1712,7 @@ function renderEpg(programmes) {
 
 async function renderFullEpg() {
     const epgView = document.getElementById('epg-view');
+    console.log('[UI] Rendering full EPG view.');
     if (!epgView) return;
 
     if (allChannels.length === 0) {
@@ -1752,6 +1802,7 @@ async function renderFullEpg() {
             if (ch.tvg_name) epgIdsToFetch.add(ch.tvg_name);
         }
     });
+    console.log('[API] Calling getEpg for full guide view.');
     const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch));
 
     let html = `
@@ -1913,6 +1964,7 @@ async function renderFullEpg() {
 }
 
 async function embedStream(channel) {
+    console.log('[STREAM] Embedding stream for channel:', channel.title);
     streamActive = true;
     
     localStorage.setItem('lastPlayedChannelUrl', channel.url);
@@ -1956,6 +2008,7 @@ async function embedStream(channel) {
     
     const mappedId = channelMappings[channel.title];
     const epgIds = [mappedId, channel.tvg_id, channel.tvg_name].filter(Boolean);
+    console.log('[API] Calling getEpg for current stream.');
     const epgData = await window.iptvAPI.getEpg(epgIds);
     
     let programmes = [];
@@ -2000,6 +2053,7 @@ async function embedStream(channel) {
     if (playerOverlay) playerOverlay.innerHTML = `<span style="color: #bb86fc;">Loading...</span><br><span style="font-size: 0.6em; color: #888;">${safeTitle}</span>`;
 
     const rect = playerContainer.getBoundingClientRect();
+    console.log('[API] Calling playMpvEmbedded.');
     window.iptvAPI.playMpvEmbedded({
         url: channel.url,
         title: channel.title,
@@ -2013,6 +2067,7 @@ async function embedStream(channel) {
 }
 
 window.iptvAPI.onMpvExit((code) => {
+    console.log('[API RECV] onMpvExit with code:', code);
     if (streamActive) {
         streamActive = false;
         const playerOverlay = document.getElementById('player-overlay');
@@ -2025,6 +2080,7 @@ window.iptvAPI.onMpvExit((code) => {
 // Use ResizeObserver to track exact pixel coordinates perfectly
 const resizeObserver = new ResizeObserver(() => {
     if (streamActive) {
+        console.log('[EVENT] ResizeObserver triggered, updating MPV bounds.');
         const rect = playerContainer.getBoundingClientRect();
         window.iptvAPI.updateMpvBounds({
             x: Math.round(rect.x),
@@ -2040,7 +2096,6 @@ resizeObserver.observe(playerContainer);
 let lastMouseMove = 0;
 playerContainer.addEventListener('mousemove', (e) => {
     const now = Date.now();
-    if (now - lastMouseMove > 30) { // Throttle updates to ~33fps to prevent IPC socket flooding
         lastMouseMove = now;
         const rect = playerContainer.getBoundingClientRect();
             const dpr = window.devicePixelRatio || 1;
@@ -2048,18 +2103,21 @@ playerContainer.addEventListener('mousemove', (e) => {
             const y = Math.round((e.clientY - rect.top) * dpr);
         window.iptvAPI.sendMpvCommand(`script-message-to modernz electron-mouse-move ${x} ${y}`);
     }
-});
+);
 
 playerContainer.addEventListener('mouseleave', () => {
+    console.log('[EVENT] playerContainer mouseleave');
     window.iptvAPI.sendMpvCommand(`script-message-to modernz electron-mouse-leave`);
 });
 
 let lastClickTime = 0;
 playerContainer.addEventListener('mousedown', (e) => {
+    console.log('[EVENT] playerContainer mousedown, button:', e.button);
     const now = Date.now();
     if (now - lastClickTime < 400) {
-        window.iptvAPI.sendMpvCommand('cycle fullscreen');
-        lastClickTime = 0; // Reset to prevent triple-click triggering again
+        window.iptvAPI.sendMpvCommand('toggle-maximize');
+        lastClickTime = 0; // Reset
+        return; // Prevent passing the second click of the double-click to MPV
     } else {
         lastClickTime = now;
     }
@@ -2068,17 +2126,20 @@ playerContainer.addEventListener('mousedown', (e) => {
 });
 
 playerContainer.addEventListener('mouseup', (e) => {
+    console.log('[EVENT] playerContainer mouseup, button:', e.button);
     const btn = e.button === 0 ? 'mbtn_left' : (e.button === 2 ? 'mbtn_right' : 'mbtn_mid');
     window.iptvAPI.sendMpvCommand(`script-message-to modernz electron-mouse-click ${btn} up`);
 });
 
 playerContainer.addEventListener('wheel', (e) => {
+    console.log('[EVENT] playerContainer wheel, deltaY:', e.deltaY);
     const btn = e.deltaY < 0 ? 'wheel_up' : 'wheel_down';
     window.iptvAPI.sendMpvCommand(`script-message-to modernz electron-mouse-click ${btn} press`);
 });
 
 // Wire up the Exit button to gracefully tear down the app
 document.getElementById('btn-exit').addEventListener('click', () => {
+    console.log('[EVENT] Exit button clicked.');
     window.close();
 });
 
@@ -2088,6 +2149,7 @@ const sidebar = document.getElementById('sidebar');
 const mainView = document.getElementById('main-view');
 
 function switchTab(tabId, clickedBtn) {
+    console.log('[UI] Switching tab to:', tabId);
     // Update active styling
     navButtons.forEach(btn => btn.classList.remove('active'));
     if (clickedBtn) clickedBtn.classList.add('active');
@@ -2190,6 +2252,7 @@ if (navBarNode) {
 
 // Hide the sidebar & title when the app goes fullscreen so the video takes up 100% of the monitor
 window.iptvAPI.onFullscreenChange((isFullscreen) => {
+    console.log('[API RECV] onFullscreenChange, isFullscreen:', isFullscreen);
     const navBar = document.getElementById('nav-bar');
     const sidebar = document.getElementById('sidebar');
     const channelDetails = document.getElementById('channel-details');
@@ -2225,11 +2288,13 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
 });
 
 async function backgroundAutoUpdate() {
+    console.log('[BACKGROUND] Starting background auto-update process.');
     let hasUpdates = false;
     let epgSourcesToUpdate = new Set(savedEpgs);
     
     for (let i = 0; i < savedPlaylists.length; i++) {
         const p = savedPlaylists[i];
+        console.log(`[BACKGROUND] Checking playlist for update: ${p.name}`);
         if (p.disabled || !p.source || (!p.source.startsWith('http') && !p.source.startsWith('https'))) continue;
 
         const result = await window.iptvAPI.parseM3u(p.source);
@@ -2257,11 +2322,13 @@ async function backgroundAutoUpdate() {
     }
     
     if (hasUpdates) updateState();
+    console.log('[BACKGROUND] Playlist updates found:', hasUpdates);
     if (epgSourcesToUpdate.size > 0) {
         const combinedEpgs = Array.from(epgSourcesToUpdate).join(',');
         await window.iptvAPI.updateEpg(combinedEpgs, null, true);
         epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
         await autoMapChannels(false);
+        console.log('[BACKGROUND] EPG data updated.');
         
         const epgIdsToFetch = new Set();
         savedPlaylists.forEach(p => {
@@ -2295,6 +2362,7 @@ async function backgroundAutoUpdate() {
 
 // Load saved channels on startup
 window.addEventListener('DOMContentLoaded', async () => {
+    console.log('[LIFECYCLE] DOMContentLoaded event fired.');
     // Increase side menu (nav-bar) width by 25%
     const navBar = document.getElementById('nav-bar');
     if (navBar) {
@@ -2380,9 +2448,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    console.log('[API] Calling getMappings on startup.');
     channelMappings = await window.iptvAPI.getMappings();
+    console.log('[API] Calling getExternalEpgs on startup.');
     savedEpgs = await window.iptvAPI.getExternalEpgs();
-
+    console.log('[API] Calling loadChannels on startup.');
     const data = await window.iptvAPI.loadChannels();
     if (data && data.length > 0) {
         // Migration for old raw channel list format
@@ -2399,6 +2469,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             savedPlaylists = data;
         }
         
+        console.log('[STARTUP] Pre-loading EPG data for playlist stats.');
         // Pre-load EPG data into memory for playlist stats on startup
         const epgIdsToFetch = new Set();
         savedPlaylists.forEach(p => {
@@ -2453,6 +2524,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Check for Reminders periodically
     setInterval(() => {
+        // console.log('[REMINDER] Checking for upcoming reminders.'); // Too noisy
         const now = new Date();
         let changed = false;
         savedReminders.forEach(r => {
@@ -2461,6 +2533,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             const diffMs = startTime - now;
             // Notify if starting within 1 minute or already started (up to 1 hr past)
             if (diffMs <= 1 * 60 * 1000 && diffMs > -60 * 60 * 1000) {
+                console.log('[REMINDER] Firing notification for program:', r.progTitle);
                 const notif = new Notification("Programme Reminder", {
                     body: `${r.progTitle} is starting soon on ${r.channelTitle}. Click to watch.`,
                     icon: 'assets/logo.png'
@@ -2483,6 +2556,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     document.addEventListener('click', (e) => {
         const btn = e.target.closest('.reminder-btn-sidebar');
+        if (btn) console.log('[EVENT] Sidebar reminder button clicked.');
         if (btn) {
             e.stopPropagation();
             const progTitle = btn.getAttribute('data-prog');
