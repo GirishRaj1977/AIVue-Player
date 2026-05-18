@@ -267,7 +267,7 @@ local user_opts = {
 
     -- fullscreen button mouse actions
     fullscreen_mbtn_left_command = "cycle fullscreen",
-    fullscreen_mbtn_right_command = "cycle window-maximized",
+    fullscreen_mbtn_right_command = "script-message electron-maximize-toggle",
 
     -- info button mouse actions
     info_mbtn_left_command = "script-binding stats/display-page-1-toggle",

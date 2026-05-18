@@ -82,6 +82,7 @@ let mpvProcess;
 let currentDOMBounds = null;
 let ipcClient = null;
 let isMpvReady = false;
+let ipcConnectionAttempts = 0;
 let reconnectTimer = null;
 const ipcPath = process.platform === 'win32' ? '\\\\.\\pipe\\mpv-electron-ipc' : '/tmp/mpv-electron-ipc';
 
@@ -287,7 +288,7 @@ function initMpv() {
         `--config-dir=${binDir}`, 
         `--load-scripts=no`,    
         `--script=${luaScript}`,
-        `--script-opts=modernz-osc_on_start=yes,modernz-bottomhover=no`,
+        `--script-opts=modernz-osc_on_start=yes,modernz-bottomhover=no,modernz-window_controls=no`,
         `--input-cursor=yes`,   
         `--input-vo-keyboard=yes`, 
         `--osc=no`,             
@@ -318,6 +319,7 @@ function initMpv() {
 
     mpvProcess.on('exit', () => {
         console.log(`[MPV] Process exited with code: ${mpvProcess ? mpvProcess.exitCode : 'unknown'}`);
+        ipcConnectionAttempts = 0;
         if (reconnectTimer) clearTimeout(reconnectTimer);
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('mpv-exit', mpvProcess ? mpvProcess.exitCode : 0);
@@ -336,15 +338,24 @@ function initMpv() {
 
 function connectIPC() {
     if (!mpvProcess || mpvProcess.exitCode !== null) return;
-    console.log('[MPV IPC] Attempting to connect to', ipcPath);
+    
+    if (ipcConnectionAttempts === 0) {
+        console.log('[MPV IPC] Attempting to connect to', ipcPath);
+    }
+    ipcConnectionAttempts++;
+
     if (ipcClient) {
         ipcClient.removeAllListeners();
         ipcClient.destroy();
     }
     ipcClient = net.createConnection(ipcPath);
+    let localConnected = false;
     
     ipcClient.on('connect', () => {
+        localConnected = true;
+        ipcConnectionAttempts = 0;
         console.log('[MPV IPC] Connection established. Sending initial commands.');
+        ipcClient.write(JSON.stringify({ command: ["keybind", "f", "script-message electron-fullscreen-toggle"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["observe_property", 1, "fullscreen"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["observe_property", 8, "window-maximized"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["observe_property", 2, "width"] }) + '\n');
@@ -365,18 +376,25 @@ function connectIPC() {
             try {
                 const msg = JSON.parse(line);
                 if (msg.event === 'property-change') {
-                    if (msg.name === 'fullscreen' && mainWindow && !mainWindow.isDestroyed()) {
-                        if (mainWindow.isFullScreen() !== msg.data) {
-                            mainWindow.setFullScreen(msg.data);
+                    if (msg.name === 'fullscreen') {
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            if (mainWindow.isFullScreen() !== msg.data) {
+                                mainWindow.setFullScreen(msg.data);
+                            }
                         }
-                    } else if (msg.name === 'window-maximized' && mainWindow && !mainWindow.isDestroyed()) {
-                        if (msg.data && !mainWindow.isMaximized()) {
-                            mainWindow.maximize();
-                        } else if (!msg.data && mainWindow.isMaximized()) {
-                            mainWindow.unmaximize();
-                        }
+                    } else if (msg.name === 'window-maximized') {
+                        // Ignore embedded MPV's native maximize state to prevent force-unmaximizing Electron
                     } else if (mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.webContents.send('mpv-prop-change', msg.name, msg.data);
+                    }
+                }
+                if (msg.event === 'client-message' && msg.args && mainWindow && !mainWindow.isDestroyed()) {
+                    if (msg.args[0] === 'electron-fullscreen-toggle') {
+                        mainWindow.setFullScreen(!mainWindow.isFullScreen());
+                    }
+                    if (msg.args[0] === 'electron-maximize-toggle') {
+                        if (mainWindow.isMaximized()) mainWindow.unmaximize();
+                        else mainWindow.maximize();
                     }
                 }
             } catch (e) {}
@@ -384,11 +402,15 @@ function connectIPC() {
     });
 
     ipcClient.on('error', (err) => {
-        console.error('[MPV IPC] Connection error:', err.message);
+        if (err.code !== 'ENOENT' && err.code !== 'ECONNREFUSED') {
+            console.error('[MPV IPC] Connection error:', err.message);
+        }
     });
 
     ipcClient.on('close', () => {
-        console.log('[MPV IPC] Connection closed.');
+        if (localConnected) {
+            console.log('[MPV IPC] Connection closed.');
+        }
         if (mpvProcess && mpvProcess.exitCode === null) {
             if (reconnectTimer) clearTimeout(reconnectTimer);
             reconnectTimer = setTimeout(connectIPC, 500);
@@ -439,6 +461,10 @@ ipcMain.on('update-mpv-bounds', (event, bounds) => {
 // Send control commands directly to the MPV process
 ipcMain.on('mpv-command', (event, command) => {
     console.log('[IPC RECV] mpv-command', command);
+    if (command === 'cycle fullscreen' && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setFullScreen(!mainWindow.isFullScreen());
+        return;
+    }
     if (command === 'toggle-maximize' && mainWindow && !mainWindow.isDestroyed()) {
         if (mainWindow.isMaximized()) {
             mainWindow.unmaximize();
@@ -456,9 +482,8 @@ ipcMain.on('mpv-command', (event, command) => {
 
 ipcMain.on('toggle-fullscreen', () => {
     console.log('[IPC RECV] toggle-fullscreen');
-    const win = BrowserWindow.getFocusedWindow();
-    if (win) {
-        win.setFullScreen(!win.isFullScreen());
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setFullScreen(!mainWindow.isFullScreen());
     }
 });
 
