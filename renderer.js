@@ -157,6 +157,29 @@ aeroStyles.textContent = `
         flex: 1 !important;
         overflow-y: auto !important;
     }
+
+    /* Custom Fullscreen button overlay */
+    #fullscreen-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(0,0,0,0.5);
+        color: white;
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 5px;
+        width: 32px;
+        height: 32px;
+        font-size: 20px;
+        line-height: 32px;
+        text-align: center;
+        cursor: pointer;
+        z-index: 100;
+        transition: opacity 0.3s;
+        opacity: 0;
+    }
+    #player-container:hover #fullscreen-btn {
+        opacity: 1;
+    }
 `;
 document.head.appendChild(aeroStyles);
 
@@ -1966,6 +1989,9 @@ async function renderFullEpg() {
 async function embedStream(channel) {
     console.log('[STREAM] Embedding stream for channel:', channel.title);
     streamActive = true;
+
+    const fsBtn = document.getElementById('fullscreen-btn');
+    if (fsBtn) fsBtn.style.display = 'block';
     
     localStorage.setItem('lastPlayedChannelUrl', channel.url);
     
@@ -2074,6 +2100,9 @@ window.iptvAPI.onMpvExit((code) => {
         if (playerOverlay) {
             playerOverlay.innerHTML = `<span style="color: #cf6679;">Loading failed or playback stopped.</span>`;
         }
+
+        const fsBtn = document.getElementById('fullscreen-btn');
+        if (fsBtn) fsBtn.style.display = 'none';
     }
 });
 
@@ -2115,7 +2144,7 @@ playerContainer.addEventListener('mousedown', (e) => {
     console.log('[EVENT] playerContainer mousedown, button:', e.button);
     const now = Date.now();
     if (now - lastClickTime < 400) {
-        window.iptvAPI.sendMpvCommand('toggle-maximize');
+        window.iptvAPI.toggleFullscreen();
         lastClickTime = 0; // Reset
         return; // Prevent passing the second click of the double-click to MPV
     } else {
@@ -2363,6 +2392,18 @@ async function backgroundAutoUpdate() {
 // Load saved channels on startup
 window.addEventListener('DOMContentLoaded', async () => {
     console.log('[LIFECYCLE] DOMContentLoaded event fired.');
+
+    // Add custom fullscreen button to the player container
+    const fsBtn = document.createElement('button');
+    fsBtn.id = 'fullscreen-btn';
+    fsBtn.innerHTML = '⛶';
+    fsBtn.title = 'Toggle Fullscreen';
+    fsBtn.style.display = 'none'; // Initially hidden
+    playerContainer.appendChild(fsBtn);
+    fsBtn.addEventListener('click', () => {
+        window.iptvAPI.toggleFullscreen();
+    });
+
     // Increase side menu (nav-bar) width by 25%
     const navBar = document.getElementById('nav-bar');
     if (navBar) {

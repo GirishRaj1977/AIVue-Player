@@ -82,6 +82,8 @@ let mpvProcess;
 let currentDOMBounds = null;
 let ipcClient = null;
 let isMpvReady = false;
+let reconnectTimer = null;
+const ipcPath = process.platform === 'win32' ? '\\\\.\\pipe\\mpv-electron-ipc' : '/tmp/mpv-electron-ipc';
 
 // Fix for "Network service crashed" on Windows (disables Chromium sandbox and HW acceleration)
 app.commandLine.appendSwitch('no-sandbox');
@@ -214,8 +216,12 @@ function syncPlayerWindow() {
 
 app.whenReady().then(() => {
     createWindow();
+    initMpv();
     app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+        if (BrowserWindow.getAllWindows().length === 0) {
+            createWindow();
+            initMpv();
+        }
     });
 });
 
@@ -223,57 +229,34 @@ app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
 });
 
-// MPV Embedding Logic
-ipcMain.on('play-mpv-embedded', (event, data) => {
-    console.log('[IPC RECV] play-mpv-embedded', data);
-    currentDOMBounds = data.bounds;
-    isMpvReady = false;
+function initMpv() {
+    if (mpvProcess && mpvProcess.exitCode === null) return;
 
-    if (mpvProcess && playerWindow && !playerWindow.isDestroyed() && ipcClient && !ipcClient.destroyed) {
-        console.log('[MPV] Reusing existing MPV process for new stream');
-        ipcClient.write(JSON.stringify({ command: ["loadfile", data.url] }) + '\n');
-        syncPlayerWindow();
-        return;
-    }
-
-    // Reset old streams
-    if (ipcClient) {
-        ipcClient.removeAllListeners();
-        ipcClient.destroy();
-        ipcClient = null;
-    }
-    if (mpvProcess) mpvProcess.kill();
-    if (playerWindow && !playerWindow.isDestroyed()) playerWindow.destroy();
-
-    console.log('[MPV] Creating new player window');
+    console.log('[MPV] Creating player window');
     const contentBounds = mainWindow.getContentBounds();
 
     // Create an invisible borderless child window exactly over the HTML div
     playerWindow = new BrowserWindow({
         parent: mainWindow,
-        x: -10000, // Spawn offscreen so HTML loading text is visible
+        x: -10000, 
         y: -10000,
         width: 10,
         height: 10,
-        opacity: 0, // Spawn completely transparent so HTML loading text remains visible
+        opacity: 0, 
         frame: false,
         hasShadow: false,
-        thickFrame: false, // Disables the invisible 8px Windows resize border
-        resizable: false,  // Prevents the OS from adding grips that cause WID bleeding
+        thickFrame: false, 
+        resizable: false,  
         backgroundColor: '#000000',
-        skipTaskbar: true, // Don't show a second icon on the taskbar
+        skipTaskbar: true, 
     });
     
-    // Let the mouse fall through to the mainWindow DOM so we can track it precisely
     playerWindow.setIgnoreMouseEvents(true);
-
-    // Force focus onto the child window so MPV can intercept native mouse/keyboard events
     playerWindow.focus();
 
     const handle = playerWindow.getNativeWindowHandle();
     let wid;
     
-    // Convert OS Window Handle to standard Integer required by libmpv
     if (process.platform === 'win32' || process.platform === 'linux') {
         wid = handle.readUInt32LE(0);
     } else {
@@ -281,25 +264,19 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
         return;
     }
 
-    // Use process.resourcesPath when packaged, otherwise use __dirname
     const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
     const mpvPath = process.platform === 'win32' ? path.join(baseDir, 'bin', 'mpv.exe') : 'mpv';
     const binDir = path.join(baseDir, 'bin');
     const luaScript = path.join(binDir, 'scripts', 'modernz.lua');
-    const ipcPath = process.platform === 'win32' ? '\\\\.\\pipe\\mpv-electron-ipc' : '/tmp/mpv-electron-ipc';
     
-    // Capture exact instances so the exit event doesn't accidentally destroy a newly switched channel
-    const currentWindow = playerWindow;
-
-    // Inject MPV into the child window using --wid
     const mpvArgs = [
         `--wid=${wid}`,
         `--input-ipc-server=${ipcPath}`,
         `--no-border`,
-        `--force-window=yes`,   // Force rendering even for audio-only streams so the OSC is accessible
-        `--hwdec=auto-safe`,    // Enable Hardware decoding
-        `--profile=fast`,       // Speed up initial playback rendering
-        `--cache=yes`,          // Force enable network caching
+        `--force-window=yes`,   
+        `--hwdec=auto-safe`,    
+        `--profile=fast`,       
+        `--cache=yes`,          
         `--cache-secs=30`,
         `--cache-pause=yes`,
         `--demuxer-max-bytes=100M`,
@@ -307,156 +284,143 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
         `--audio-buffer=1.0`,
         `--ao=wasapi`,
         `--video-sync=audio`,
-        `--config-dir=${binDir}`, // Force MPV to read mpv.conf from the bin folder
-        `--load-scripts=no`,    // Disable auto-loading to prevent duplicate UI instances
-        `--script=${luaScript}`,// Explicitly load the exact Lua script path
-        `--script-opts=modernz-osc_on_start=yes,modernz-bottomhover=no,modernz-window_controls=no,modernz-window_top_bar=no`, // Force hover and disable top window controls
-        `--input-cursor=yes`,   // Ensure MPV accepts mouse inputs over the window
-        `--input-vo-keyboard=yes`, // Ensure MPV accepts keyboard shortcuts
-        `--osc=no`,             // Disable default MPV UI so custom Lua scripts can take over
+        `--config-dir=${binDir}`, 
+        `--load-scripts=no`,    
+        `--script=${luaScript}`,
+        `--script-opts=modernz-osc_on_start=yes,modernz-bottomhover=no`,
+        `--input-cursor=yes`,   
+        `--input-vo-keyboard=yes`, 
+        `--osc=no`,             
         `--demuxer-lavf-analyzeduration=20`,
         `--demuxer-lavf-probescore=100`,
         `--keep-open=yes`,
         `--prefetch-playlist=yes`,
         `--stream-lavf-o=reconnect=1`,
         `--stream-lavf-o=reconnect_streamed=1`,
-        data.url
+        `--idle=yes` 
     ];
-    console.log('[MPV] Spawning MPV process with args:', mpvArgs);
-    mpvProcess = spawn(mpvPath, [
-        `--wid=${wid}`,
-        `--input-ipc-server=${ipcPath}`,
-        `--no-border`,
-        `--force-window=yes`,   // Force rendering even for audio-only streams so the OSC is accessible
-        `--hwdec=auto-safe`,    // Enable Hardware decoding
-        `--profile=fast`,       // Speed up initial playback rendering
-        `--cache=yes`,          // Force enable network caching
-        `--cache-secs=30`,
-        `--cache-pause=yes`,
-        `--demuxer-max-bytes=100M`,
-        `--demuxer-max-back-bytes=50M`,
-        `--audio-buffer=1.0`,
-        `--ao=wasapi`,
-        `--video-sync=audio`,
-        `--config-dir=${binDir}`, // Force MPV to read mpv.conf from the bin folder
-        `--load-scripts=no`,    // Disable auto-loading to prevent duplicate UI instances
-        `--script=${luaScript}`,// Explicitly load the exact Lua script path
-        `--script-opts=modernz-osc_on_start=yes,modernz-bottomhover=no,modernz-window_controls=no,modernz-window_top_bar=no`, // Force hover and disable top window controls
-        `--input-cursor=yes`,   // Ensure MPV accepts mouse inputs over the window
-        `--input-vo-keyboard=yes`, // Ensure MPV accepts keyboard shortcuts
-        `--osc=no`,             // Disable default MPV UI so custom Lua scripts can take over
-        `--demuxer-lavf-analyzeduration=20`,
-        `--demuxer-lavf-probescore=100`,
-        `--keep-open=yes`,
-        `--prefetch-playlist=yes`,
-        `--stream-lavf-o=reconnect=1`,
-        `--stream-lavf-o=reconnect_streamed=1`,
-        data.url
-    ], { windowsHide: true });
+    console.log('[MPV] Spawning MPV process ONCE with args:', mpvArgs);
+    mpvProcess = spawn(mpvPath, mpvArgs, { windowsHide: true });
 
-    const currentMpv = mpvProcess;
+    setTimeout(connectIPC, 1000); 
 
-    // Establish a secure IPC connection to pass commands directly into MPV
-    function connectIPC() {
-        if (currentMpv !== mpvProcess || currentMpv.exitCode !== null) return;
-        console.log('[MPV IPC] Attempting to connect to', ipcPath);
-        if (ipcClient) ipcClient.destroy();
-        ipcClient = net.createConnection(ipcPath);
-        
-        ipcClient.on('connect', () => {
-            console.log('[MPV IPC] Connection established. Sending initial commands.');
-            ipcClient.write(JSON.stringify({ command: ["observe_property", 1, "fullscreen"] }) + '\n');
-            ipcClient.write(JSON.stringify({ command: ["observe_property", 8, "window-maximized"] }) + '\n');
-            ipcClient.write(JSON.stringify({ command: ["observe_property", 2, "width"] }) + '\n');
-            ipcClient.write(JSON.stringify({ command: ["observe_property", 3, "height"] }) + '\n');
-            ipcClient.write(JSON.stringify({ command: ["observe_property", 4, "container-fps"] }) + '\n');
-            ipcClient.write(JSON.stringify({ command: ["observe_property", 5, "video-bitrate"] }) + '\n');
-            ipcClient.write(JSON.stringify({ command: ["observe_property", 6, "playback-time"] }) + '\n');
-            ipcClient.write(JSON.stringify({ command: ["observe_property", 7, "core-idle"] }) + '\n');
-        });
-        
-        let buffer = '';
-        ipcClient.on('data', (chunk) => {
-            buffer += chunk.toString();
-            const lines = buffer.split('\n');
-            buffer = lines.pop(); // Keep incomplete lines in the buffer
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                try {
-                    console.log('[MPV IPC RECV]', line);
-                    const msg = JSON.parse(line);
-                    if (msg.event === 'property-change') {
-                        if (msg.name === 'fullscreen' && mainWindow && !mainWindow.isDestroyed()) {
-                            if (mainWindow.isFullScreen() !== msg.data) {
-                                mainWindow.setFullScreen(msg.data);
-                            }
-                        } else if (msg.name === 'window-maximized' && mainWindow && !mainWindow.isDestroyed()) {
-                            if (msg.data && !mainWindow.isMaximized()) {
-                                mainWindow.maximize();
-                            } else if (!msg.data && mainWindow.isMaximized()) {
-                                mainWindow.unmaximize();
-                            }
-                        } else if (mainWindow && !mainWindow.isDestroyed()) {
-                            mainWindow.webContents.send('mpv-prop-change', msg.name, msg.data);
-                        }
-                    }
-                } catch (e) {}
-            }
-        });
-
-        ipcClient.on('error', (err) => {
-            console.error('[MPV IPC] Connection error:', err.message);
-            // 'close' event will automatically follow and handle the retry safely
-        });
-
-        ipcClient.on('close', () => {
-            console.log('[MPV IPC] Connection closed.');
-            // Re-establish connection if it drops while MPV is still running
-            if (currentMpv === mpvProcess && currentMpv.exitCode === null) {
-                if (reconnectTimer) clearTimeout(reconnectTimer);
-                reconnectTimer = setTimeout(connectIPC, 500);
-            }
-        });
-    }
-    connectIPC();
-
-    // Log MPV output to the terminal for debugging
-    currentMpv.stdout.on('data', (data) => {
+    mpvProcess.stdout.on('data', (data) => {
         const str = data.toString().trim();
-        console.log(`[MPV] ${str}`);
-
-        // Wait until MPV outputs the time progress line (AV: / V: / A:) to signify playback has truly started
+        // Log can be uncommented for debugging
+        // console.log(`[MPV] ${str}`);
         if (!isMpvReady && /(?:AV|V|A):\s+\d{2}:\d{2}:\d{2}/.test(str)) {
             console.log('[MPV] Playback confirmed ready.');
             isMpvReady = true;
-            syncPlayerWindow(); // Instantly snap the video over the "Loading..." text
+            syncPlayerWindow(); 
         }
     });
-    currentMpv.stderr.on('data', (data) => console.error(`[MPV ERR] ${data.toString().trim()}`));
+    mpvProcess.stderr.on('data', (data) => console.error(`[MPV ERR] ${data.toString().trim()}`));
 
-    // Close the invisible child window gracefully if MPV quits
-    currentMpv.on('exit', () => {
-        // Only send the exit event to the frontend if this is still the active stream.
-        console.log(`[MPV] Process exited with code: ${currentMpv.exitCode}`);
+    mpvProcess.on('exit', () => {
+        console.log(`[MPV] Process exited with code: ${mpvProcess ? mpvProcess.exitCode : 'unknown'}`);
         if (reconnectTimer) clearTimeout(reconnectTimer);
-        // If the user clicked a new channel, mpvProcess points to the new process, so we shouldn't overwrite the "Loading..." message.
-        if (mainWindow && !mainWindow.isDestroyed() && mpvProcess === currentMpv) {
-            mainWindow.webContents.send('mpv-exit', currentMpv.exitCode);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('mpv-exit', mpvProcess ? mpvProcess.exitCode : 0);
         }
         if (ipcClient) {
+            ipcClient.removeAllListeners();
             ipcClient.destroy();
             ipcClient = null;
         }
-        if (currentWindow && !currentWindow.isDestroyed()) {
-            currentWindow.destroy();
+        if (playerWindow && !playerWindow.isDestroyed()) {
+            playerWindow.destroy();
         }
-        if (playerWindow === currentWindow) {
-            playerWindow = null;
-        }
-        if (mpvProcess === currentMpv) {
-            mpvProcess = null;
+        mpvProcess = null;
+    });
+}
+
+function connectIPC() {
+    if (!mpvProcess || mpvProcess.exitCode !== null) return;
+    console.log('[MPV IPC] Attempting to connect to', ipcPath);
+    if (ipcClient) {
+        ipcClient.removeAllListeners();
+        ipcClient.destroy();
+    }
+    ipcClient = net.createConnection(ipcPath);
+    
+    ipcClient.on('connect', () => {
+        console.log('[MPV IPC] Connection established. Sending initial commands.');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 1, "fullscreen"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 8, "window-maximized"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 2, "width"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 3, "height"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 4, "container-fps"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 5, "video-bitrate"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 6, "playback-time"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 7, "core-idle"] }) + '\n');
+    });
+    
+    let buffer = '';
+    ipcClient.on('data', (chunk) => {
+        buffer += chunk.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // Keep incomplete lines in the buffer
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+                const msg = JSON.parse(line);
+                if (msg.event === 'property-change') {
+                    if (msg.name === 'fullscreen' && mainWindow && !mainWindow.isDestroyed()) {
+                        if (mainWindow.isFullScreen() !== msg.data) {
+                            mainWindow.setFullScreen(msg.data);
+                        }
+                    } else if (msg.name === 'window-maximized' && mainWindow && !mainWindow.isDestroyed()) {
+                        if (msg.data && !mainWindow.isMaximized()) {
+                            mainWindow.maximize();
+                        } else if (!msg.data && mainWindow.isMaximized()) {
+                            mainWindow.unmaximize();
+                        }
+                    } else if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('mpv-prop-change', msg.name, msg.data);
+                    }
+                }
+            } catch (e) {}
         }
     });
+
+    ipcClient.on('error', (err) => {
+        console.error('[MPV IPC] Connection error:', err.message);
+    });
+
+    ipcClient.on('close', () => {
+        console.log('[MPV IPC] Connection closed.');
+        if (mpvProcess && mpvProcess.exitCode === null) {
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(connectIPC, 500);
+        }
+    });
+}
+
+// MPV Embedding Logic
+ipcMain.on('play-mpv-embedded', (event, data) => {
+    console.log('[IPC RECV] play-mpv-embedded', data);
+    currentDOMBounds = data.bounds;
+    isMpvReady = false;
+
+    if (!mpvProcess || mpvProcess.exitCode !== null) {
+        initMpv();
+    }
+
+    if (playerWindow && !playerWindow.isDestroyed()) {
+        playerWindow.focus();
+    }
+
+    syncPlayerWindow();
+
+    if (ipcClient && !ipcClient.destroyed) {
+        ipcClient.write(JSON.stringify({ command: ["loadfile", data.url, "replace"] }) + '\n');
+    } else {
+        setTimeout(() => {
+            if (ipcClient && !ipcClient.destroyed) {
+                ipcClient.write(JSON.stringify({ command: ["loadfile", data.url, "replace"] }) + '\n');
+            }
+        }, 1500);
+    }
 });
 
 // Keep window perfectly locked if the user triggers a DOM resize inside the app
@@ -475,10 +439,6 @@ ipcMain.on('update-mpv-bounds', (event, bounds) => {
 // Send control commands directly to the MPV process
 ipcMain.on('mpv-command', (event, command) => {
     console.log('[IPC RECV] mpv-command', command);
-    if (command === 'toggle-fullscreen' && mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.setFullScreen(!mainWindow.isFullScreen());
-        return;
-    }
     if (command === 'toggle-maximize' && mainWindow && !mainWindow.isDestroyed()) {
         if (mainWindow.isMaximized()) {
             mainWindow.unmaximize();
@@ -491,6 +451,14 @@ ipcMain.on('mpv-command', (event, command) => {
         const args = command.split(' ');
         console.log('[MPV IPC SEND]', JSON.stringify({ command: args }));
         ipcClient.write(JSON.stringify({ command: args }) + '\n');
+    }
+});
+
+ipcMain.on('toggle-fullscreen', () => {
+    console.log('[IPC RECV] toggle-fullscreen');
+    const win = BrowserWindow.getFocusedWindow();
+    if (win) {
+        win.setFullScreen(!win.isFullScreen());
     }
 });
 

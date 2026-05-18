@@ -2047,13 +2047,13 @@ layouts["modern"] = function ()
 
     -- Fullscreen/Info/Pin/Screenshot/Loop/Speed
     local end_x = osc_geo.w - 37
-    if fullscreen_button then
-        lo = add_layout("tog_fullscreen")
-        lo.geometry = {x = end_x, y = refY - 35, an = 5, w = 24, h = 24}
-        lo.style = osc_styles.control_3
-        lo.visible = (osc_param.playresx >= 250 - outeroffset)
-        end_x = end_x - 45
-    end
+    -- if fullscreen_button then
+    --     lo = add_layout("tog_fullscreen")
+    --     lo.geometry = {x = end_x, y = refY - 35, an = 5, w = 24, h = 24}
+    --     lo.style = osc_styles.control_3
+    --     lo.visible = (osc_param.playresx >= 250 - outeroffset)
+    --     end_x = end_x - 45
+    -- end
 
     if info_button then
         lo = add_layout("tog_info")
@@ -2304,13 +2304,13 @@ layouts["modern-compact"] = function ()
     -- Right side buttons
     local end_x = osc_geo.w - 50
 
-    elements.tog_fullscreen.visible = user_opts.fullscreen_button and osc_geo.w >= 100
-    if elements.tog_fullscreen.visible then
-        lo = add_layout("tog_fullscreen")
-        lo.geometry = {x = end_x, y = refY - 35, an = 5, w = 24, h = 24}
-        lo.style = osc_styles.control_2
-        end_x = end_x - 55
-    end
+    -- elements.tog_fullscreen.visible = user_opts.fullscreen_button and osc_geo.w >= 100
+    -- if elements.tog_fullscreen.visible then
+    --     lo = add_layout("tog_fullscreen")
+    --     lo.geometry = {x = end_x, y = refY - 35, an = 5, w = 24, h = 24}
+    --     lo.style = osc_styles.control_2
+    --     end_x = end_x - 55
+    -- end
 
     elements.tog_ontop.visible = user_opts.ontop_button and osc_geo.w >= 250
     if elements.tog_ontop.visible then
@@ -2470,12 +2470,12 @@ layouts["modern-image"] = function ()
     end
 
     -- Fullscreen/Info/Pin/Download
-    if fullscreen_button then
-        lo = add_layout("tog_fullscreen")
-        lo.geometry = {x = osc_geo.w - 37, y = refY - 30, an = 5, w = 24, h = 24}
-        lo.style = osc_styles.control_3
-        lo.visible = (osc_param.playresx >= 250)
-    end
+    -- if fullscreen_button then
+    --     lo = add_layout("tog_fullscreen")
+    --     lo.geometry = {x = osc_geo.w - 37, y = refY - 30, an = 5, w = 24, h = 24}
+    --     lo.style = osc_styles.control_3
+    --     lo.visible = (osc_param.playresx >= 250)
+    -- end
 
     if info_button then
         lo = add_layout("tog_info")
@@ -2634,7 +2634,7 @@ local function osc_init()
     ne.content = function () return (state.maximized or state.fullscreen) and icons.window.unmaximize or icons.window.maximize end
     ne.eventresponder["mbtn_left_up"] = function ()
         if state.fullscreen then
-            mp.commandv("cycle", "fullscreen")
+            mp.set_property("fullscreen", "no")
         else
             mp.commandv("cycle", "window-maximized")
         end
@@ -2971,12 +2971,12 @@ local function osc_init()
 
     visible_min_width = 550 - outeroffset
     --tog_fullscreen
-    ne = new_element("tog_fullscreen", "button")
-    ne.content = function () return state.fullscreen and icons.fullscreen_exit or icons.fullscreen end
-    ne.visible = (osc_param.playresx >= visible_min_width)
-    ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.fullscreen_mbtn_left_command)
-    ne.eventresponder["mbtn_right_up"] = command_callback(user_opts.fullscreen_mbtn_right_command)
-    visible_min_width = visible_min_width + (user_opts.fullscreen_button and 100 or 0)
+    -- ne = new_element("tog_fullscreen", "button")
+    -- ne.content = function () return state.fullscreen and icons.fullscreen_exit or icons.fullscreen end
+    -- ne.visible = (osc_param.playresx >= visible_min_width)
+    -- ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.fullscreen_mbtn_left_command)
+    -- ne.eventresponder["mbtn_right_up"] = command_callback(user_opts.fullscreen_mbtn_right_command)
+    -- visible_min_width = visible_min_width + (user_opts.fullscreen_button and 100 or 0)
 
     --tog_info
     ne = new_element("tog_info", "button")

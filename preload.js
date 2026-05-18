@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     playMpvEmbedded: (data) => ipcRenderer.send('play-mpv-embedded', data),
     updateMpvBounds: (bounds) => ipcRenderer.send('update-mpv-bounds', bounds),
     sendMpvCommand: (cmd) => ipcRenderer.send('mpv-command', cmd),
+    toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),
     onFullscreenChange: (callback) => ipcRenderer.on('fullscreen-state', (_event, isFull) => callback(isFull)),
     onMpvPropChange: (callback) => ipcRenderer.on('mpv-prop-change', (_event, name, val) => callback(name, val)),
     onMpvExit: (callback) => ipcRenderer.on('mpv-exit', (_event, code) => callback(code)),
