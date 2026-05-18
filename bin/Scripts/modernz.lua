@@ -1926,6 +1926,7 @@ layouts["modern"] = function ()
         lo = add_layout("playlist_prev")
         lo.geometry = {x = refX - (60 + (chapter_skip_buttons and 60 or 0)) - offset, y = refY - 35, an = 5, w = 30, h = 24}
         lo.style = osc_styles.control_2
+        lo.layer = 52
     end
 
     if chapter_skip_buttons then
@@ -1960,6 +1961,7 @@ layouts["modern"] = function ()
         lo = add_layout("playlist_next")
         lo.geometry = {x = refX + (60 + (chapter_skip_buttons and 60 or 0)) + offset, y = refY - 35, an = 5, w = 30, h = 24}
         lo.style = osc_styles.control_2
+        lo.layer = 52
     end
 
     local start_x = 37
@@ -2245,14 +2247,14 @@ layouts["modern-compact"] = function ()
     local pl_count = mp.get_property_number("playlist-count", 0)
     local pl_pos = mp.get_property_number("playlist-pos", 0) + 1
 
-    if pl_count > 1 and pl_pos > 1 and user_opts.track_nextprev_buttons and osc_geo.w >= 500 then
+    if user_opts.track_nextprev_buttons and osc_geo.w >= 500 then
         lo = add_layout("playlist_prev")
         lo.geometry = {x = start_x, y = refY - 35, an = 5, w = 24, h = 24}
         lo.style = osc_styles.control_2
         start_x = start_x + 55
     end
 
-    if pl_count > 1 and pl_pos < pl_count and user_opts.track_nextprev_buttons and osc_geo.w >= 350 then
+    if user_opts.track_nextprev_buttons and osc_geo.w >= 350 then
         lo = add_layout("playlist_next")
         lo.geometry = {x = start_x, y = refY - 35, an = 5, w = 24, h = 24}
         lo.style = osc_styles.control_2
@@ -2710,18 +2712,18 @@ local function osc_init()
     -- playlist buttons
     -- prev
     ne = new_element("playlist_prev", "button")
-    ne.visible = (osc_param.playresx >= (state.is_image and 300 or 500) - nojumpoffset - noskipoffset*(nojumpoffset == 0 and 1 or 10))
+    ne.visible = true
     ne.content = icons.previous
-    ne.enabled = (pl_pos > 1) or (loop ~= "no") or contains(user_opts.buttons_always_active, "playlist_prev")
+    ne.enabled = true
     ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.playlist_prev_mbtn_left_command)
     ne.eventresponder["mbtn_right_up"] = command_callback(user_opts.playlist_prev_mbtn_right_command)
     ne.eventresponder["shift+mbtn_left_down"] = command_callback(user_opts.playlist_prev_mbtn_mid_command)
 
     --next
     ne = new_element("playlist_next", "button")
-    ne.visible = (osc_param.playresx >= (state.is_image and 300 or 500) - nojumpoffset - noskipoffset*(nojumpoffset == 0 and 1 or 10))
+    ne.visible = true
     ne.content = icons.next
-    ne.enabled = (have_pl and (pl_pos < pl_count)) or (loop ~= "no") or contains(user_opts.buttons_always_active, "playlist_next")
+    ne.enabled = true
     ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.playlist_next_mbtn_left_command)
     ne.eventresponder["mbtn_right_up"] = command_callback(user_opts.playlist_next_mbtn_right_command)
     ne.eventresponder["shift+mbtn_left_down"] = command_callback(user_opts.playlist_next_mbtn_mid_command)
