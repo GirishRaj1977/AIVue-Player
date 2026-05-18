@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     onFullscreenChange: (callback) => ipcRenderer.on('fullscreen-state', (_event, isFull) => callback(isFull)),
     onMpvPropChange: (callback) => ipcRenderer.on('mpv-prop-change', (_event, name, val) => callback(name, val)),
     onMpvExit: (callback) => ipcRenderer.on('mpv-exit', (_event, code) => callback(code)),
+    onPreviousChannel: (callback) => ipcRenderer.on('mpv-previous-channel', callback),
+    onNextChannel: (callback) => ipcRenderer.on('mpv-next-channel', callback),
     saveChannels: (channels) => ipcRenderer.invoke('save-channels', channels),
     loadChannels: () => ipcRenderer.invoke('load-channels'),
     openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),

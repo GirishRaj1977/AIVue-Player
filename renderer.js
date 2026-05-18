@@ -203,6 +203,7 @@ const importCancelBtn = document.getElementById('import-cancel-btn');
 let savedPlaylists = [];
 let allChannels = [];
 let streamActive = false;
+let currentPlayingChannelIndex = -1;
 let editingPlaylistIndex = -1;
 
 let savedEpgs = [];
@@ -1989,6 +1990,8 @@ async function renderFullEpg() {
 async function embedStream(channel) {
     console.log('[STREAM] Embedding stream for channel:', channel.title);
     streamActive = true;
+    
+    currentPlayingChannelIndex = allChannels.findIndex(c => c.url === channel.url && c.title === channel.title);
 
     const fsBtn = document.getElementById('fullscreen-btn');
     if (fsBtn) fsBtn.style.display = 'block';
@@ -2103,6 +2106,18 @@ window.iptvAPI.onMpvExit((code) => {
 
         const fsBtn = document.getElementById('fullscreen-btn');
         if (fsBtn) fsBtn.style.display = 'none';
+    }
+});
+
+window.iptvAPI.onPreviousChannel(() => {
+    if (currentPlayingChannelIndex > 0) {
+        embedStream(allChannels[currentPlayingChannelIndex - 1]);
+    }
+});
+
+window.iptvAPI.onNextChannel(() => {
+    if (currentPlayingChannelIndex >= 0 && currentPlayingChannelIndex < allChannels.length - 1) {
+        embedStream(allChannels[currentPlayingChannelIndex + 1]);
     }
 });
 
@@ -2561,6 +2576,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     setTimeout(() => {
         backgroundAutoUpdate();
         setInterval(backgroundAutoUpdate, 4 * 60 * 60 * 1000); // Check every 4 hours, actual web fetch limited to 24h by python cache
+        const lastUpdate = localStorage.getItem('lastBackgroundUpdate');
+        const now = Date.now();
+        if (!lastUpdate || (now - parseInt(lastUpdate)) > 12 * 60 * 60 * 1000) {
+            backgroundAutoUpdate();
+            localStorage.setItem('lastBackgroundUpdate', now.toString());
+        }
+        setInterval(() => {
+            backgroundAutoUpdate();
+            localStorage.setItem('lastBackgroundUpdate', Date.now().toString());
+        }, 4 * 60 * 60 * 1000); // Check every 4 hours, actual web fetch limited to 24h by python cache
     }, 5000);
 
     // Check for Reminders periodically

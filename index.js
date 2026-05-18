@@ -288,7 +288,7 @@ function initMpv() {
         `--config-dir=${binDir}`, 
         `--load-scripts=no`,    
         `--script=${luaScript}`,
-        `--script-opts=modernz-osc_on_start=yes,modernz-bottomhover=no,modernz-window_controls=no`,
+        `--script-opts=modernz-osc_on_start=yes,modernz-bottomhover=no,modernz-window_controls=no,modernz-playlist_button=no,modernz-info_button=no,modernz-ontop_button=no,modernz-jump_buttons=no,modernz-chapter_skip_buttons=no`,
         `--input-cursor=yes`,   
         `--input-vo-keyboard=yes`, 
         `--osc=no`,             
@@ -306,14 +306,8 @@ function initMpv() {
     setTimeout(connectIPC, 1000); 
 
     mpvProcess.stdout.on('data', (data) => {
-        const str = data.toString().trim();
-        // Log can be uncommented for debugging
-        // console.log(`[MPV] ${str}`);
-        if (!isMpvReady && /(?:AV|V|A):\s+\d{2}:\d{2}:\d{2}/.test(str)) {
-            console.log('[MPV] Playback confirmed ready.');
-            isMpvReady = true;
-            syncPlayerWindow(); 
-        }
+        // MPV stdout parsing removed. We now rely strictly on IPC property-change events 
+        // (like playback-time) to know exactly when the video has started rendering.
     });
     mpvProcess.stderr.on('data', (data) => console.error(`[MPV ERR] ${data.toString().trim()}`));
 
@@ -384,8 +378,15 @@ function connectIPC() {
                         }
                     } else if (msg.name === 'window-maximized') {
                         // Ignore embedded MPV's native maximize state to prevent force-unmaximizing Electron
-                    } else if (mainWindow && !mainWindow.isDestroyed()) {
-                        mainWindow.webContents.send('mpv-prop-change', msg.name, msg.data);
+                    } else {
+                        if (msg.name === 'playback-time' && msg.data !== null && !isMpvReady) {
+                            console.log('[MPV] Playback confirmed ready.');
+                            isMpvReady = true;
+                            syncPlayerWindow();
+                        }
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            mainWindow.webContents.send('mpv-prop-change', msg.name, msg.data);
+                        }
                     }
                 }
                 if (msg.event === 'client-message' && msg.args && mainWindow && !mainWindow.isDestroyed()) {
@@ -395,6 +396,12 @@ function connectIPC() {
                     if (msg.args[0] === 'electron-maximize-toggle') {
                         if (mainWindow.isMaximized()) mainWindow.unmaximize();
                         else mainWindow.maximize();
+                    }
+                    if (msg.args[0] === 'electron-previous-channel') {
+                        mainWindow.webContents.send('mpv-previous-channel');
+                    }
+                    if (msg.args[0] === 'electron-next-channel') {
+                        mainWindow.webContents.send('mpv-next-channel');
                     }
                 }
             } catch (e) {}
@@ -435,10 +442,12 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
     syncPlayerWindow();
 
     if (ipcClient && !ipcClient.destroyed) {
+        console.log('[MPV IPC SEND]', JSON.stringify({ command: ["loadfile", data.url, "replace"] }));
         ipcClient.write(JSON.stringify({ command: ["loadfile", data.url, "replace"] }) + '\n');
     } else {
         setTimeout(() => {
             if (ipcClient && !ipcClient.destroyed) {
+                console.log('[MPV IPC SEND]', JSON.stringify({ command: ["loadfile", data.url, "replace"] }));
                 ipcClient.write(JSON.stringify({ command: ["loadfile", data.url, "replace"] }) + '\n');
             }
         }, 1500);

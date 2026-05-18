@@ -84,7 +84,7 @@ local user_opts = {
     -- Buttons display and functionality
     subtitles_button = true,               -- show the subtitles menu button
     audio_tracks_button = true,            -- show the audio tracks menu button
-    jump_buttons = true,                   -- show the jump backward and forward buttons
+    jump_buttons = false,                  -- show the jump backward and forward buttons
     jump_amount = 10,                      -- change the jump amount in seconds
     jump_more_amount = 60,                 -- change the jump amount in seconds when right-clicking jump buttons and shift-clicking chapter skip buttons
     jump_icon_number = true,               -- show different icon when jump_amount is set to 5, 10, or 30
@@ -96,13 +96,13 @@ local user_opts = {
 
     volume_control = true,                 -- show mute button and volume slider
     volume_control_type = "linear",        -- volume scale type: "linear" or "logarithmic"
-    playlist_button = true,                -- show playlist button: Left-click for simple playlist, Right-click for interactive playlist
+    playlist_button = false,               -- show playlist button: Left-click for simple playlist, Right-click for interactive playlist
     hide_empty_playlist_button = false,    -- hide playlist button when no playlist exists
     gray_empty_playlist_button = false,    -- gray out the playlist button when no playlist exists
 
     fullscreen_button = true,              -- show fullscreen toggle button
-    info_button = true,                    -- show info button
-    ontop_button = true,                   -- show window on top button
+    info_button = false,                   -- show info button
+    ontop_button = false,                  -- show window on top button
     screenshot_button = false,             -- show screenshot button
 
     download_button = true,                -- show download button on web videos (requires yt-dlp and ffmpeg)
@@ -116,7 +116,7 @@ local user_opts = {
 
     loop_in_pause = true,                  -- enable loop with mouse actions on pause button
 
-    buttons_always_active = "none",        -- force buttons to always be active. can add: playlist_prev, playlist_next
+    buttons_always_active = "playlist_prev, playlist_next", -- force buttons to always be active. can add: playlist_prev, playlist_next
 
     playpause_size = 28,                   -- icon size for the play/pause button
     midbuttons_size = 24,                  -- icon size for the middle buttons
@@ -257,11 +257,11 @@ local user_opts = {
     chapter_title_mbtn_right_command = "show-text ${chapter-list} 3000",
 
     -- playlist skip buttons mouse actions
-    playlist_prev_mbtn_left_command = "playlist-prev",
+    playlist_prev_mbtn_left_command = "script-message electron-previous-channel",
     playlist_prev_mbtn_mid_command = "show-text ${playlist} 3000",
     playlist_prev_mbtn_right_command = "script-binding select/select-playlist; script-message-to modernz osc-hide",
 
-    playlist_next_mbtn_left_command = "playlist-next",
+    playlist_next_mbtn_left_command = "script-message electron-next-channel",
     playlist_next_mbtn_mid_command = "show-text ${playlist} 3000",
     playlist_next_mbtn_right_command = "script-binding select/select-playlist; script-message-to modernz osc-hide",
 
@@ -2047,13 +2047,13 @@ layouts["modern"] = function ()
 
     -- Fullscreen/Info/Pin/Screenshot/Loop/Speed
     local end_x = osc_geo.w - 37
-    -- if fullscreen_button then
-    --     lo = add_layout("tog_fullscreen")
-    --     lo.geometry = {x = end_x, y = refY - 35, an = 5, w = 24, h = 24}
-    --     lo.style = osc_styles.control_3
-    --     lo.visible = (osc_param.playresx >= 250 - outeroffset)
-    --     end_x = end_x - 45
-    -- end
+    if fullscreen_button then
+        lo = add_layout("tog_fullscreen")
+        lo.geometry = {x = end_x, y = refY - 35, an = 5, w = 24, h = 24}
+        lo.style = osc_styles.control_3
+        lo.visible = (osc_param.playresx >= 250 - outeroffset)
+        end_x = end_x - 45
+    end
 
     if info_button then
         lo = add_layout("tog_info")
@@ -2304,13 +2304,13 @@ layouts["modern-compact"] = function ()
     -- Right side buttons
     local end_x = osc_geo.w - 50
 
-    -- elements.tog_fullscreen.visible = user_opts.fullscreen_button and osc_geo.w >= 100
-    -- if elements.tog_fullscreen.visible then
-    --     lo = add_layout("tog_fullscreen")
-    --     lo.geometry = {x = end_x, y = refY - 35, an = 5, w = 24, h = 24}
-    --     lo.style = osc_styles.control_2
-    --     end_x = end_x - 55
-    -- end
+    elements.tog_fullscreen.visible = user_opts.fullscreen_button and osc_geo.w >= 100
+    if elements.tog_fullscreen.visible then
+        lo = add_layout("tog_fullscreen")
+        lo.geometry = {x = end_x, y = refY - 35, an = 5, w = 24, h = 24}
+        lo.style = osc_styles.control_2
+        end_x = end_x - 55
+    end
 
     elements.tog_ontop.visible = user_opts.ontop_button and osc_geo.w >= 250
     if elements.tog_ontop.visible then
@@ -2470,12 +2470,12 @@ layouts["modern-image"] = function ()
     end
 
     -- Fullscreen/Info/Pin/Download
-    -- if fullscreen_button then
-    --     lo = add_layout("tog_fullscreen")
-    --     lo.geometry = {x = osc_geo.w - 37, y = refY - 30, an = 5, w = 24, h = 24}
-    --     lo.style = osc_styles.control_3
-    --     lo.visible = (osc_param.playresx >= 250)
-    -- end
+    if fullscreen_button then
+        lo = add_layout("tog_fullscreen")
+        lo.geometry = {x = osc_geo.w - 37, y = refY - 30, an = 5, w = 24, h = 24}
+        lo.style = osc_styles.control_3
+        lo.visible = (osc_param.playresx >= 250)
+    end
 
     if info_button then
         lo = add_layout("tog_info")
@@ -2971,12 +2971,12 @@ local function osc_init()
 
     visible_min_width = 550 - outeroffset
     --tog_fullscreen
-    -- ne = new_element("tog_fullscreen", "button")
-    -- ne.content = function () return state.fullscreen and icons.fullscreen_exit or icons.fullscreen end
-    -- ne.visible = (osc_param.playresx >= visible_min_width)
-    -- ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.fullscreen_mbtn_left_command)
-    -- ne.eventresponder["mbtn_right_up"] = command_callback(user_opts.fullscreen_mbtn_right_command)
-    -- visible_min_width = visible_min_width + (user_opts.fullscreen_button and 100 or 0)
+    ne = new_element("tog_fullscreen", "button")
+    ne.content = function () return state.fullscreen and icons.fullscreen_exit or icons.fullscreen end
+    ne.visible = (osc_param.playresx >= visible_min_width)
+    ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.fullscreen_mbtn_left_command)
+    ne.eventresponder["mbtn_right_up"] = command_callback(user_opts.fullscreen_mbtn_right_command)
+    visible_min_width = visible_min_width + (user_opts.fullscreen_button and 100 or 0)
 
     --tog_info
     ne = new_element("tog_info", "button")
