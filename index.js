@@ -390,6 +390,7 @@ function connectIPC() {
                     }
                 }
                 if (msg.event === 'client-message' && msg.args && mainWindow && !mainWindow.isDestroyed()) {
+                    console.log('[MPV IPC RECV] client-message:', msg.args);
                     if (msg.args[0] === 'electron-fullscreen-toggle') {
                         mainWindow.setFullScreen(!mainWindow.isFullScreen());
                     }
