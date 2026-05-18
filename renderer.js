@@ -961,6 +961,27 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                 await window.iptvAPI.updateEpg(combinedEpgs, null, true);
                 epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
                 await autoMapChannels(false);
+                
+                // Fetch the newly updated EPG data from the local database
+                const epgIdsToFetch = new Set();
+                const targetPlaylist = editIndex >= 0 ? savedPlaylists[editIndex] : savedPlaylists[savedPlaylists.length - 1];
+                targetPlaylist.channels.forEach(ch => {
+                    const mappedId = channelMappings[ch.title];
+                    if (mappedId) epgIdsToFetch.add(mappedId);
+                    else {
+                        if (ch.tvg_id) epgIdsToFetch.add(ch.tvg_id);
+                        if (ch.tvg_name) epgIdsToFetch.add(ch.tvg_name);
+                    }
+                });
+                
+                const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch));
+                targetPlaylist.channels.forEach(ch => {
+                    const mappedId = channelMappings[ch.title];
+                    if (mappedId && epgData[mappedId]) ch.epg_programmes = epgData[mappedId];
+                    else if (ch.tvg_id && epgData[ch.tvg_id]) ch.epg_programmes = epgData[ch.tvg_id];
+                    else if (ch.tvg_name && epgData[ch.tvg_name]) ch.epg_programmes = epgData[ch.tvg_name];
+                });
+                updateState(); // Re-render to clear "(EPG not Loaded)"
             }
         }
     } catch (err) {
@@ -2241,7 +2262,35 @@ async function backgroundAutoUpdate() {
         await window.iptvAPI.updateEpg(combinedEpgs, null, true);
         epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
         await autoMapChannels(false);
+        
+        const epgIdsToFetch = new Set();
+        savedPlaylists.forEach(p => {
+            if (p.channels) {
+                p.channels.forEach(ch => {
+                    const mappedId = channelMappings[ch.title];
+                    if (mappedId) epgIdsToFetch.add(mappedId);
+                    else {
+                        if (ch.tvg_id) epgIdsToFetch.add(ch.tvg_id);
+                        if (ch.tvg_name) epgIdsToFetch.add(ch.tvg_name);
+                    }
+                });
+            }
+        });
+        const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch));
+        savedPlaylists.forEach(p => {
+            if (p.channels) {
+                p.channels.forEach(ch => {
+                    const mappedId = channelMappings[ch.title];
+                    if (mappedId && epgData[mappedId]) ch.epg_programmes = epgData[mappedId];
+                    else if (ch.tvg_id && epgData[ch.tvg_id]) ch.epg_programmes = epgData[ch.tvg_id];
+                    else if (ch.tvg_name && epgData[ch.tvg_name]) ch.epg_programmes = epgData[ch.tvg_name];
+                });
+            }
+        });
+        hasUpdates = true;
     }
+    
+    if (hasUpdates) updateState();
 }
 
 // Load saved channels on startup
@@ -2349,6 +2398,33 @@ window.addEventListener('DOMContentLoaded', async () => {
         } else {
             savedPlaylists = data;
         }
+        
+        // Pre-load EPG data into memory for playlist stats on startup
+        const epgIdsToFetch = new Set();
+        savedPlaylists.forEach(p => {
+            if (p.channels) {
+                p.channels.forEach(ch => {
+                    const mappedId = channelMappings[ch.title];
+                    if (mappedId) epgIdsToFetch.add(mappedId);
+                    else {
+                        if (ch.tvg_id) epgIdsToFetch.add(ch.tvg_id);
+                        if (ch.tvg_name) epgIdsToFetch.add(ch.tvg_name);
+                    }
+                });
+            }
+        });
+        const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch));
+        savedPlaylists.forEach(p => {
+            if (p.channels) {
+                p.channels.forEach(ch => {
+                    const mappedId = channelMappings[ch.title];
+                    if (mappedId && epgData[mappedId]) ch.epg_programmes = epgData[mappedId];
+                    else if (ch.tvg_id && epgData[ch.tvg_id]) ch.epg_programmes = epgData[ch.tvg_id];
+                    else if (ch.tvg_name && epgData[ch.tvg_name]) ch.epg_programmes = epgData[ch.tvg_name];
+                });
+            }
+        });
+
         updateState();
         
         if (allChannels.length > 0) {
