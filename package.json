@@ -1,0 +1,32 @@
+{
+  "name": "play",
+  "version": "1.0.0",
+  "description": "Python Electron IPTV Player",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron .",
+    "build": "electron-builder build --win"
+  },
+  "keywords": [],
+  "author": "My Name",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
+    "electron": "^38.8.6",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.iptv.player",
+    "productName": "IPTV Player",
+    "asar": true,
+    "extraResources": [
+      "bin/**/*",
+      "backend/**/*"
+    ]
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0"
+  }
+}
