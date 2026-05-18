@@ -229,13 +229,21 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
     currentDOMBounds = data.bounds;
     isMpvReady = false;
 
+    if (mpvProcess && playerWindow && !playerWindow.isDestroyed() && ipcClient && !ipcClient.destroyed) {
+        console.log('[MPV] Reusing existing MPV process for new stream');
+        ipcClient.write(JSON.stringify({ command: ["loadfile", data.url] }) + '\n');
+        syncPlayerWindow();
+        return;
+    }
+
     // Reset old streams
     if (ipcClient) {
+        ipcClient.removeAllListeners();
         ipcClient.destroy();
         ipcClient = null;
     }
     if (mpvProcess) mpvProcess.kill();
-    if (playerWindow) playerWindow.destroy();
+    if (playerWindow && !playerWindow.isDestroyed()) playerWindow.destroy();
 
     console.log('[MPV] Creating new player window');
     const contentBounds = mainWindow.getContentBounds();
@@ -397,15 +405,16 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
         });
 
         ipcClient.on('error', (err) => {
-            console.error('[MPV IPC] Connection error:', err.message, 'Retrying...');
-            setTimeout(connectIPC, 200); // Retry instantly if connection drops
+            console.error('[MPV IPC] Connection error:', err.message);
+            // 'close' event will automatically follow and handle the retry safely
         });
 
         ipcClient.on('close', () => {
             console.log('[MPV IPC] Connection closed.');
             // Re-establish connection if it drops while MPV is still running
             if (currentMpv === mpvProcess && currentMpv.exitCode === null) {
-                setTimeout(connectIPC, 200);
+                if (reconnectTimer) clearTimeout(reconnectTimer);
+                reconnectTimer = setTimeout(connectIPC, 500);
             }
         });
     }
@@ -429,6 +438,7 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
     currentMpv.on('exit', () => {
         // Only send the exit event to the frontend if this is still the active stream.
         console.log(`[MPV] Process exited with code: ${currentMpv.exitCode}`);
+        if (reconnectTimer) clearTimeout(reconnectTimer);
         // If the user clicked a new channel, mpvProcess points to the new process, so we shouldn't overwrite the "Loading..." message.
         if (mainWindow && !mainWindow.isDestroyed() && mpvProcess === currentMpv) {
             mainWindow.webContents.send('mpv-exit', currentMpv.exitCode);
@@ -454,6 +464,12 @@ ipcMain.on('update-mpv-bounds', (event, bounds) => {
     console.log('[IPC RECV] update-mpv-bounds', bounds);
     currentDOMBounds = bounds;
     syncPlayerWindow();
+    
+    // Stop decoding background streams automatically if the player is hidden/collapsed
+    if (bounds.width === 0 && bounds.height === 0 && ipcClient && !ipcClient.destroyed) {
+        ipcClient.write(JSON.stringify({ command: ["stop"] }) + '\n');
+        isMpvReady = false;
+    }
 });
 
 // Send control commands directly to the MPV process
