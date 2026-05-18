@@ -128,6 +128,11 @@ aeroStyles.textContent = `
         border-radius: 0 !important;
     }
 
+    /* Prevent overlays from stealing mouse clicks */
+    #player-overlay {
+        pointer-events: none !important;
+    }
+
     /* Live TV Screen Split Layout */
     #sidebar {
         flex: 3 !important;
@@ -925,12 +930,7 @@ function updateState() {
         }
     });
     
-    allChannels.sort((a, b) => {
-        const groupA = a.group || 'Uncategorized';
-        const groupB = b.group || 'Uncategorized';
-        if (groupA !== groupB) return sortAlphaNum(groupA, groupB);
-        return sortAlphaNum(a.title, b.title);
-    });
+    allChannels.sort((a, b) => sortAlphaNum(a.title, b.title));
 
     if (filterSelect && Array.from(filterSelect.options).some(o => o.value === currentFilter)) {
         filterSelect.value = currentFilter;
@@ -2110,14 +2110,22 @@ window.iptvAPI.onMpvExit((code) => {
 });
 
 window.iptvAPI.onPreviousChannel(() => {
-    if (currentPlayingChannelIndex > 0) {
-        embedStream(allChannels[currentPlayingChannelIndex - 1]);
+    const currentUrl = localStorage.getItem('lastPlayedChannelUrl');
+    const detailName = document.getElementById('detail-name');
+    const currentTitle = detailName ? detailName.textContent : '';
+    const idx = allChannels.findIndex(c => c.url === currentUrl && (c.title || 'Unknown Channel') === currentTitle);
+    if (idx > 0) {
+        embedStream(allChannels[idx - 1]);
     }
 });
 
 window.iptvAPI.onNextChannel(() => {
-    if (currentPlayingChannelIndex >= 0 && currentPlayingChannelIndex < allChannels.length - 1) {
-        embedStream(allChannels[currentPlayingChannelIndex + 1]);
+    const currentUrl = localStorage.getItem('lastPlayedChannelUrl');
+    const detailName = document.getElementById('detail-name');
+    const currentTitle = detailName ? detailName.textContent : '';
+    const idx = allChannels.findIndex(c => c.url === currentUrl && (c.title || 'Unknown Channel') === currentTitle);
+    if (idx >= 0 && idx < allChannels.length - 1) {
+        embedStream(allChannels[idx + 1]);
     }
 });
 
@@ -2140,14 +2148,15 @@ resizeObserver.observe(playerContainer);
 let lastMouseMove = 0;
 playerContainer.addEventListener('mousemove', (e) => {
     const now = Date.now();
+    if (now - lastMouseMove > 30) {
         lastMouseMove = now;
         const rect = playerContainer.getBoundingClientRect();
-            const dpr = window.devicePixelRatio || 1;
-            const x = Math.round((e.clientX - rect.left) * dpr);
-            const y = Math.round((e.clientY - rect.top) * dpr);
+        const dpr = window.devicePixelRatio || 1;
+        const x = Math.round((e.clientX - rect.left) * dpr);
+        const y = Math.round((e.clientY - rect.top) * dpr);
         window.iptvAPI.sendMpvCommand(`script-message-to modernz electron-mouse-move ${x} ${y}`);
     }
-);
+});
 
 playerContainer.addEventListener('mouseleave', () => {
     console.log('[EVENT] playerContainer mouseleave');

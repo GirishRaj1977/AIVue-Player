@@ -205,6 +205,8 @@ function syncPlayerWindow() {
             return;
         }
         playerWindow.setOpacity(1); // Restore visibility when active
+
+        playerWindow.setIgnoreMouseEvents(true); // Re-enforce OS click fallthrough after opacity changes
         const contentBounds = mainWindow.getContentBounds();
         playerWindow.setBounds({
             x: contentBounds.x + currentDOMBounds.x,
