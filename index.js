@@ -507,7 +507,8 @@ if (!fs.existsSync(cacheDir)) {
 
 // M3U Parsing backend wrapper
 ipcMain.handle('parse-m3u', async (event, source, epgSource, mappings, forceRefresh) => {
-    console.log('[IPC HANDLE] parse-m3u', { source, epgSource, mappings, forceRefresh });
+    console.log('[IPC HANDLE] parse-m3u START', { source, epgSource, mappings, forceRefresh });
+    console.time('parse-m3u');
     if (forceRefresh) {
         cachedEpgDict = null; // Clear active node-memory cache when a forced refresh happens
         cachedEpgDictKey = '';
@@ -531,6 +532,8 @@ ipcMain.handle('parse-m3u', async (event, source, epgSource, mappings, forceRefr
         console.log(`[Backend] Starting Python parser for: ${source}`);
         execFile(pythonCmd, args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, timeout: 120000, env }, (error, stdout, stderr) => {
             console.log(`[Backend] Python parser finished.`);
+            console.timeEnd('parse-m3u');
+            console.log('[IPC HANDLE] parse-m3u END');
             if (error) {
                 console.error(`[Backend] Error:`, error.message);
                 return resolve({ error: `${error.message}\n${stderr || ''}` });
@@ -596,10 +599,17 @@ ipcMain.handle('get-epg-channels', async (event, epgSources) => {
 });
 
 ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) => {
-    console.log('[IPC HANDLE] update-epg', { epgSources, filterIds, forceRefresh });
-    if (!db) return false;
+    console.log('[IPC HANDLE] update-epg START', { epgSources, filterIds, forceRefresh });
+    console.time('update-epg');
+    if (!db) {
+        console.timeEnd('update-epg');
+        return false;
+    }
     const sources = (epgSources || '').split(',').map(s => s.trim()).filter(s => s);
-    if (sources.length === 0) return true;
+    if (sources.length === 0) {
+        console.timeEnd('update-epg');
+        return true;
+    }
 
     const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
     const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
@@ -645,12 +655,18 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
             console.error(`[EPG Update] Failed for ${source}:`, err);
         }
     }
+    console.timeEnd('update-epg');
+    console.log('[IPC HANDLE] update-epg END');
     return true;
 });
 
 ipcMain.handle('get-epg', (event, channelIds) => {
-    console.log('[IPC HANDLE] get-epg', { channelIds_count: channelIds ? channelIds.length : 0 });
-    if (!db || !channelIds || channelIds.length === 0) return {};
+    console.log('[IPC HANDLE] get-epg START', { channelIds_count: channelIds ? channelIds.length : 0 });
+    console.time('get-epg');
+    if (!db || !channelIds || channelIds.length === 0) {
+        console.timeEnd('get-epg');
+        return {};
+    }
     try {
         const result = {};
         // SQLite has a limit on bind variables, process array elements in safe chunks
@@ -671,10 +687,13 @@ ipcMain.handle('get-epg', (event, channelIds) => {
                 });
             }
         }
+        console.timeEnd('get-epg');
+        console.log('[IPC HANDLE] get-epg END');
         return result;
     } catch (e) {
         console.error('[DB ERR] Failed to get EPG:', e);
-        return {};
+        console.timeEnd('get-epg');
+        throw e;
     }
 });
 
@@ -692,8 +711,12 @@ ipcMain.handle('open-file-dialog', async () => {
 
 // Channels persistence
 function saveChannelsToDb(playlists) {
-    console.log('[DB] Saving channels to database...');
-    if (!db) return false;
+    console.log('[DB] Saving channels to database START...');
+    console.time('saveChannelsToDb');
+    if (!db) {
+        console.timeEnd('saveChannelsToDb');
+        return false;
+    }
     const insertPlaylist = db.prepare(`
         INSERT INTO playlists (id, name, source_url, epg_url, is_disabled)
         VALUES (@id, @name, @source, @epg, @disabled)
@@ -750,14 +773,25 @@ function saveChannelsToDb(playlists) {
         }
     });
 
-    saveTx(playlists);
+    try {
+        saveTx(playlists);
+    } catch (e) {
+        console.error('[DB ERR] Transaction failed:', e);
+        console.timeEnd('saveChannelsToDb');
+        throw e;
+    }
+    
+    console.timeEnd('saveChannelsToDb');
+    console.log('[DB] Saving channels to database END.');
     return true;
 }
 
 ipcMain.handle('save-channels', (event, channels) => {
-    console.log('[IPC HANDLE] save-channels', { playlist_count: channels ? channels.length : 0 });
+    console.log('[IPC HANDLE] save-channels START', { playlist_count: channels ? channels.length : 0 });
     try {
-        return saveChannelsToDb(channels);
+        const result = saveChannelsToDb(channels);
+        console.log('[IPC HANDLE] save-channels END');
+        return result;
     } catch (e) {
         console.error('[DB ERR] Failed to save channels:', e);
         return false;
@@ -765,14 +799,15 @@ ipcMain.handle('save-channels', (event, channels) => {
 });
 
 ipcMain.handle('get-external-epgs', () => {
-    console.log('[IPC HANDLE] get-external-epgs');
+    console.log('[IPC HANDLE] get-external-epgs START');
     if (!db) return [];
     try {
         const rows = db.prepare('SELECT source_url FROM external_epgs').all();
+        console.log('[IPC HANDLE] get-external-epgs END');
         return rows.map(r => r.source_url);
     } catch (e) {
         console.error('[DB ERR] Failed to get external EPGs:', e);
-        return [];
+        throw e;
     }
 });
 
@@ -799,9 +834,13 @@ ipcMain.handle('remove-external-epg', (event, url) => {
 });
 
 ipcMain.handle('load-channels', (event) => {
-    console.log('[IPC HANDLE] load-channels');
+    console.log('[IPC HANDLE] load-channels START');
+    console.time('load-channels');
     try {
-        if (!db) return []; // Fallback if DB failed to load
+        if (!db) {
+            console.timeEnd('load-channels');
+            return []; // Fallback if DB failed to load
+        }
         const oldFilePath = path.join(app.getPath('userData'), 'saved_channels.json');
         const bakFilePath = path.join(app.getPath('userData'), 'saved_channels.json.bak');
         
@@ -838,11 +877,14 @@ ipcMain.handle('load-channels', (event) => {
                 channels: pChannels
             });
         }
+        console.timeEnd('load-channels');
+        console.log('[IPC HANDLE] load-channels END');
         return result;
     } catch (e) {
         console.error('[DB ERR] Failed to load channels:', e);
+        console.timeEnd('load-channels');
+        throw e;
     }
-    return [];
 });
 
 // Cache deletion
@@ -867,7 +909,7 @@ ipcMain.handle('clear-cache', async (event, url) => {
 
 // Mappings persistence
 ipcMain.handle('get-mappings', () => {
-    console.log('[IPC HANDLE] get-mappings');
+    console.log('[IPC HANDLE] get-mappings START');
     if (!db) return {};
     try {
         const rows = db.prepare('SELECT channel_title, epg_id FROM mappings').all();
@@ -875,15 +917,16 @@ ipcMain.handle('get-mappings', () => {
         for (const row of rows) {
             map[row.channel_title] = row.epg_id;
         }
+        console.log('[IPC HANDLE] get-mappings END');
         return map;
     } catch (e) {
         console.error('[DB ERR] Failed to get mappings:', e);
-        return {};
+        throw e;
     }
 });
 
 ipcMain.handle('save-mapping', (event, title, epgId) => {
-    console.log('[IPC HANDLE] save-mapping', { title, epgId });
+    console.log('[IPC HANDLE] save-mapping START', { title, epgId });
     if (!db) return false;
     try {
         if (epgId) {
@@ -895,15 +938,16 @@ ipcMain.handle('save-mapping', (event, title, epgId) => {
         } else {
             db.prepare('DELETE FROM mappings WHERE channel_title = ?').run(title);
         }
+        console.log('[IPC HANDLE] save-mapping END');
         return true;
     } catch (e) {
         console.error('[DB ERR] Failed to save mapping:', e);
-        return false;
+        throw e;
     }
 });
 
 ipcMain.handle('factory-reset', () => {
-    console.log('[IPC HANDLE] factory-reset. Relaunching app.');
+    console.log('[IPC HANDLE] factory-reset START. Relaunching app.');
     try {
         if (db) db.close(); // Safely release SQLite locks
         const dbPath = path.join(app.getPath('userData'), 'iptv.db');
@@ -913,11 +957,12 @@ ipcMain.handle('factory-reset', () => {
         if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
         if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
         
+        console.log('[IPC HANDLE] factory-reset END');
         app.relaunch();
         app.quit();
         return true;
     } catch (e) {
         console.error("[DB ERR] Factory reset failed:", e);
-        return false;
+        throw e;
     }
 });

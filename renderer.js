@@ -280,7 +280,7 @@ function sortAlphaNum(a, b) {
     return (a || '').toString().localeCompare((b || '').toString(), undefined, { numeric: true, sensitivity: 'base' });
 }
 
-async function autoMapChannels(showSummaryAlert = false) {
+async function autoMapChannels(showSummaryAlert = false, skipSave = false) {
     console.log('[MAPPING] Starting auto-map process...');
     let mappedCount = 0;
     const epgLookup = {};
@@ -317,7 +317,7 @@ async function autoMapChannels(showSummaryAlert = false) {
 
     if (mappedCount > 0) {
         console.log(`[MAPPING] Auto-mapped ${mappedCount} new channels.`);
-        updateState();
+        updateState(skipSave);
         renderMappingColumns();
         if (showSummaryAlert) alert(`Successfully auto-mapped ${mappedCount} channels!`);
     } else {
@@ -885,7 +885,7 @@ function updateGroupFilterOptions() {
     }
 }
 
-function updateState() {
+function updateState(skipSave = false) {
     console.log('[STATE] Updating global state and re-rendering.');
     allChannels = [];
     
@@ -961,7 +961,9 @@ function updateState() {
     
     renderChannels();
     renderPlaylists();
-    window.iptvAPI.saveChannels(savedPlaylists);
+    if (!skipSave) {
+        window.iptvAPI.saveChannels(savedPlaylists);
+    }
     updateNavLockState();
 }
 
@@ -997,7 +999,7 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                     disabled: false
                 });
             }
-            updateState();
+            updateState(true); // SKIP SAVE
             
             // Auto-fetch EPG data in background to cache in SQLite
             let allEpgSources = savedEpgs.slice();
@@ -1009,7 +1011,7 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                 const combinedEpgs = allEpgSources.join(',');
                 await window.iptvAPI.updateEpg(combinedEpgs, null, true);
                 epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
-                await autoMapChannels(false);
+                await autoMapChannels(false, true); // SKIP SAVE
                 
                 // Fetch the newly updated EPG data from the local database
                 const epgIdsToFetch = new Set();
@@ -1031,7 +1033,9 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                     else if (ch.tvg_id && epgData[ch.tvg_id]) ch.epg_programmes = epgData[ch.tvg_id];
                     else if (ch.tvg_name && epgData[ch.tvg_name]) ch.epg_programmes = epgData[ch.tvg_name];
                 });
-                updateState(); // Re-render to clear "(EPG not Loaded)"
+                updateState(); // Re-render to clear "(EPG not Loaded)" AND SAVE
+            } else {
+                updateState(); // Re-render AND SAVE
             }
         }
     } catch (err) {
@@ -1374,15 +1378,16 @@ function renderPlaylists() {
                     if (result.epg_url && (!savedPlaylists[idx].epg || savedPlaylists[idx].epg === 'Not Configured')) {
                         savedPlaylists[idx].epg = result.epg_url;
                     }
-                    updateState();
+                    updateState(true); // SKIP SAVE
                     
                     // Trigger EPG update and auto-map
                     if (allEpgSources.length > 0) {
                         console.log('[API] Calling updateEpg after refresh.');
                         await window.iptvAPI.updateEpg(combinedEpgs, null, true);
                         epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
-                        await autoMapChannels(false);
+                        await autoMapChannels(false, true); // SKIP SAVE
                     }
+                    updateState(); // FINAL SAVE
                 } else {
                     alert('Failed to refresh playlist: ' + (result ? result.error : 'Unknown error'));
                 }
@@ -2374,43 +2379,47 @@ async function backgroundAutoUpdate() {
         }
     }
     
-    if (hasUpdates) updateState();
     console.log('[BACKGROUND] Playlist updates found:', hasUpdates);
-    if (epgSourcesToUpdate.size > 0) {
-        const combinedEpgs = Array.from(epgSourcesToUpdate).join(',');
-        await window.iptvAPI.updateEpg(combinedEpgs, null, true);
-        epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
-        await autoMapChannels(false);
-        console.log('[BACKGROUND] EPG data updated.');
-        
-        const epgIdsToFetch = new Set();
-        savedPlaylists.forEach(p => {
-            if (p.channels) {
-                p.channels.forEach(ch => {
-                    const mappedId = channelMappings[ch.title];
-                    if (mappedId) epgIdsToFetch.add(mappedId);
-                    else {
-                        if (ch.tvg_id) epgIdsToFetch.add(ch.tvg_id);
-                        if (ch.tvg_name) epgIdsToFetch.add(ch.tvg_name);
-                    }
-                });
-            }
-        });
-        const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch));
-        savedPlaylists.forEach(p => {
-            if (p.channels) {
-                p.channels.forEach(ch => {
-                    const mappedId = channelMappings[ch.title];
-                    if (mappedId && epgData[mappedId]) ch.epg_programmes = epgData[mappedId];
-                    else if (ch.tvg_id && epgData[ch.tvg_id]) ch.epg_programmes = epgData[ch.tvg_id];
-                    else if (ch.tvg_name && epgData[ch.tvg_name]) ch.epg_programmes = epgData[ch.tvg_name];
-                });
-            }
-        });
-        hasUpdates = true;
-    }
     
-    if (hasUpdates) updateState();
+    if (hasUpdates) {
+        if (epgSourcesToUpdate.size > 0) {
+            updateState(true); // Skip save if EPG will be updated next
+            
+            const combinedEpgs = Array.from(epgSourcesToUpdate).join(',');
+            await window.iptvAPI.updateEpg(combinedEpgs, null, true);
+            epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
+            await autoMapChannels(false, true); // SKIP SAVE
+            console.log('[BACKGROUND] EPG data updated.');
+            
+            const epgIdsToFetch = new Set();
+            savedPlaylists.forEach(p => {
+                if (p.channels) {
+                    p.channels.forEach(ch => {
+                        const mappedId = channelMappings[ch.title];
+                        if (mappedId) epgIdsToFetch.add(mappedId);
+                        else {
+                            if (ch.tvg_id) epgIdsToFetch.add(ch.tvg_id);
+                            if (ch.tvg_name) epgIdsToFetch.add(ch.tvg_name);
+                        }
+                    });
+                }
+            });
+            const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch));
+            savedPlaylists.forEach(p => {
+                if (p.channels) {
+                    p.channels.forEach(ch => {
+                        const mappedId = channelMappings[ch.title];
+                        if (mappedId && epgData[mappedId]) ch.epg_programmes = epgData[mappedId];
+                        else if (ch.tvg_id && epgData[ch.tvg_id]) ch.epg_programmes = epgData[ch.tvg_id];
+                        else if (ch.tvg_name && epgData[ch.tvg_name]) ch.epg_programmes = epgData[ch.tvg_name];
+                    });
+                }
+            });
+            updateState(); // FINAL SAVE
+        } else {
+            updateState(); // FINAL SAVE
+        }
+    }
 }
 
 // Load saved channels on startup
@@ -2583,14 +2592,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     
     // Begin non-blocking background auto-update process (Delayed to allow the UI to finish rendering first)
     setTimeout(() => {
-        backgroundAutoUpdate();
-        setInterval(backgroundAutoUpdate, 4 * 60 * 60 * 1000); // Check every 4 hours, actual web fetch limited to 24h by python cache
         const lastUpdate = localStorage.getItem('lastBackgroundUpdate');
         const now = Date.now();
         if (!lastUpdate || (now - parseInt(lastUpdate)) > 12 * 60 * 60 * 1000) {
             backgroundAutoUpdate();
             localStorage.setItem('lastBackgroundUpdate', now.toString());
         }
+        
         setInterval(() => {
             backgroundAutoUpdate();
             localStorage.setItem('lastBackgroundUpdate', Date.now().toString());
