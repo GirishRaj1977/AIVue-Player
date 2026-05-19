@@ -75,6 +75,16 @@ aeroStyles.textContent = `
         color: #bb86fc !important;
     }
 
+    /* Active state for channel items */
+    .channel-item {
+        border-left: 4px solid transparent;
+        transition: background-color 0.2s, border-left-color 0.2s;
+    }
+    .channel-item.active {
+        background-color: rgba(187, 134, 252, 0.15) !important;
+        border-left: 4px solid #bb86fc !important;
+    }
+
     /* General modern flat styling for playlist buttons, preserving inline colors */
     .playlist-btn {
         background-color: #2a2a2a; /* Default background for those without inline styles */
@@ -123,11 +133,6 @@ aeroStyles.textContent = `
         box-shadow: 0 4px 12px rgba(207, 102, 121, 0.2) !important;
     }
 
-    /* Force square corners on player to prevent native window bleed */
-    #player-wrapper {
-        border-radius: 0 !important;
-    }
-
     /* Prevent overlays from stealing mouse clicks */
     #player-overlay {
         pointer-events: none !important;
@@ -138,10 +143,16 @@ aeroStyles.textContent = `
         flex: 3 !important;
         max-width: none !important;
         width: auto !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
     }
     #main-view {
         flex: 7 !important;
+        display: flex !important;
         flex-direction: column !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
     }
     #live-top-half {
         display: flex !important;
@@ -149,18 +160,43 @@ aeroStyles.textContent = `
         height: 50% !important;
         width: 100% !important;
         gap: 12px !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
     }
     #live-bottom-half {
         height: 50% !important;
         width: 100% !important;
         overflow-y: auto !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
     }
     #player-wrapper {
         flex: 2 !important;
+        background-color: #333 !important;
+        padding: 1px !important;
+        box-sizing: border-box !important;
+        border-radius: 0 !important;
+        position: relative !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+    }
+    #player-container {
+        flex: 1 !important;
+        position: relative !important;
+        width: 100% !important;
+        height: 100% !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        background: #000 !important;
     }
     #channel-details {
         flex: 1 !important;
         overflow-y: auto !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
     }
 
     /* Custom Fullscreen button overlay */
@@ -932,6 +968,15 @@ function updateState(skipSave = false) {
     
     allChannels.sort((a, b) => sortAlphaNum(a.title, b.title));
 
+    if (streamActive) {
+        const currentUrl = localStorage.getItem('lastPlayedChannelUrl');
+        const detailName = document.getElementById('detail-name');
+        const currentTitle = detailName ? detailName.textContent : '';
+        currentPlayingChannelIndex = allChannels.findIndex(c => c.url === currentUrl && (c.title || 'Unknown Channel') === currentTitle);
+    } else {
+        currentPlayingChannelIndex = -1;
+    }
+
     if (filterSelect && Array.from(filterSelect.options).some(o => o.value === currentFilter)) {
         filterSelect.value = currentFilter;
     }
@@ -1453,7 +1498,8 @@ function renderChannels() {
         const favClass = channel.favourite ? 'fav-btn active' : 'fav-btn';
         const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
 
-        html += `<div class="channel-item" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}" style="display: flex; align-items: center; width: 100%; box-sizing: border-box; padding: 5px 10px; border-bottom: 1px solid #1e1e1e; cursor: pointer;">
+        const activeClass = (index === currentPlayingChannelIndex) ? ' active' : '';
+        html += `<div class="channel-item${activeClass}" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}" style="display: flex; align-items: center; width: 100%; box-sizing: border-box; padding: 5px 10px; border-bottom: 1px solid #1e1e1e; cursor: pointer;">
             ${logoHtml}
             <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; color: #e0e0e0; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif;">${safeTitle}</span>
             ${favBtnHtml}
@@ -1998,6 +2044,10 @@ async function embedStream(channel) {
     
     currentPlayingChannelIndex = allChannels.findIndex(c => c.url === channel.url && c.title === channel.title);
 
+    document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+    const activeEl = document.querySelector(`.channel-item[data-index="${currentPlayingChannelIndex}"]`);
+    if (activeEl) activeEl.classList.add('active');
+
     const fsBtn = document.getElementById('fullscreen-btn');
     if (fsBtn) fsBtn.style.display = 'block';
     
@@ -2104,6 +2154,9 @@ window.iptvAPI.onMpvExit((code) => {
     console.log('[API RECV] onMpvExit with code:', code);
     if (streamActive) {
         streamActive = false;
+        currentPlayingChannelIndex = -1;
+        document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+
         const playerOverlay = document.getElementById('player-overlay');
         if (playerOverlay) {
             playerOverlay.innerHTML = `<span style="color: #cf6679;">Loading failed or playback stopped.</span>`;
@@ -2220,30 +2273,22 @@ function switchTab(tabId, clickedBtn) {
 
     if (sidebar) sidebar.style.display = isLive ? 'flex' : 'none';
     if (mainView) mainView.style.display = isLive ? 'flex' : 'none';
-    
-    // Dynamically double the channel list (sidebar) width upon first showing it
-    if (isLive && sidebar && !window.sidebarReduced) {
-        const currentWidth = parseFloat(window.getComputedStyle(sidebar).width);
-        if (!isNaN(currentWidth) && currentWidth > 0) {
-            const newWidth = currentWidth * 2; // Double the width
-            sidebar.style.width = newWidth + 'px';
-            sidebar.style.minWidth = newWidth + 'px';
-            sidebar.style.maxWidth = newWidth + 'px';
-            sidebar.style.flex = `0 0 ${newWidth}px`;
-            window.sidebarReduced = true;
-        }
-    }
+    if (sidebar) sidebar.style.setProperty('display', isLive ? 'flex' : 'none', 'important');
+    if (mainView) mainView.style.setProperty('display', isLive ? 'flex' : 'none', 'important');
     
     const playlistView = document.getElementById('playlist-view');
     if (playlistView) playlistView.style.display = isPlaylist ? 'flex' : 'none';
+    if (playlistView) playlistView.style.setProperty('display', isPlaylist ? 'flex' : 'none', 'important');
     
     const epgView = document.getElementById('epg-view');
     if (epgView) epgView.style.display = isEpg ? 'flex' : 'none';
+    if (epgView) epgView.style.setProperty('display', isEpg ? 'flex' : 'none', 'important');
     
     if (isEpg) renderFullEpg();
     
     const settingsView = document.getElementById('settings-view');
     if (settingsView) settingsView.style.display = isSettings ? 'flex' : 'none';
+    if (settingsView) settingsView.style.setProperty('display', isSettings ? 'flex' : 'none', 'important');
 
     if (isSettings) renderSettings();
 
@@ -2330,13 +2375,15 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
     
     if (playerWrapper) {
         if (isFullscreen) {
-            playerWrapper.style.setProperty('border', 'none', 'important');
+            playerWrapper.style.setProperty('padding', '0', 'important');
+            playerWrapper.style.setProperty('background-color', 'transparent', 'important');
             playerWrapper.style.setProperty('border-radius', '0', 'important');
             document.body.style.setProperty('padding', '0', 'important');
             document.body.style.setProperty('gap', '0', 'important');
             if (liveTopHalf) liveTopHalf.style.setProperty('gap', '0', 'important');
         } else {
-            playerWrapper.style.setProperty('border', '1px solid #333', 'important');
+            playerWrapper.style.setProperty('padding', '1px', 'important');
+            playerWrapper.style.setProperty('background-color', '#333', 'important');
             playerWrapper.style.setProperty('border-radius', '0', 'important');
             document.body.style.setProperty('padding', '12px', 'important');
             document.body.style.setProperty('gap', '12px', 'important');
@@ -2425,6 +2472,13 @@ async function backgroundAutoUpdate() {
 // Load saved channels on startup
 window.addEventListener('DOMContentLoaded', async () => {
     console.log('[LIFECYCLE] DOMContentLoaded event fired.');
+
+    // Hide all main view containers initially to prevent UI flash before data loads
+    ['sidebar', 'main-view', 'playlist-view', 'epg-view', 'settings-view'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+        if (el) el.style.setProperty('display', 'none', 'important');
+    });
 
     // Add custom fullscreen button to the player container
     const fsBtn = document.createElement('button');
@@ -2576,18 +2630,25 @@ window.addEventListener('DOMContentLoaded', async () => {
             switchTab('live-tv', document.getElementById('btn-live-tv'));
             // Autoplay last played channel
             const lastUrl = localStorage.getItem('lastPlayedChannelUrl');
+            let startedPlayback = false;
             if (lastUrl) {
                 const lastChannel = allChannels.find(c => c.url === lastUrl);
                 if (lastChannel) {
                     embedStream(lastChannel);
+                    startedPlayback = true;
                 }
+            }
+            if (!startedPlayback && window.iptvAPI.hideSplash) {
+                window.iptvAPI.hideSplash();
             }
         } else {
             switchTab('playlist', document.getElementById('btn-playlist'));
+            if (window.iptvAPI.hideSplash) window.iptvAPI.hideSplash();
         }
     } else {
         updateState(); // Initialize empty states
         switchTab('playlist', document.getElementById('btn-playlist'));
+        if (window.iptvAPI.hideSplash) window.iptvAPI.hideSplash();
     }
     
     // Begin non-blocking background auto-update process (Delayed to allow the UI to finish rendering first)

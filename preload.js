@@ -23,5 +23,6 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     loadChannels: () => ipcRenderer.invoke('load-channels'),
     openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
     clearCache: (url) => ipcRenderer.invoke('clear-cache', url),
-    factoryReset: () => ipcRenderer.invoke('factory-reset')
+    factoryReset: () => ipcRenderer.invoke('factory-reset'),
+    hideSplash: () => ipcRenderer.send('hide-splash')
 });

@@ -84,6 +84,9 @@ let ipcClient = null;
 let isMpvReady = false;
 let ipcConnectionAttempts = 0;
 let reconnectTimer = null;
+let splashWindow = null;
+let isMainReadyToShow = false;
+let shouldShowMainWindow = false;
 const ipcPath = process.platform === 'win32' ? '\\\\.\\pipe\\mpv-electron-ipc' : '/tmp/mpv-electron-ipc';
 
 // Fix for "Network service crashed" on Windows (disables Chromium sandbox and HW acceleration)
@@ -92,9 +95,21 @@ app.disableHardwareAcceleration();
 // Suppress harmless DirectComposition GPU driver warnings on Windows
 app.commandLine.appendSwitch('log-level', '3'); // Suppress Chromium console spam
 
+function showMainWindowAndHideSplash() {
+    shouldShowMainWindow = true;
+    if (isMainReadyToShow) {
+        if (splashWindow && !splashWindow.isDestroyed()) {
+            splashWindow.destroy();
+        }
+        if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+            mainWindow.show();
+        }
+    }
+}
+
 function createWindow() {
     // Create a frameless, transparent splash window
-    const splash = new BrowserWindow({
+    splashWindow = new BrowserWindow({
         width: 600,
         height: 600,
         transparent: true,
@@ -104,7 +119,7 @@ function createWindow() {
         icon: path.join(__dirname, 'assets', 'logo.png')
     });
 
-    splash.loadFile('splash.html');
+    splashWindow.loadFile('splash.html');
 
     mainWindow = new BrowserWindow({
         width: 1200,
@@ -146,8 +161,13 @@ function createWindow() {
 
     // Wait until the HTML is fully rendered and ready to display
     mainWindow.once('ready-to-show', () => {
-        if (!splash.isDestroyed()) splash.destroy(); // Remove splash
-        mainWindow.show();       // Show the completed main window
+        isMainReadyToShow = true;
+        if (shouldShowMainWindow) {
+            showMainWindowAndHideSplash();
+        }
+        
+        // Fallback in case of an issue playing the stream
+        setTimeout(showMainWindowAndHideSplash, 8000);
     });
 
     // Terminate MPV gracefully when the window closes
@@ -385,6 +405,7 @@ function connectIPC() {
                             console.log('[MPV] Playback confirmed ready.');
                             isMpvReady = true;
                             syncPlayerWindow();
+                            showMainWindowAndHideSplash();
                         }
                         if (mainWindow && !mainWindow.isDestroyed()) {
                             mainWindow.webContents.send('mpv-prop-change', msg.name, msg.data);
@@ -462,12 +483,6 @@ ipcMain.on('update-mpv-bounds', (event, bounds) => {
     console.log('[IPC RECV] update-mpv-bounds', bounds);
     currentDOMBounds = bounds;
     syncPlayerWindow();
-    
-    // Stop decoding background streams automatically if the player is hidden/collapsed
-    if (bounds.width === 0 && bounds.height === 0 && ipcClient && !ipcClient.destroyed) {
-        ipcClient.write(JSON.stringify({ command: ["stop"] }) + '\n');
-        isMpvReady = false;
-    }
 });
 
 // Send control commands directly to the MPV process
@@ -497,6 +512,11 @@ ipcMain.on('toggle-fullscreen', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.setFullScreen(!mainWindow.isFullScreen());
     }
+});
+
+ipcMain.on('hide-splash', () => {
+    console.log('[IPC RECV] hide-splash');
+    showMainWindowAndHideSplash();
 });
 
 // Ensure the Cache directory exists within the OS-specific User Data folder
