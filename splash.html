@@ -39,24 +39,38 @@ html, body {
 <body>
 
 <div id="container">
-    <video id="video-container" src="./assets/Splash_1.webm" autoplay loop muted playsinline></video>
+    <video id="video-container" src="./assets/Splash_1.webm" autoplay muted playsinline></video>
     <img id="fallback-image" src="./assets/player.png">
 </div>
 
 <script>
+const { ipcRenderer } = require('electron');
 const video = document.getElementById('video-container');
 const fallback = document.getElementById('fallback-image');
+
+let endedSent = false;
+function sendEnded() {
+    if (endedSent) return;
+    endedSent = true;
+    ipcRenderer.send('splash-ended');
+}
 
 function showFallback(reason) {
     console.error('Splash fallback:', reason);
 
     video.style.display = 'none';
     fallback.style.display = 'block';
+    setTimeout(sendEnded, 1500);
 }
+
+video.addEventListener('ended', sendEnded);
 
 video.addEventListener('error', (e) => {
     showFallback('Video failed to load');
 });
+
+// Fallback just in case video doesn't play or end properly
+setTimeout(sendEnded, 10000);
 </script>
 
 </body>

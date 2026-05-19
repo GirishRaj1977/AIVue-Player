@@ -92,6 +92,7 @@ let reconnectTimer = null;
 let splashWindow = null;
 let isMainReadyToShow = false;
 let shouldShowMainWindow = false;
+let isSplashEnded = false;
 const ipcPath = process.platform === 'win32' ? '\\\\.\\pipe\\mpv-electron-ipc' : '/tmp/mpv-electron-ipc';
 
 // Fix for "Network service crashed" on Windows (disables Chromium sandbox and HW acceleration)
@@ -100,9 +101,19 @@ app.disableHardwareAcceleration();
 // Suppress harmless DirectComposition GPU driver warnings on Windows
 app.commandLine.appendSwitch('log-level', '3'); // Suppress Chromium console spam
 
+ipcMain.on('splash-ended', () => {
+    console.log('[EVENT] splash-ended');
+    isSplashEnded = true;
+    checkAndShowMainWindow();
+});
+
 function showMainWindowAndHideSplash() {
     shouldShowMainWindow = true;
-    if (isMainReadyToShow) {
+    checkAndShowMainWindow();
+}
+
+function checkAndShowMainWindow() {
+    if (shouldShowMainWindow && isMainReadyToShow && isSplashEnded) {
         if (splashWindow && !splashWindow.isDestroyed()) {
             splashWindow.destroy();
         }
@@ -122,7 +133,11 @@ function createWindow() {
         alwaysOnTop: true,
         hasShadow: false,
         title: 'AIVue Player',
-        icon: path.join(__dirname, 'assets', 'logo.ico')
+        icon: path.join(__dirname, 'assets', 'logo.ico'),
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
     });
 
     splashWindow.loadFile('splash.html');
@@ -168,9 +183,7 @@ function createWindow() {
     // Wait until the HTML is fully rendered and ready to display
     mainWindow.once('ready-to-show', () => {
         isMainReadyToShow = true;
-        if (shouldShowMainWindow) {
-            showMainWindowAndHideSplash();
-        }
+        checkAndShowMainWindow();
         
         // Fallback in case of an issue playing the stream
         setTimeout(showMainWindowAndHideSplash, 8000);
