@@ -2757,6 +2757,119 @@ window.addEventListener('DOMContentLoaded', async () => {
             if (heading) {
                 heading.parentNode.insertBefore(tabContainer, heading.nextSibling);
             }
+
+            // --- REDESIGN ADD PLAYLIST CARD FOR HORIZONTAL COMPACT LAYOUT ---
+            card.style.width = '100%';
+            card.style.maxWidth = '100%';
+            card.style.boxSizing = 'border-box';
+
+            const nameNode = document.getElementById('import-name');
+            const fileContainerNode = document.getElementById('input-container-file');
+            const urlContainerNode = document.getElementById('input-container-url');
+            const epgNode = document.getElementById('import-epg-path');
+
+            if (nameNode && fileContainerNode && urlContainerNode && epgNode) {
+                const flexContainer = document.createElement('div');
+                flexContainer.style.display = 'flex';
+                flexContainer.style.flexDirection = 'row';
+                flexContainer.style.flexWrap = 'wrap';
+                flexContainer.style.gap = '20px';
+                flexContainer.style.width = '100%';
+                flexContainer.style.alignItems = 'flex-end';
+                flexContainer.style.marginTop = '10px';
+                flexContainer.style.marginBottom = '20px';
+
+                function createCol(idList) {
+                    const col = document.createElement('div');
+                    col.style.display = 'flex';
+                    col.style.flexDirection = 'column';
+                    col.style.flex = '1 1 250px';
+                    col.style.minWidth = '0';
+                    col.style.gap = '8px';
+
+                    idList.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) {
+                            let prev = el.previousElementSibling;
+                            while (prev && prev.tagName === 'BR') {
+                                prev.style.display = 'none';
+                                prev = prev.previousElementSibling;
+                            }
+                            if (prev && ['LABEL', 'STRONG', 'B', 'SPAN'].includes(prev.tagName)) {
+                                col.appendChild(prev);
+                            }
+                            col.appendChild(el);
+                            el.style.width = '100%';
+                            el.style.boxSizing = 'border-box';
+                        }
+                    });
+                    return col;
+                }
+
+                const col1 = createCol(['import-name']);
+
+                const col2 = document.createElement('div');
+                col2.style.display = 'flex';
+                col2.style.flexDirection = 'column';
+                col2.style.flex = '1 1 250px';
+                col2.style.minWidth = '0';
+                col2.style.gap = '8px';
+
+                const modeFileBtn = document.getElementById('btn-mode-file');
+                if (modeFileBtn && modeFileBtn.parentElement) {
+                    const modeContainer = modeFileBtn.parentElement;
+                    let prev = modeContainer.previousElementSibling;
+                    while (prev && prev.tagName === 'BR') {
+                        prev.style.display = 'none';
+                        prev = prev.previousElementSibling;
+                    }
+                    if (prev && ['LABEL', 'STRONG', 'B', 'SPAN'].includes(prev.tagName)) {
+                        col2.appendChild(prev);
+                    }
+                    col2.appendChild(modeContainer);
+                }
+
+                if (urlContainerNode) {
+                    col2.appendChild(urlContainerNode);
+                    urlContainerNode.style.width = '100%';
+                }
+                if (fileContainerNode) {
+                    col2.appendChild(fileContainerNode);
+                    fileContainerNode.style.width = '100%';
+                }
+
+                const col3 = createCol(['import-epg-path']);
+
+                flexContainer.appendChild(col1);
+                flexContainer.appendChild(col2);
+                flexContainer.appendChild(col3);
+
+                const submitBtn = document.getElementById('import-submit-btn');
+                if (submitBtn) {
+                    submitBtn.parentElement.insertBefore(flexContainer, submitBtn);
+                }
+
+                const actionsRow = document.createElement('div');
+                actionsRow.style.display = 'flex';
+                actionsRow.style.justifyContent = 'flex-end';
+                actionsRow.style.alignItems = 'center';
+                actionsRow.style.gap = '15px';
+                actionsRow.style.width = '100%';
+
+                const cancelBtn = document.getElementById('import-cancel-btn');
+                const loadingIndicator = document.getElementById('loading');
+
+                if (loadingIndicator) actionsRow.appendChild(loadingIndicator);
+                if (cancelBtn) actionsRow.appendChild(cancelBtn);
+                if (submitBtn) actionsRow.appendChild(submitBtn);
+
+                card.appendChild(actionsRow);
+
+                // Clean up any stray <br> tags left behind in the card body
+                Array.from(card.children).forEach(child => {
+                    if (child.tagName === 'BR') child.style.display = 'none';
+                });
+            }
         }
     }
 
