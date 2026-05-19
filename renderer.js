@@ -2125,7 +2125,7 @@ async function renderFullEpg() {
     const nowPx = minutesSinceStart * pxPerMinute;
     let redLineHtml = '';
     if (nowPx > 0 && nowPx < totalWidth) {
-        redLineHtml = `<div id="epg-time-indicator" style="position: absolute; left: ${nowPx}px; top: 0; height: 100%; width: 2px; background: #cf6679; z-index: 15; pointer-events: none;"></div>`;
+        redLineHtml = `<div id="epg-time-indicator" style="position: absolute; left: ${250 + nowPx}px; top: 0; height: 100%; width: 2px; background: #cf6679; z-index: 15; pointer-events: none;"></div>`;
     }
 
     let html = `
@@ -2217,7 +2217,7 @@ async function renderFullEpg() {
             const newNow = new Date();
             const newMinutesSinceStart = (newNow.getTime() - epgGridState.gridStart.getTime()) / 60000;
             const newNowPx = newMinutesSinceStart * epgGridState.pxPerMinute;
-            indicator.style.left = `${newNowPx}px`;
+            indicator.style.left = `${250 + newNowPx}px`;
         }
     }, 60000);
 }
