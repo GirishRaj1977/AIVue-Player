@@ -5,6 +5,11 @@ const net = require('net');
 const fs = require('fs');
 const crypto = require('crypto');
 
+// Force all native warnings, dialogs, and popups to use the main window title
+const originalUserData = app.getPath('userData');
+app.name = 'AIVue Player';
+app.setPath('userData', originalUserData); // Prevents wiping the user's data due to the name change!
+
 // --- SQLite Database Initialization ---
 const dbPath = path.join(app.getPath('userData'), 'iptv.db');
 let db;
@@ -116,7 +121,8 @@ function createWindow() {
         frame: false,
         alwaysOnTop: true,
         hasShadow: false,
-        icon: path.join(__dirname, 'assets', 'logo.png')
+        title: 'AIVue Player',
+        icon: path.join(__dirname, 'assets', 'logo.ico')
     });
 
     splashWindow.loadFile('splash.html');
@@ -125,7 +131,7 @@ function createWindow() {
         width: 1200,
         height: 800,
         title: 'AIVue Player',
-        icon: path.join(__dirname, 'assets', 'logo.png'),
+        icon: path.join(__dirname, 'assets', 'logo.ico'),
         show: false, // Hide initially until fully loaded
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -272,6 +278,7 @@ function initMpv() {
         resizable: false,  
         backgroundColor: '#000000',
         skipTaskbar: true, 
+        title: 'AIVue Player',
     });
     
     playerWindow.setIgnoreMouseEvents(true);
@@ -721,7 +728,7 @@ ipcMain.handle('get-epg', (event, channelIds) => {
 ipcMain.handle('open-file-dialog', async () => {
     console.log('[IPC HANDLE] open-file-dialog');
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-        title: 'Select Playlist',
+        title: 'AIVue Player',
         properties: ['openFile'],
         filters: [{ name: 'M3U Playlists', extensions: ['m3u', 'm3u8'] }]
     });

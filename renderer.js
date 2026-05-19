@@ -1048,6 +1048,24 @@ function updateState(skipSave = false) {
         });
     }
 
+    let channelSearch = document.getElementById('channel-search');
+    if (!channelSearch && groupFilter) {
+        channelSearch = document.createElement('input');
+        channelSearch.id = 'channel-search';
+        channelSearch.type = 'text';
+        channelSearch.placeholder = 'Search channels...';
+        channelSearch.style.marginTop = '10px';
+        channelSearch.style.width = '100%';
+        channelSearch.style.padding = '8px';
+        channelSearch.style.borderRadius = '4px';
+        channelSearch.style.background = '#1e1e1e';
+        channelSearch.style.color = '#fff';
+        channelSearch.style.border = '1px solid #333';
+        channelSearch.style.boxSizing = 'border-box';
+        groupFilter.parentNode.insertBefore(channelSearch, groupFilter.nextSibling);
+        channelSearch.addEventListener('input', () => renderChannels());
+    }
+
     updateGroupFilterOptions();
     
     renderChannels();
@@ -1456,7 +1474,6 @@ function renderPlaylists() {
                 allEpgSources.push(epgSource);
             }
             const combinedEpgs = allEpgSources.join(',');
-            const mappingsJson = JSON.stringify(channelMappings);
 
             const originalText = e.target.textContent;
             e.target.textContent = 'Refreshing...';
@@ -1464,9 +1481,22 @@ function renderPlaylists() {
 
             try {
                 console.log('[API] Calling parseM3u for refresh.');
-                const result = await window.iptvAPI.parseM3u(source, combinedEpgs, mappingsJson, true);
+                const result = await window.iptvAPI.parseM3u(source, null, null, true);
                 if (result && !result.error && (Array.isArray(result) || result.channels)) {
                     const channels = Array.isArray(result) ? result : result.channels;
+                    
+                    const oldMap = new Map();
+                    if (targetPlaylist.channels) {
+                        targetPlaylist.channels.forEach(c => oldMap.set(c.title, c));
+                    }
+                    channels.forEach(newCh => {
+                        const old = oldMap.get(newCh.title);
+                        if (old) {
+                            newCh.disabled = old.disabled;
+                            newCh.favourite = old.favourite;
+                        }
+                    });
+                    
                     targetPlaylist.channels = channels;
                     if (result.epg_url && (!targetPlaylist.epg || targetPlaylist.epg === 'Not Configured')) {
                         targetPlaylist.epg = result.epg_url;
@@ -1551,6 +1581,9 @@ function renderChannels() {
     const groupFilter = document.getElementById('group-filter');
     const groupVal = groupFilter ? groupFilter.value : 'all';
 
+    const channelSearch = document.getElementById('channel-search');
+    const searchVal = channelSearch ? channelSearch.value.toLowerCase() : '';
+
     let html = '';
     
     allChannels.forEach((channel, index) => {
@@ -1560,8 +1593,10 @@ function renderChannels() {
         const channelGroup = channel.group || 'Uncategorized';
         if (groupVal !== 'all' && channelGroup !== groupVal) return;
 
-        const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.png';
+        const rawTitle = channel.title || 'Unknown Channel';
+        if (searchVal && !rawTitle.toLowerCase().includes(searchVal)) return;
+        const safeTitle = rawTitle.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.ico';
         
         const logoHtml = `<img src="${imgSrc}" style="width: 40px; height: 40px; min-width: 40px; object-fit: contain; margin-right: 10px; border-radius: 4px; background: #ffffff;">`;
         
@@ -1586,7 +1621,7 @@ function renderChannels() {
     channelList.querySelectorAll('img').forEach(img => {
         img.onerror = function() {
             this.onerror = null;
-            this.src = 'assets/logo.png';
+            this.src = 'assets/logo.ico';
         };
     });
 }
@@ -2026,7 +2061,7 @@ function renderVisibleEpgRows(force = false) {
         img.setAttribute('data-eh', '1');
         img.onerror = function() {
             this.onerror = null;
-            this.src = 'assets/logo.png';
+            this.src = 'assets/logo.ico';
         };
     });
 
@@ -2267,9 +2302,9 @@ async function embedStream(channel) {
         detailLogo.style.objectFit = 'contain';
         detailLogo.onerror = function() {
             this.onerror = null;
-            this.src = 'assets/logo.png';
+            this.src = 'assets/logo.ico';
         };
-        detailLogo.src = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.png';
+        detailLogo.src = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.ico';
     }
     const detailRes = document.getElementById('detail-res');
     if (detailRes) {
@@ -2983,7 +3018,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                 console.log('[REMINDER] Firing notification for program:', r.progTitle);
                 const notif = new Notification("Programme Reminder", {
                     body: `${r.progTitle} is starting soon on ${r.channelTitle}. Click to watch.`,
-                    icon: 'assets/logo.png'
+                    icon: 'assets/logo.ico'
                 });
 
                 notif.onclick = () => {

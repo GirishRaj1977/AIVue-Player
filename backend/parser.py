@@ -88,52 +88,71 @@ def parse_m3u(content, source=""):
     if content.strip().lower().startswith('<!doctype html>') or '<html' in content[:100].lower() or '<body' in content[:100].lower():
         return None
 
-    # Detect if this is a single video stream (HLS manifest) instead of an IPTV playlist
-    # This prevents the parser from extracting individual .ts video segments as channels!
-    if '#EXT-X-TARGETDURATION' in content or '#EXT-X-MEDIA-SEQUENCE' in content or ('#EXT-X-STREAM-INF' in content and '#EXTINF' not in content):
-        title = urlparse(source).hostname or "HLS Stream"
-        return {"channels": [{"title": f"Live Stream ({title})", "logo": "", "url": source}], "epg_url": None}
-
     lines = content.splitlines()
+    if lines and lines[0].startswith('\ufeff'):
+        lines[0] = lines[0].replace('\ufeff', '')
+
     channels = []
     current_channel = {}
     epg_url = None
+    
+    is_hls_chunklist = False
 
     for line in lines:
         line = line.strip()
         if not line:
             continue
+            
+        line_upper = line.upper()
 
-        if line.startswith('#EXTM3U'):
+        if line_upper.startswith('#EXT-X-TARGETDURATION') or line_upper.startswith('#EXT-X-MEDIA-SEQUENCE'):
+            is_hls_chunklist = True
+            continue
+
+        if line_upper.startswith('#EXTM3U'):
             epg_match = re.search(r'(?:x-tvg-url|url-tvg)=["\']([^"\']+)["\']', line, re.IGNORECASE)
             if epg_match:
                 epg_url = epg_match.group(1)
             continue
             
-        if line.startswith('#EXTINF'):
-            # Extract title (after the first comma to allow commas in channel names)
-            title_split = line.split(',', 1)
-            current_channel['title'] = title_split[1].strip() if len(title_split) > 1 else "Unknown Channel"
+        if line_upper.startswith('#EXTINF'):
+            # Robust attribute extraction mapping all key="value" pairs
+            attrs = {}
+            for match in re.finditer(r'([a-zA-Z0-9_-]+)\s*=\s*(?:["\']([^"\']*)["\']|([^\s,]+))', line):
+                key = match.group(1).lower()
+                val = match.group(2) if match.group(2) is not None else match.group(3)
+                attrs[key] = val
 
-            # Safely extract logo using regex to handle both single and double quotes
-            logo_match = re.search(r'tvg-logo=["\']([^"\']+)["\']', line)
-            current_channel['logo'] = logo_match.group(1) if logo_match else ""
-            
-            tvg_id_match = re.search(r'tvg-id=["\']([^"\']+)["\']', line, re.IGNORECASE)
-            current_channel['tvg_id'] = tvg_id_match.group(1) if tvg_id_match else ""
-            
-            tvg_name_match = re.search(r'tvg-name=["\']([^"\']+)["\']', line, re.IGNORECASE)
-            current_channel['tvg_name'] = tvg_name_match.group(1) if tvg_name_match else ""
-            
-            group_title_match = re.search(r'group-title\s*=\s*(["\'])(.*?)\1', line, re.IGNORECASE)
-            if not group_title_match:
-                group_title_match = re.search(r'group-title\s*=\s*([^\s,]+)', line, re.IGNORECASE)
-                current_channel['group'] = group_title_match.group(1).strip() if group_title_match else "Uncategorized"
+            # Extract title by finding the first comma not inside quotes
+            in_quotes = False
+            comma_pos = -1
+            for i, char in enumerate(line):
+                if char == '"' or char == "'":
+                    in_quotes = not in_quotes
+                elif char == ',' and not in_quotes:
+                    comma_pos = i
+                    break
+                    
+            if comma_pos >= 0:
+                raw_title = line[comma_pos + 1:].strip()
             else:
-                current_channel['group'] = group_title_match.group(2).strip()
+                # Fallback if the M3U is malformed and lacks a comma
+                raw_title = re.sub(r'(?i)#EXTINF:.*?(?=\s|$)', '', line).strip()
             
-        elif line.startswith('#EXT-X-STREAM-INF'):
+            # If it's an HLS chunklist and the title is empty, it's just a .ts segment. Ignore it.
+            if is_hls_chunklist and not raw_title:
+                current_channel['ignore'] = True
+                continue
+                
+            current_channel['title'] = raw_title if raw_title else "Unknown Channel"
+            current_channel['logo'] = attrs.get('tvg-logo', '')
+            current_channel['tvg_id'] = attrs.get('tvg-id', '')
+            current_channel['tvg_name'] = attrs.get('tvg-name', '')
+            current_channel['group'] = attrs.get('group-title', 'Uncategorized')
+            
+        elif line_upper.startswith('#EXT-X-STREAM-INF'):
             # Handle HLS Master Playlists that list channels as variant streams
+            is_hls_chunklist = True
             if 'title' not in current_channel:
                 name_match = re.search(r'NAME=["\']([^"\']+)["\']', line)
                 if name_match:
@@ -145,10 +164,13 @@ def parse_m3u(content, source=""):
             if 'logo' not in current_channel:
                 current_channel['logo'] = ""
                 
-        elif line.startswith('#EXTGRP:'):
+        elif line_upper.startswith('#EXTGRP:'):
             current_channel['group'] = line[8:].strip()
             
-        elif not line.startswith('#'):
+        elif not line_upper.startswith('#'):
+            if current_channel.pop('ignore', False):
+                continue
+                
             url = line
             if source.startswith('http') and not (url.startswith('http://') or url.startswith('https://')):
                 url = urljoin(source, url)
@@ -156,12 +178,19 @@ def parse_m3u(content, source=""):
             
             # Fallback if no #EXTINF or #EXT-X-STREAM-INF provided a title
             if 'title' not in current_channel:
+                if is_hls_chunklist:
+                    continue # Skip raw un-annotated segments in HLS streams
                 current_channel['title'] = f"Stream {len(channels) + 1}"
             if 'logo' not in current_channel:
                 current_channel['logo'] = ""
                 
             channels.append(current_channel)
             current_channel = {} # Reset for the next channel
+
+    # If it was an HLS stream with NO valid named channels extracted, return it as a single Live Stream fallback
+    if is_hls_chunklist and len(channels) == 0:
+        title = urlparse(source).hostname or "HLS Stream"
+        return {"channels": [{"title": f"Live Stream ({title})", "logo": "", "url": source}], "epg_url": None}
 
     return {"channels": channels, "epg_url": epg_url}
 
