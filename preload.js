@@ -33,5 +33,8 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     onRemoteError: (callback) => ipcRenderer.on('remote-error', (_event, msg) => callback(msg)),
     onRemoteAction: (callback) => ipcRenderer.on('remote-action', (_event, cmd) => callback(cmd)),
     onShowRemoteOverrideToast: (callback) => ipcRenderer.on('show-remote-override-toast', (_event, deviceId) => callback(deviceId)),
-    sendRemoteOverrideResponse: (allow) => ipcRenderer.send('remote-override-response', allow)
+    sendRemoteOverrideResponse: (allow) => ipcRenderer.send('remote-override-response', allow),
+    onRemoteSearch: (callback) => ipcRenderer.on('remote-search', (_event, text) => callback(text)),
+    syncRemoteSearch: (text) => ipcRenderer.send('sync-remote-search', text),
+    focusRemoteSearch: () => ipcRenderer.send('focus-remote-search')
 });

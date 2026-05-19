@@ -138,11 +138,24 @@ function checkAndShowMainWindow() {
             splashWindow.destroy();
         }
         if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+                mainWindow.setAlwaysOnTop(true);
             mainWindow.show();
+                mainWindow.setAlwaysOnTop(false);
+                mainWindow.focus();
             syncPlayerWindow();
         }
     }
 }
+
+let sseClients = [];
+
+ipcMain.on('sync-remote-search', (event, text) => {
+    sseClients.forEach(c => c.write(`data: ${JSON.stringify({ type: 'searchSync', text })}\n\n`));
+});
+
+ipcMain.on('focus-remote-search', (event) => {
+    sseClients.forEach(c => c.write(`data: ${JSON.stringify({ type: 'focusSearch' })}\n\n`));
+});
 
 function createWindow() {
     // Create a frameless, transparent splash window
@@ -321,7 +334,7 @@ function initRemoteServer() {
 
                 if (authCookie !== expectedAuth && !isBasicAuthValid) {
                     console.log(`[REMOTE API] Auth failed or missing for path: ${req.path}`);
-                    if (req.path === '/login' || req.path === '/manifest.json' || req.path === '/icon.svg' || req.path === '/sw.js' || req.path === '/favicon.ico') {
+                    if (req.path === '/login' || req.path === '/manifest.json' || req.path === '/icon.svg' || req.path === '/sw.js' || req.path === '/favicon.ico' || req.path === '/player.png') {
                         console.log(`[REMOTE API] Bypassing auth for public path: ${req.path}`);
                         return next();
                     }
@@ -343,7 +356,7 @@ function initRemoteServer() {
 
             console.log(`[REMOTE API] Current Device ID: ${deviceId} | Active Paired Device: ${remoteSettings.activeDeviceId}`);
 
-            if (req.path === '/manifest.json' || req.path === '/icon.svg' || req.path === '/sw.js' || req.path === '/login' || req.path === '/favicon.ico') {
+            if (req.path === '/manifest.json' || req.path === '/icon.svg' || req.path === '/sw.js' || req.path === '/login' || req.path === '/favicon.ico' || req.path === '/player.png') {
                 console.log(`[REMOTE API] Bypassing device lock for public path: ${req.path}`);
                 return next();
             }
@@ -405,6 +418,23 @@ function initRemoteServer() {
                 console.log(`[REMOTE API] Device matches active device. Proceeding.`);
                 next();
             }
+        });
+
+        app.get('/events', (req, res) => {
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            res.flushHeaders();
+            sseClients.push(res);
+            req.on('close', () => { sseClients = sseClients.filter(c => c !== res); });
+        });
+
+        app.post('/search', (req, res) => {
+            const text = req.body.text || '';
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('remote-search', text);
+            }
+            res.send('OK');
         });
 
         app.get('/login', (req, res) => {
@@ -497,21 +527,21 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
         app.get('/cmd/:command', (req, res) => {
             const cmd = req.params.command;
             switch(cmd) {
-                case 'playpause': case 'ok': sendMpvCommand(['cycle', 'pause']); break;
+                case 'playpause': sendMpvCommand(['cycle', 'pause']); break;
                 case 'mute': sendMpvCommand(['cycle', 'mute']); break;
-                case 'volup': case 'up': sendMpvCommand(['add', 'volume', 5]); break;
-                case 'voldown': case 'down': sendMpvCommand(['add', 'volume', -5]); break;
+                case 'volup': sendMpvCommand(['add', 'volume', 5]); break;
+                case 'voldown': sendMpvCommand(['add', 'volume', -5]); break;
                 case 'forward': sendMpvCommand(['seek', 30]); break;
                 case 'rewind': sendMpvCommand(['seek', -30]); break;
-                case 'right': sendMpvCommand(['seek', 10]); break;
-                case 'left': sendMpvCommand(['seek', -10]); break;
                 case 'chup': 
                     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mpv-next-channel');
                     break;
                 case 'chdown': 
                     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mpv-previous-channel');
                     break;
-                case 'power': case 'home': case 'back': case 'guide': case 'favorites': case 'search':
+                case 'power': case 'home': case 'back': case 'guide': case 'favorites':
+                case 'up': case 'down': case 'left': case 'right': case 'ok': case 'search':
+                case 'livetv': case 'playlist': case 'settings':
                     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-action', cmd);
                     break;
             }
@@ -520,6 +550,10 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
 
         app.get('/favicon.ico', (req, res) => {
             res.sendFile(path.join(__dirname, 'assets', 'logo.ico'));
+        });
+
+        app.get('/player.png', (req, res) => {
+            res.sendFile(path.join(__dirname, 'assets', 'player.png'));
         });
 
         // ------------------ PWA Endpoints ------------------
@@ -563,35 +597,48 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
 <title>AIVue Remote</title>
 <style>
 *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body{ background:#0f172a; font-family:Arial,sans-serif; color:white; min-height:100vh; display:flex; justify-content:center; align-items:center; padding:15px; }
-.remote{ width:100%; max-width:420px; display:flex; flex-direction:column; gap:14px; }
-.row{ display:grid; gap:10px; }
+body{ background:#0f172a; font-family:Arial,sans-serif; color:white; min-height:100vh; display:flex; justify-content:center; align-items:center; padding:10px; overflow-x:hidden; }
+.remote{ width:100%; max-width:420px; display:flex; flex-direction:column; gap:10px; margin:auto; }
+.row{ display:grid; gap:8px; }
 .row-4{ grid-template-columns:repeat(4,1fr); }
 .row-3{ grid-template-columns:repeat(3,1fr); }
 .row-2{ grid-template-columns:repeat(2,1fr); }
-button{ border:none; border-radius:16px; background:#1e293b; color:white; font-size:18px; font-weight:600; height:60px; cursor:pointer; transition:.15s; }
+button{ border:none; border-radius:12px; background:#1e293b; color:white; font-size:16px; font-weight:600; height:50px; cursor:pointer; transition:.15s; }
 button:active{ transform:scale(.95); }
-.top-btn{ height:55px; }
+.top-btn{ height:45px; }
 .power{ background:#dc2626; }
 .guide{ background:#7c3aed; }
-.dpad{ display:flex; flex-direction:column; align-items:center; gap:10px; }
-.dpad button{ width:70px; height:70px; }
-.middle{ display:flex; align-items:center; gap:10px; }
-.ok{ width:90px !important; height:90px !important; border-radius:50%; background:#7c3aed; font-size:22px; }
-.playback button{ font-size:24px; }
+.dpad{ display:flex; flex-direction:column; align-items:center; gap:8px; margin:5px 0; }
+.dpad button{ width:60px; height:60px; border-radius:50%; }
+.middle{ display:flex; align-items:center; gap:12px; }
+.ok{ width:75px !important; height:75px !important; border-radius:50%; background:#7c3aed; font-size:20px; }
+.playback button{ font-size:20px; }
 .secondary{ background:#334155; }
-.title{ text-align:center; font-size:22px; font-weight:bold; margin-bottom:5px; color:#cbd5e1; }
+.header-img{ display:block; margin:0 auto; max-height:60px; min-height:50px; max-width:100%; object-fit:contain; }
 </style>
 </head>
 <body>
 <div class="remote">
-    <div class="title">AIVue Remote</div>
+    <img src="/player.png" alt="AIVue Remote" class="header-img">
+    <!-- Search -->
+    <input type="text" id="remoteSearchBox" placeholder="Search channels..." autocomplete="off" style="width:100%; padding:12px; border-radius:12px; border:none; background:#1e293b; color:white; font-size:16px; outline:none; text-align:center; margin-bottom: 5px;">
     <!-- Top Buttons -->
     <div class="row row-4">
-        <button class="top-btn power" data-cmd="power" style="display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M16.56,5.44L15.11,6.89C16.84,7.94 18,9.83 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12C6,9.83 7.16,7.94 8.88,6.88L7.44,5.44C5.36,6.88 4,9.28 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12C20,9.28 18.64,6.88 16.56,5.44M11,3V13H13V3H11Z"/></svg></button>
-        <button class="top-btn" data-cmd="home">⌂</button>
-        <button class="top-btn" data-cmd="back">←</button>
-        <button class="top-btn guide" data-cmd="guide">EPG</button>
+        <button class="top-btn" data-cmd="livetv" style="background:#ef4444; display:flex; align-items:center; justify-content:center;">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M21,3H3C1.89,3 1,3.89 1,5V17A2,2 0 0,0 3,19H8V21H16V19H21A2,2 0 0,0 23,17V5C23,3.89 22.1,3 21,3M21,17H3V5H21V17Z"/></svg>
+        </button>
+        <button class="top-btn" data-cmd="playlist" style="background:#22c55e; display:flex; align-items:center; justify-content:center;">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2 14H8V16H2M2 10H12V12H2M2 6H14V8H2M16 14V8H18V14H22V16H16V14Z"/></svg>
+        </button>
+        <button class="top-btn" data-cmd="guide" style="background:#eab308; display:flex; align-items:center; justify-content:center;">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19,4H18V2H16V4H8V2H6V4H5C3.89,4 3.01,4.9 3.01,6L3,20A2,2 0 0,0 5,22H19A2,2 0 0,0 21,20V6A2,2 0 0,0 19,4M19,20H5V10H19V20M9,14H7V12H9V14M13,14H11V12H13V14M17,14H15V12H17V14M9,18H7V16H9V18M13,18H11V16H13V18M17,18H15V16H17V18Z"/></svg>
+        </button>
+        <button class="top-btn" data-cmd="settings" style="background:#3b82f6; display:flex; align-items:center; justify-content:center;">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg>
+        </button>
+        <div style="display:flex; justify-content:center;"><button data-cmd="home" style="width:45px;height:45px;border-radius:50%;font-size:22px;background:#334155;">⌂</button></div>
+        <div style="grid-column: span 2;"></div>
+        <div style="display:flex; justify-content:center;"><button data-cmd="back" style="width:45px;height:45px;border-radius:50%;font-size:22px;background:#334155;">←</button></div>
     </div>
     <!-- D-Pad -->
     <div class="dpad">
@@ -614,7 +661,7 @@ button:active{ transform:scale(.95); }
     <div class="row row-3">
         <button class="secondary" data-cmd="mute">🔇</button>
         <button class="secondary" data-cmd="favorites">⭐</button>
-        <button class="secondary" data-cmd="search">🔍</button>
+        <button class="power" data-cmd="power" style="display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M16.56,5.44L15.11,6.89C16.84,7.94 18,9.83 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12C6,9.83 7.16,7.94 8.88,6.88L7.44,5.44C5.36,6.88 4,9.28 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12C20,9.28 18.64,6.88 16.56,5.44M11,3V13H13V3H11Z"/></svg></button>
     </div>
 </div>
 <script>
@@ -628,6 +675,22 @@ document.querySelectorAll('button').forEach(btn => {
         if(navigator.vibrate) navigator.vibrate(50);
     });
 });
+
+const searchBox = document.getElementById('remoteSearchBox');
+searchBox.addEventListener('input', () => {
+    fetch('/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: searchBox.value })
+    }).catch(e => console.error(e));
+});
+
+const evtSource = new EventSource('/events');
+evtSource.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'searchSync') { searchBox.value = data.text; }
+    else if (data.type === 'focusSearch') { searchBox.focus(); }
+};
 </script>
 </body>
 </html>

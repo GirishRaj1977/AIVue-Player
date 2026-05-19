@@ -44,6 +44,43 @@ aeroStyles.textContent = `
         font-weight: bold !important; 
     }
 
+    /* Spatial Navigation Focus */
+    *:focus {
+        outline: 2px solid #bb86fc !important;
+        outline-offset: 2px;
+    }
+
+    .channel-item:focus, .mapping-ch-item:focus, .mapping-epg-item:focus, .epg-program-cell:focus, .epg-play-channel:focus, .playlist-btn:focus, .nav-btn:focus, button:focus, input:focus, select:focus {
+    .channel-item:focus, .mapping-ch-item:focus, .playlist-btn:focus, .nav-btn:focus, button:focus, input:focus, select:focus {
+        background-color: rgba(187, 134, 252, 0.3) !important;
+        outline: 2px solid #bb86fc !important;
+        outline-offset: -2px;
+    }
+    
+    .epg-program-cell:focus, .epg-play-channel:focus {
+        background-color: rgba(187, 134, 252, 0.5) !important;
+    .mapping-epg-item:focus, .epg-program-cell:focus, .epg-play-channel:focus {
+        background: #bb86fc !important;
+        background-color: #bb86fc !important;
+        outline: 2px solid #bb86fc !important;
+        outline-offset: -2px;
+        color: #000 !important;
+    }
+
+    .epg-program-cell:focus {
+        z-index: 5 !important;
+    }
+
+    .mapping-epg-item:focus span, .epg-program-cell:focus div, .epg-play-channel:focus span {
+        color: #000 !important;
+    }
+
+    select.remote-open {
+        background-color: rgba(187, 134, 252, 0.2) !important;
+        border: 1px solid #bb86fc !important;
+        outline: 2px solid #bb86fc !important;
+    }
+
     /* Modern sleek style for side menu buttons */
     .nav-btn {
         font-weight: 500; /* Menu text: Inter Medium */
@@ -484,7 +521,7 @@ function renderMappingColumns() {
         }
 
         chHtmlArr.push(`
-            <div class="mapping-ch-item" data-title="${safeTitle.replace(/"/g, '&quot;')}" style="padding: 10px; margin-bottom: 6px; background: ${bg}; border: ${border}; border-radius: 4px; cursor: pointer; transition: 0.1s;">
+            <div class="mapping-ch-item" tabindex="0" data-title="${safeTitle.replace(/"/g, '&quot;')}" style="padding: 10px; margin-bottom: 6px; background: ${bg}; border: ${border}; border-radius: 4px; cursor: pointer; transition: 0.1s; outline: none;">
                 <div style="color: ${color}; font-weight: ${mappingSelectedChannel === title ? 'bold' : 'normal'}; pointer-events: none; font-size: 0.8em; font-family: 'Inter', sans-serif;">${safeTitle}${playlistNameStr}</div>
             </div>
         `);
@@ -522,7 +559,7 @@ function renderMappingColumns() {
         const sourceDomain = epgSourceFilter === 'all' && epg.source ? `<span style="color: #888; font-size: 0.8em; margin-left: 8px;">(${getEpgName(epg.source)})</span>` : '';
 
         epgHtmlArr.push(`
-            <div class="mapping-epg-item" data-id="${safeId.replace(/"/g, '&quot;')}" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-bottom: 6px; background: ${bg}; border: ${border}; border-radius: 4px; cursor: pointer; transition: 0.1s;">
+            <div class="mapping-epg-item" tabindex="0" data-id="${safeId.replace(/"/g, '&quot;')}" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-bottom: 6px; background: ${bg}; border: ${border}; border-radius: 4px; cursor: pointer; transition: 0.1s; outline: none;">
                 <span style="color: ${color}; font-weight: ${isSelected ? 'bold' : 'normal'}; pointer-events: none; font-size: 0.8em; font-family: 'Inter', sans-serif;">${safeName}${sourceDomain}</span>
                 ${isSelected ? `<button class="mapping-confirm-btn playlist-btn" style="background: #43CB44; color: black; border: none; font-size: 0.9em; padding: 2px 8px; cursor: pointer; border-radius: 4px; font-weight: bold;">✔️</button>` : ''}
             </div>
@@ -1739,7 +1776,7 @@ function renderChannels() {
         const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
 
         const activeClass = (index === currentPlayingChannelIndex) ? ' active' : '';
-        html += `<div class="channel-item${activeClass}" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}" style="display: flex; align-items: center; width: 100%; box-sizing: border-box; padding: 5px 10px; border-bottom: 1px solid #1e1e1e; cursor: pointer;">
+        html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}" style="display: flex; align-items: center; width: 100%; box-sizing: border-box; padding: 5px 10px; border-bottom: 1px solid #1e1e1e; cursor: pointer; outline: none;">
             ${logoHtml}
             <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; color: #e0e0e0; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif;">${safeTitle}</span>
             ${favBtnHtml}
@@ -1781,8 +1818,20 @@ channelList.addEventListener('click', (e) => {
         const index = favBtn.getAttribute('data-fav-index');
         const channel = allChannels[index];
         if (channel) {
+            const wasFocused = (document.activeElement === favBtn || favBtn.contains(document.activeElement));
             channel.favourite = !channel.favourite;
             updateState(); // Re-render lists and save state to background file
+            if (wasFocused) {
+                setTimeout(() => {
+                    const newFavBtn = document.querySelector(`.fav-btn[data-fav-index="${index}"]`);
+                    if (newFavBtn) {
+                        newFavBtn.focus();
+                    } else {
+                        const firstChannel = document.querySelector('.channel-item');
+                        if (firstChannel) firstChannel.focus();
+                    }
+                }, 10);
+            }
         }
         return; // Stop event so video doesn't play
     }
@@ -2036,6 +2085,7 @@ function renderEpg(programmes) {
         
         html += `
             <div style="background: #1e1e1e; padding: 12px; border-radius: 8px; border-left: 4px solid ${isCurrent ? '#43CB44' : '#444'};">
+            <div class="live-epg-item" tabindex="0" style="background: #1e1e1e; padding: 12px; border-radius: 8px; border-left: 4px solid ${isCurrent ? '#43CB44' : '#444'}; outline: none; cursor: default; transition: 0.2s;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px;">
                     <div style="font-weight: ${isCurrent ? 'bold' : 'normal'}; color: ${color}; font-size: 1.1em; margin-bottom: 5px; display: flex; align-items: center;">${reminderHtml}<span>${title}</span></div>
                     <div style="color: #bb86fc; white-space: nowrap; font-size: 0.9em; margin-top: 2px;">${startTimeStr} - ${stopTimeStr}</div>
@@ -2189,7 +2239,7 @@ function renderVisibleEpgRows(force = false) {
                     const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
 
                     programsHtml += `
-                    <div class="epg-play-channel epg-program-cell" data-index="${globalIdx}" style="position: absolute; left: ${left}px; width: ${width}px; height: 100%; background: ${bg}; border-right: 1px solid #111; border-top: 2px solid ${borderCol}; box-sizing: border-box; padding: 6px 10px; overflow: hidden; cursor: pointer; transition: background 0.2s;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
+                    <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; width: ${width}px; height: 100%; background: ${bg}; border-right: 1px solid #111; border-top: 2px solid ${borderCol}; box-sizing: border-box; padding: 6px 10px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
                         <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${pTitle}</div>
                         <div style="font-size: 0.75em; color: #888; margin-top: 4px;">${timeStr}</div>
                     </div>`;
@@ -2204,7 +2254,7 @@ function renderVisibleEpgRows(force = false) {
         html += `
         <div style="position: absolute; top: ${topPos}px; left: 0; display: flex; width: ${250 + totalWidth}px; border-bottom: 1px solid #2a2a2a; height: 60px; box-sizing: border-box;">
             <!-- Left-Pinned Channel Logo + Name -->
-            <div class="epg-play-channel" data-index="${globalIdx}" style="width: 250px; min-width: 250px; position: sticky; left: 0; z-index: 10; background: #1e1e1e; border-right: 2px solid #333; display: flex; align-items: center; padding: 10px; box-sizing: border-box; cursor: pointer;">
+            <div class="epg-play-channel" tabindex="0" data-index="${globalIdx}" style="width: 250px; min-width: 250px; position: sticky; left: 0; z-index: 10; background: #1e1e1e; border-right: 2px solid #333; display: flex; align-items: center; padding: 10px; box-sizing: border-box; cursor: pointer; outline: none;">
                 <img src="${imgSrc}" data-eh="0" style="width: 40px; height: 40px; min-width: 40px; object-fit: contain; margin-right: 15px; background: #ffffff; border-radius: 4px;">
                 <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif; color: #e0e0e0;" title="${safeTitle}">${safeTitle}</span>
             </div>
@@ -2373,6 +2423,12 @@ async function renderFullEpg() {
 
             const playChannel = e.target.closest('.epg-play-channel');
             if (playChannel) {
+                const internalReminderBtn = playChannel.querySelector('.reminder-btn-full');
+                if (internalReminderBtn && playChannel.classList.contains('epg-program-cell')) {
+                    internalReminderBtn.click();
+                    return;
+                }
+
                 const idx = playChannel.getAttribute('data-index');
                 const targetChannel = allChannels[idx];
                 if (targetChannel) {
@@ -2624,9 +2680,204 @@ window.iptvAPI.onNextChannel(() => {
     }
 });
 
+function getFocusableElements() {
+    const exitToast = document.getElementById('remote-exit-toast');
+    const overrideToast = document.getElementById('remote-override-toast');
+    const activeToast = exitToast || overrideToast;
+
+    const focusableSelectors = [
+        'button', 'a[href]', 'input', 'select', 'textarea', '[tabindex]:not([tabindex="-1"])'
+    ];
+    
+    let rootNode = activeToast ? activeToast : document;
+
+    return Array.from(rootNode.querySelectorAll(focusableSelectors.join(', ')))
+        .filter(el => {
+            if (!el) return false;
+            if (!activeToast && (el.closest('#channel-details') || el.closest('#player-wrapper'))) return false;
+            const rect = el.getBoundingClientRect();
+            const style = window.getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.opacity !== '0' && !el.disabled;
+        });
+}
+
+function getCenter(rect) {
+    return {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2
+    };
+}
+
+function navigateDirection(direction) {
+    const focusables = getFocusableElements();
+    if (focusables.length === 0) return;
+
+    let current = document.activeElement;
+
+    if (current && current.tagName === 'SELECT' && current.classList.contains('remote-open')) {
+        const options = Array.from(current.options);
+        let selectedIndex = current.selectedIndex;
+        if (direction === 'down' || direction === 'right') {
+            selectedIndex = Math.min(options.length - 1, selectedIndex + 1);
+        } else if (direction === 'up' || direction === 'left') {
+            selectedIndex = Math.max(0, selectedIndex - 1);
+        }
+        if (selectedIndex !== current.selectedIndex) {
+            current.selectedIndex = selectedIndex;
+            current.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return;
+    }
+
+    if (!current || !focusables.includes(current) || current === document.body) {
+        const activeToast = document.getElementById('remote-exit-toast') || document.getElementById('remote-override-toast');
+        
+        const firstChannel = document.querySelector('.channel-item');
+        if (!activeToast && firstChannel && firstChannel.getBoundingClientRect().width > 0) {
+            firstChannel.focus();
+            return;
+        }
+
+        focusables[0].focus();
+        return;
+    }
+
+    const currentRect = current.getBoundingClientRect();
+    const currentCenter = getCenter(currentRect);
+
+    let bestMatch = null;
+    let minDistance = Infinity;
+
+    focusables.forEach(el => {
+        if (el === current) return;
+        const rect = el.getBoundingClientRect();
+        const center = getCenter(rect);
+
+        let dx = center.x - currentCenter.x;
+        let dy = center.y - currentCenter.y;
+
+        let isDirectionMatch = false;
+        if (direction === 'up') isDirectionMatch = dy < 0 && Math.abs(dy) >= Math.abs(dx);
+        if (direction === 'down') isDirectionMatch = dy > 0 && Math.abs(dy) >= Math.abs(dx);
+        if (direction === 'left') isDirectionMatch = dx < 0 && Math.abs(dx) >= Math.abs(dy);
+        if (direction === 'right') isDirectionMatch = dx > 0 && Math.abs(dx) >= Math.abs(dy);
+
+        if (!isDirectionMatch) {
+            if (direction === 'up' && dy < 0) isDirectionMatch = true;
+            if (direction === 'down' && dy > 0) isDirectionMatch = true;
+            if (direction === 'left' && dx < 0) isDirectionMatch = true;
+            if (direction === 'right' && dx > 0) isDirectionMatch = true;
+        }
+
+        if (isDirectionMatch) {
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            let score = distance;
+            
+            if (direction === 'up' || direction === 'down') {
+                score += Math.abs(dx) * 2; 
+            } else {
+                score += Math.abs(dy) * 2; 
+            }
+
+            if (score < minDistance) {
+                minDistance = score;
+                bestMatch = el;
+            }
+        }
+    });
+
+    if (bestMatch) {
+        bestMatch.focus();
+        bestMatch.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
+}
+
+function handleOkPress() {
+    const current = document.activeElement;
+    if (current && current.tagName === 'SELECT') {
+        if (current.classList.contains('remote-open')) {
+            current.classList.remove('remote-open');
+        } else {
+            current.classList.add('remote-open');
+            current.addEventListener('blur', function onBlur() {
+                current.classList.remove('remote-open');
+                current.removeEventListener('blur', onBlur);
+            });
+        }
+    } else if (current && ['BUTTON', 'A', 'INPUT'].includes(current.tagName)) {
+        current.click();
+    } else if (current && (current.classList.contains('channel-item') || current.classList.contains('mapping-ch-item') || current.classList.contains('mapping-epg-item') || current.classList.contains('epg-play-channel'))) {
+        current.click();
+    } else if (current && (current.classList.contains('channel-item') || current.classList.contains('mapping-ch-item') || current.classList.contains('mapping-epg-item') || current.classList.contains('epg-play-channel') || current.classList.contains('live-epg-item'))) {
+        const reminderBtn = current.querySelector('.reminder-btn-sidebar');
+        if (current.classList.contains('live-epg-item')) {
+            if (reminderBtn) reminderBtn.click();
+        } else {
+            current.click();
+        }
+    } else {
+        if (streamActive) {
+            window.iptvAPI.sendMpvCommand('cycle pause');
+        }
+    }
+}
+
+window.iptvAPI.onRemoteSearch((text) => {
+    let activeSearch = null;
+    
+    const manageModal = document.getElementById('manage-channels-modal');
+    const settingsView = document.getElementById('settings-view');
+    
+    if (manageModal && manageModal.style.display !== 'none') {
+        activeSearch = document.getElementById('modal-channel-search');
+    } else if (settingsView && settingsView.style.display !== 'none') {
+        if (document.activeElement && document.activeElement.tagName === 'INPUT' && document.activeElement.id.startsWith('mapping')) {
+            activeSearch = document.activeElement;
+        } else {
+            activeSearch = document.getElementById('mapping-channel-search');
+        }
+    } else {
+        activeSearch = document.getElementById('channel-search');
+    }
+
+    if (activeSearch) {
+        if (document.activeElement !== activeSearch) activeSearch.focus();
+        activeSearch.value = text;
+        activeSearch.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+});
+
+document.addEventListener('input', (e) => {
+    if (e.isTrusted && e.target.tagName === 'INPUT' && ['channel-search', 'modal-channel-search', 'mapping-channel-search', 'mapping-epg-search', 'mapping-mapped-search'].includes(e.target.id)) {
+        if (window.iptvAPI.syncRemoteSearch) window.iptvAPI.syncRemoteSearch(e.target.value);
+    }
+});
+
+document.addEventListener('focusin', (e) => {
+    if (e.target.tagName === 'INPUT' && ['channel-search', 'modal-channel-search', 'mapping-channel-search', 'mapping-epg-search', 'mapping-mapped-search'].includes(e.target.id)) {
+        if (window.iptvAPI.focusRemoteSearch) window.iptvAPI.focusRemoteSearch();
+    }
+});
+
 window.iptvAPI.onRemoteAction((cmd) => {
     console.log('[REMOTE] Action received:', cmd);
     switch (cmd) {
+        case 'up':
+        case 'down':
+        case 'left':
+        case 'right':
+            if (streamActive && (!document.activeElement || document.activeElement === document.body)) {
+                if (cmd === 'up') window.iptvAPI.sendMpvCommand('add volume 5');
+                if (cmd === 'down') window.iptvAPI.sendMpvCommand('add volume -5');
+                if (cmd === 'right') window.iptvAPI.sendMpvCommand('seek 10');
+                if (cmd === 'left') window.iptvAPI.sendMpvCommand('seek -10');
+            } else {
+                navigateDirection(cmd);
+            }
+            break;
+        case 'ok':
+            handleOkPress();
+            break;
         case 'power':
             let exitToast = document.getElementById('remote-exit-toast');
             if (exitToast) exitToast.remove();
@@ -2648,9 +2899,16 @@ window.iptvAPI.onRemoteAction((cmd) => {
                 window.close(); // Gracefully closes the window and terminates MPV
             });
             document.getElementById('btn-remote-exit-no').addEventListener('click', () => {
+                exitToast.style.pointerEvents = 'none';
                 exitToast.style.opacity = '0';
+                if (document.activeElement) document.activeElement.blur();
                 setTimeout(() => exitToast.remove(), 300);
             });
+
+            setTimeout(() => {
+                const btnNo = document.getElementById('btn-remote-exit-no');
+                if (btnNo) btnNo.focus();
+            }, 50);
             break;
         case 'home':
             switchTab('live-tv', document.getElementById('btn-live-tv'));
@@ -2660,6 +2918,15 @@ window.iptvAPI.onRemoteAction((cmd) => {
             break;
         case 'guide':
             switchTab('epg', document.getElementById('btn-epg'));
+            break;
+        case 'livetv':
+            switchTab('live-tv', document.getElementById('btn-live-tv'));
+            break;
+        case 'playlist':
+            switchTab('playlist', document.getElementById('btn-playlist'));
+            break;
+        case 'settings':
+            switchTab('settings', document.getElementById('btn-settings'));
             break;
         case 'favorites':
             const filter = document.getElementById('playlist-filter');
@@ -2694,14 +2961,23 @@ window.iptvAPI.onShowRemoteOverrideToast((deviceId) => {
     
     document.getElementById('btn-remote-allow').addEventListener('click', () => {
         window.iptvAPI.sendRemoteOverrideResponse(true);
+        toast.style.pointerEvents = 'none';
         toast.style.opacity = '0';
+        if (document.activeElement) document.activeElement.blur();
         setTimeout(() => toast.remove(), 300);
     });
     document.getElementById('btn-remote-deny').addEventListener('click', () => {
         window.iptvAPI.sendRemoteOverrideResponse(false);
+        toast.style.pointerEvents = 'none';
         toast.style.opacity = '0';
+        if (document.activeElement) document.activeElement.blur();
         setTimeout(() => toast.remove(), 300);
     });
+
+    setTimeout(() => {
+        const btnDeny = document.getElementById('btn-remote-deny');
+        if (btnDeny) btnDeny.focus();
+    }, 50);
 });
 
 // Use ResizeObserver to track exact pixel coordinates perfectly
@@ -3359,4 +3635,11 @@ window.addEventListener('DOMContentLoaded', async () => {
             }
         }
     });
+
+    setTimeout(() => {
+        const focusables = getFocusableElements();
+        if (focusables.length > 0) {
+            focusables[0].focus();
+        }
+    }, 1000);
 });
