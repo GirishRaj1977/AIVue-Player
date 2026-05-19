@@ -297,6 +297,21 @@ let epgChannelsData = null;
 let epgSelectedPlaylist = 'all';
 let epgSelectedGroup = 'all';
 
+// Global variables for virtualized EPG Guide
+let epgGridState = null;
+let epgChannelsToRender = [];
+let epgCache = {};
+let epgLoadingSet = new Set();
+let epgLastStartIndex = -1;
+let epgLastEndIndex = -1;
+let epgLastScrollLeft = -1;
+let epgScrollTicking = false;
+
+function formatDateToEpgString(date) {
+    const pad = n => n.toString().padStart(2, '0');
+    return `${date.getUTCFullYear()}${pad(date.getUTCMonth()+1)}${pad(date.getUTCDate())}${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}`;
+}
+
 let mappingDebounceTimer;
 function debouncedRenderMappingColumns() {
     clearTimeout(mappingDebounceTimer);
@@ -618,7 +633,7 @@ async function renderSettings() {
 
     let epgListHtml = savedEpgs.map((epg, idx) => `
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #2a2a2a; margin-bottom: 8px; border-radius: 6px;">
-            <div style="display: flex; flex-direction: column; flex-grow: 1; margin-right: 15px; overflow: hidden;">
+            <div style="display: flex; flex-direction: column; flex-grow: 1; margin-right: 15px; overflow: hidden; min-width: 0;">
                 <span style="color: #bb86fc; font-weight: bold; margin-bottom: 4px;">${getEpgName(epg)}</span>
                 <span style="color: #888; font-size: 0.85em; word-break: break-all;">${epg}</span>
             </div>
@@ -636,7 +651,7 @@ async function renderSettings() {
         const st = parseEpgTime(r.startTime).toLocaleString([], {weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
         return `
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #2a2a2a; margin-bottom: 8px; border-radius: 6px;">
-            <div style="display: flex; flex-direction: column; flex-grow: 1; overflow: hidden;">
+            <div style="display: flex; flex-direction: column; flex-grow: 1; overflow: hidden; min-width: 0;">
                 <span style="color: #bb86fc; font-weight: bold; margin-bottom: 4px;">${r.progTitle}</span>
                 <span style="color: #888; font-size: 0.85em;">${r.channelTitle} &bull; ${st}</span>
             </div>
@@ -645,10 +660,10 @@ async function renderSettings() {
     }).join('') : '<div style="color:#666; font-style: italic;">No upcoming reminders.</div>';
 
     settingsView.innerHTML = `
-        <div style="padding: 10px; width: 100%; box-sizing: border-box; overflow-y: auto;">
+        <div style="padding: 10px; width: 100%; box-sizing: border-box; overflow-y: auto; overflow-x: hidden;">
             <h2 style="color: #bb86fc; border-bottom: 1px solid #333; padding-bottom: 15px; margin-top: 0;">Settings</h2>
             
-            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333;">
+            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
                 <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px;">External EPG Sources</h3>
                 <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Add multiple XMLTV EPG URLs to load automatically for your playlists. (Requires refreshing your playlist to take effect).</p>
                 <div style="display: flex; gap: 10px; margin-bottom: 20px;">
@@ -659,7 +674,7 @@ async function renderSettings() {
             </div>
 
             <!-- Reminders Card -->
-            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333;">
+            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
                 <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px;">Upcoming Reminders</h3>
                 <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Manage your scheduled program notifications.</p>
                 <div id="settings-reminders-list" style="max-height: 300px; overflow-y: auto;">
@@ -668,7 +683,7 @@ async function renderSettings() {
             </div>
 
             <!-- 3-Column Channel Mapping UI -->
-            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; height: 600px;">
+            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; height: 600px; min-width: 0;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div>
                         <h3 style="color: #e0e0e0; margin: 0;">Channel Mapping</h3>
@@ -677,9 +692,9 @@ async function renderSettings() {
                     <button id="mapping-auto-map-btn" class="playlist-btn" style="background: #43CB44; color: black; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 0.9em; cursor: pointer;">Auto Map</button>
                 </div>
                 
-                <div style="display: flex; gap: 15px; flex-grow: 1; min-height: 0;">
+                <div style="display: flex; gap: 15px; flex-grow: 1; min-height: 0; min-width: 0;">
                     <!-- Left Column: Playlist Channels -->
-                    <div style="flex: 28; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; border-radius: 6px; overflow: hidden;">
+                    <div style="flex: 28; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; border-radius: 6px; overflow: hidden; min-width: 0;">
                         <div style="padding: 10px; background: #252525; border-bottom: 1px solid #444;">
                             <select id="mapping-playlist-filter" style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; margin-bottom: 8px;">
                                 <option value="all">All Playlists</option>
@@ -691,7 +706,7 @@ async function renderSettings() {
                     </div>
                     
                     <!-- Right Column: Available EPG Channels -->
-                    <div style="flex: 28; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; border-radius: 6px; overflow: hidden;">
+                    <div style="flex: 28; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; border-radius: 6px; overflow: hidden; min-width: 0;">
                         <div style="padding: 10px; background: #252525; border-bottom: 1px solid #444;">
                             <select id="mapping-epg-filter" style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; margin-bottom: 8px;">
                                 <option value="all">All EPG Sources</option>
@@ -704,7 +719,7 @@ async function renderSettings() {
                     </div>
 
                     <!-- Right Column: Mapped List -->
-                    <div style="flex: 44; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; border-radius: 6px; overflow: hidden;">
+                    <div style="flex: 44; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; border-radius: 6px; overflow: hidden; min-width: 0;">
                         <div style="padding: 10px; background: #252525; border-bottom: 1px solid #444;">
                             <h3 style="color: #e0e0e0; margin: 0; font-size: 1em; padding: 6px 0; margin-bottom: 6px;">Mapped Channels</h3>
                             <input type="text" id="mapping-mapped-search" placeholder="Search Mapped..." style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; box-sizing: border-box;">
@@ -715,7 +730,7 @@ async function renderSettings() {
             </div>
 
             <!-- Danger Zone -->
-            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #cf6679;">
+            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #cf6679; min-width: 0;">
                 <h3 style="color: #cf6679; margin-top: 0; margin-bottom: 5px;">Danger Zone</h3>
                 <p style="color: #888; font-size: 0.9em; margin-bottom: 15px;">Completely wipe the database and reset the application to its default state. This action cannot be undone.</p>
                 <button id="settings-factory-reset-btn" class="playlist-btn" style="background: #cf6679; color: black; font-weight: bold; padding: 8px 16px;">Factory Reset</button>
@@ -775,6 +790,32 @@ async function renderSettings() {
             console.log('[SETTINGS] Remove EPG button clicked for index:', idx);
             const epgSource = savedEpgs[idx];
             
+            // 1. Unmap all channels mapped to this EPG source
+            const epgIdsToRemove = new Set();
+            if (epgChannelsData) {
+                epgChannelsData.forEach(epg => {
+                    if (epg.source === epgSource) {
+                        epgIdsToRemove.add(epg.id);
+                    }
+                });
+            }
+
+            const titlesToUnmap = [];
+            Object.entries(channelMappings).forEach(([chTitle, epgId]) => {
+                if (epgIdsToRemove.has(epgId)) {
+                    titlesToUnmap.push(chTitle);
+                }
+            });
+
+            if (titlesToUnmap.length > 0) {
+                console.log(`[MAPPING] Unmapping ${titlesToUnmap.length} channels associated with removed EPG.`);
+                for (const title of titlesToUnmap) {
+                    delete channelMappings[title];
+                    await window.iptvAPI.saveMapping(title, null);
+                }
+                updateState(true); // Update the channels without forcing a DB save of the playlist
+            }
+
             // Check if this EPG is still actively used by an imported playlist
             const isUsedByPlaylist = savedPlaylists.some(p => p.epg === epgSource);
             
@@ -785,7 +826,12 @@ async function renderSettings() {
             }
             
             savedEpgs.splice(idx, 1);
-            window.iptvAPI.removeExternalEpg(epgSource);
+            await window.iptvAPI.removeExternalEpg(epgSource);
+            
+            if (epgChannelsData) {
+                epgChannelsData = epgChannelsData.filter(epg => epg.source !== epgSource);
+            }
+
             renderSettings();
         });
     });
@@ -1071,7 +1117,7 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                 });
                 
                 console.log('[API] Calling getEpg to populate new playlist data.');
-                const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch));
+                const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch), null, null);
                 targetPlaylist.channels.forEach(ch => {
                     const mappedId = channelMappings[ch.title];
                     if (mappedId && epgData[mappedId]) ch.epg_programmes = epgData[mappedId];
@@ -1291,22 +1337,20 @@ function renderPlaylists() {
         card.style.cssText = "border: 1px solid #333; border-radius: 12px; padding: 20px; background: #1e1e1e; display: flex; flex-direction: column; gap: 10px;";
         
         let epgInfo = '';
-        if (playlist.epg && playlist.epg !== 'Not Configured') {
-            let mappedChannels = 0;
-            let totalPrograms = 0;
-            if (playlist.channels) {
-                playlist.channels.forEach(ch => {
-                    if (ch.epg_programmes && ch.epg_programmes.length > 0) {
-                        mappedChannels++;
-                        totalPrograms += ch.epg_programmes.length;
-                    }
-                });
-            }
-            if (totalPrograms > 0) {
-                epgInfo = ` <span style="color: #43CB44; font-size: 0.9em;">(${mappedChannels} channels mapped, ${totalPrograms} programs)</span>`;
-            } else {
-                epgInfo = ` <span style="color: #cf6679; font-size: 0.9em;">(EPG not loaded)</span>`;
-            }
+        let mappedChannels = 0;
+        let totalPrograms = 0;
+        if (playlist.channels) {
+            playlist.channels.forEach(ch => {
+                if (ch.epg_programmes && ch.epg_programmes.length > 0) {
+                    mappedChannels++;
+                    totalPrograms += ch.epg_programmes.length;
+                }
+            });
+        }
+        if (totalPrograms > 0) {
+            epgInfo = ` <span style="color: #43CB44; font-size: 0.9em;">(${mappedChannels} channels mapped, ${totalPrograms} programs)</span>`;
+        } else if (playlist.epg && playlist.epg !== 'Not Configured') {
+            epgInfo = ` <span style="color: #cf6679; font-size: 0.9em;">(EPG not loaded)</span>`;
         }
 
         let totalChannels = playlist.channels ? playlist.channels.length : 0;
@@ -1401,10 +1445,11 @@ function renderPlaylists() {
 
     document.querySelectorAll('.refresh-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
-            const idx = e.target.getAttribute('data-index');
+            const idx = parseInt(e.target.getAttribute('data-index'), 10);
             console.log('[EVENT] Refresh playlist button clicked for index:', idx);
-            const source = savedPlaylists[idx].source;
-            const epgSource = savedPlaylists[idx].epg !== 'Not Configured' ? savedPlaylists[idx].epg : '';
+            const targetPlaylist = savedPlaylists[idx];
+            const source = targetPlaylist.source;
+            const epgSource = targetPlaylist.epg !== 'Not Configured' ? targetPlaylist.epg : '';
             
             let allEpgSources = savedEpgs.slice();
             if (epgSource && !allEpgSources.includes(epgSource)) {
@@ -1413,15 +1458,18 @@ function renderPlaylists() {
             const combinedEpgs = allEpgSources.join(',');
             const mappingsJson = JSON.stringify(channelMappings);
 
-            if (loadingMsg) loadingMsg.style.display = 'block';
+            const originalText = e.target.textContent;
+            e.target.textContent = 'Refreshing...';
+            e.target.disabled = true;
+
             try {
                 console.log('[API] Calling parseM3u for refresh.');
                 const result = await window.iptvAPI.parseM3u(source, combinedEpgs, mappingsJson, true);
                 if (result && !result.error && (Array.isArray(result) || result.channels)) {
                     const channels = Array.isArray(result) ? result : result.channels;
-                    savedPlaylists[idx].channels = channels;
-                    if (result.epg_url && (!savedPlaylists[idx].epg || savedPlaylists[idx].epg === 'Not Configured')) {
-                        savedPlaylists[idx].epg = result.epg_url;
+                    targetPlaylist.channels = channels;
+                    if (result.epg_url && (!targetPlaylist.epg || targetPlaylist.epg === 'Not Configured')) {
+                        targetPlaylist.epg = result.epg_url;
                     }
                     updateState(true); // SKIP SAVE
                     
@@ -1431,6 +1479,26 @@ function renderPlaylists() {
                         await window.iptvAPI.updateEpg(combinedEpgs, null, true);
                         epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
                         await autoMapChannels(false, true); // SKIP SAVE
+                        
+                        // Fetch the newly updated EPG data from the local database
+                        const epgIdsToFetch = new Set();
+                        targetPlaylist.channels.forEach(ch => {
+                            const mappedId = channelMappings[ch.title];
+                            if (mappedId) epgIdsToFetch.add(mappedId);
+                            else {
+                                if (ch.tvg_id) epgIdsToFetch.add(ch.tvg_id);
+                                if (ch.tvg_name) epgIdsToFetch.add(ch.tvg_name);
+                            }
+                        });
+                        
+                        console.log('[API] Calling getEpg to populate refreshed playlist data.');
+                        const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch), null, null);
+                        targetPlaylist.channels.forEach(ch => {
+                            const mappedId = channelMappings[ch.title];
+                            if (mappedId && epgData[mappedId]) ch.epg_programmes = epgData[mappedId];
+                            else if (ch.tvg_id && epgData[ch.tvg_id]) ch.epg_programmes = epgData[ch.tvg_id];
+                            else if (ch.tvg_name && epgData[ch.tvg_name]) ch.epg_programmes = epgData[ch.tvg_name];
+                        });
                     }
                     updateState(); // FINAL SAVE
                 } else {
@@ -1439,7 +1507,9 @@ function renderPlaylists() {
             } catch(err) {
                 alert('Refresh error: ' + err.message);
             }
-            if (loadingMsg) loadingMsg.style.display = 'none';
+            
+            e.target.textContent = originalText;
+            e.target.disabled = false;
         });
     });
 
@@ -1785,6 +1855,180 @@ function renderEpg(programmes) {
     container.innerHTML = html;
 }
 
+async function fetchEpgDataForChannels(channels) {
+    const epgIdsToFetch = new Set();
+    channels.forEach(ch => {
+        if (!ch) return;
+        const mappedId = channelMappings[ch.title];
+        const epgId = mappedId || ch.tvg_id || ch.tvg_name;
+        if (epgId && !epgCache[epgId] && !epgLoadingSet.has(epgId)) {
+            epgIdsToFetch.add(epgId);
+            epgLoadingSet.add(epgId);
+        }
+    });
+    
+    const epgIdsArr = Array.from(epgIdsToFetch);
+    if (epgIdsArr.length === 0) return;
+    
+    const { gridStart, gridEnd } = epgGridState;
+    // Fetch a wider range to accommodate horizontal scrolling without re-fetching
+    const fetchStart = new Date(gridStart.getTime() - 12 * 60 * 60 * 1000);
+    const fetchEnd = new Date(gridEnd.getTime() + 12 * 60 * 60 * 1000);
+    
+    const startLimit = formatDateToEpgString(fetchStart);
+    const endLimit = formatDateToEpgString(fetchEnd);
+    
+    console.log(`[API] Fetching EPG for ${epgIdsArr.length} channel IDs...`);
+    const epgData = await window.iptvAPI.getEpg(epgIdsArr, startLimit, endLimit);
+    
+    Object.keys(epgData).forEach(id => {
+        epgCache[id] = epgData[id] || [];
+    });
+
+    // Mark as loaded even if no data was returned to prevent re-fetching
+    epgIdsArr.forEach(id => {
+        if (!epgCache[id]) epgCache[id] = [];
+    });
+    
+    renderVisibleEpgRows(true); // Force re-render with new data
+}
+
+function onEpgScroll() {
+    if (!epgScrollTicking) {
+        window.requestAnimationFrame(() => {
+            renderVisibleEpgRows();
+            epgScrollTicking = false;
+        });
+        epgScrollTicking = true;
+    }
+}
+
+function renderVisibleEpgRows(force = false) {
+    const scrollContainer = document.getElementById('epg-scroll-container');
+    const rowsLayer = document.getElementById('epg-rows-layer');
+    if (!scrollContainer || !rowsLayer || !epgGridState) return;
+    
+    const scrollTop = scrollContainer.scrollTop;
+    const scrollLeft = scrollContainer.scrollLeft;
+    const viewportHeight = scrollContainer.clientHeight;
+    const viewportWidth = scrollContainer.clientWidth;
+    const rowHeight = 60;
+    
+    const overscan = 5; // Render a few extra rows above and below
+    let startIndex = Math.floor(scrollTop / rowHeight) - overscan;
+    let endIndex = Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan;
+    
+    startIndex = Math.max(0, startIndex);
+    endIndex = Math.min(epgChannelsToRender.length - 1, endIndex);
+    
+    if (!force && startIndex === epgLastStartIndex && endIndex === epgLastEndIndex && Math.abs(scrollLeft - epgLastScrollLeft) < (viewportWidth / 2)) {
+        return; // No change in visible rows or horizontal overscan, so do nothing.
+    }
+    
+    epgLastStartIndex = startIndex;
+    epgLastEndIndex = endIndex;
+    epgLastScrollLeft = scrollLeft;
+    
+    const { gridStart, totalWidth, pxPerMinute, now } = epgGridState;
+    let html = '';
+    const channelsToFetch = [];
+    
+    // Calculate visible time window for program rendering
+    const horizontalOverscanPx = viewportWidth; // Overscan one viewport width left and right
+    const viewStartPx = scrollLeft - horizontalOverscanPx;
+    const viewEndPx = scrollLeft + viewportWidth + horizontalOverscanPx;
+
+    for (let i = startIndex; i <= endIndex; i++) {
+        const channel = epgChannelsToRender[i];
+        if (!channel) continue;
+
+        const globalIdx = allChannels.findIndex(c => c.url === channel.url && c.title === channel.title);
+        const topPos = i * rowHeight;
+        const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.png';
+        
+        let programsHtml = '';
+        const mappedId = channelMappings[channel.title];
+        const epgId = mappedId || channel.tvg_id || channel.tvg_name;
+        
+        let programmes = null;
+        if (epgId) {
+            if (epgCache[epgId]) {
+                programmes = epgCache[epgId];
+            } else {
+                channelsToFetch.push(channel);
+            }
+        }
+
+        if (programmes) {
+            if (programmes.length > 0) {
+                for (const prog of programmes) {
+                    const pStart = parseEpgTime(prog.start);
+                    const pEnd = parseEpgTime(prog.stop);
+                    
+                    let startMin = (pStart.getTime() - gridStart.getTime()) / 60000;
+                    let endMin = (pEnd.getTime() - gridStart.getTime()) / 60000;
+                    
+                    let left = Math.max(0, startMin * pxPerMinute);
+                    let right = Math.min(totalWidth, endMin * pxPerMinute);
+                    let width = right - left;
+
+                    // Optimization: only render programs that are horizontally in view
+                    if (right < viewStartPx || left > viewEndPx) {
+                        continue;
+                    }
+
+                    const isCurrent = (now >= pStart && now <= pEnd);
+                    const isFuture = pStart > now;
+                    const bg = isCurrent ? '#2c2c2c' : '#1e1e1e';
+                    const borderCol = isCurrent ? '#bb86fc' : '#444';
+                    const pTitle = (prog.title || 'Unknown').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    const timeStr = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                    const isReminderSet = savedReminders.some(r => r.progTitle === prog.title && r.startTime === prog.start && r.channelTitle === channel.title);
+                    const reminderStyle = isReminderSet ? 'opacity: 1; filter: drop-shadow(0 0 4px #bb86fc);' : 'opacity: 0.3; filter: grayscale(100%);';
+                    const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
+
+                    programsHtml += `
+                    <div class="epg-play-channel epg-program-cell" data-index="${globalIdx}" style="position: absolute; left: ${left}px; width: ${width}px; height: 100%; background: ${bg}; border-right: 1px solid #111; border-top: 2px solid ${borderCol}; box-sizing: border-box; padding: 6px 10px; overflow: hidden; cursor: pointer; transition: background 0.2s;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
+                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${pTitle}</div>
+                        <div style="font-size: 0.75em; color: #888; margin-top: 4px;">${timeStr}</div>
+                    </div>`;
+                }
+            } else {
+                programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="display: flex; align-items: center; padding-left: 20px; height: 100%; color: #555; font-size: 0.9em; width: 100%; cursor: pointer;">No EPG Data</div>`;
+            }
+        } else {
+            programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="display: flex; align-items: center; padding-left: 20px; height: 100%; color: #888; font-size: 0.9em; width: 100%; cursor: pointer;">Loading...</div>`;
+        }
+        
+        html += `
+        <div style="position: absolute; top: ${topPos}px; left: 0; display: flex; width: ${250 + totalWidth}px; border-bottom: 1px solid #2a2a2a; height: 60px; box-sizing: border-box;">
+            <!-- Left-Pinned Channel Logo + Name -->
+            <div class="epg-play-channel" data-index="${globalIdx}" style="width: 250px; min-width: 250px; position: sticky; left: 0; z-index: 10; background: #1e1e1e; border-right: 2px solid #333; display: flex; align-items: center; padding: 10px; box-sizing: border-box; cursor: pointer;">
+                <img src="${imgSrc}" data-eh="0" style="width: 40px; height: 40px; min-width: 40px; object-fit: contain; margin-right: 15px; background: #ffffff; border-radius: 4px;">
+                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif; color: #e0e0e0;" title="${safeTitle}">${safeTitle}</span>
+            </div>
+            <!-- Right-Side Content -->
+            <div style="position: relative; width: ${totalWidth}px; height: 100%; background: #121212;">${programsHtml}</div>
+        </div>`;
+    }
+    
+    rowsLayer.innerHTML = html;
+
+    // Apply CSP-safe image error handlers dynamically 
+    rowsLayer.querySelectorAll('img[data-eh="0"]').forEach(img => {
+        img.setAttribute('data-eh', '1');
+        img.onerror = function() {
+            this.onerror = null;
+            this.src = 'assets/logo.png';
+        };
+    });
+
+    if (channelsToFetch.length > 0) {
+        fetchEpgDataForChannels(channelsToFetch);
+    }
+}
+
 async function renderFullEpg() {
     const epgView = document.getElementById('epg-view');
     console.log('[UI] Rendering full EPG view.');
@@ -1840,20 +2084,20 @@ async function renderFullEpg() {
         renderFullEpg();
     });
 
+    if (window.epgTimeIndicatorInterval) clearInterval(window.epgTimeIndicatorInterval);
+
     const pxPerMinute = 6;
     const hourWidth = 60 * pxPerMinute;
     const now = new Date();
     
-    // Let the timeline begin 2 hours before "now" to give users perspective
     const gridStart = new Date(now.getTime());
     gridStart.setMinutes(0, 0, 0);
     gridStart.setHours(gridStart.getHours() - 2);
     
-    // Generate 24-hour total scope
     const gridEnd = new Date(gridStart.getTime() + 24 * 60 * 60 * 1000);
     const totalWidth = 24 * hourWidth;
 
-    const channelsToRender = allChannels.filter(channel => {
+    epgChannelsToRender = allChannels.filter(channel => {
         if (epgSelectedPlaylist === 'favs' && !channel.favourite) return false;
         if (epgSelectedPlaylist !== 'all' && epgSelectedPlaylist !== 'favs' && String(channel.playlistId) !== String(epgSelectedPlaylist)) return false;
         const channelGroup = channel.group || 'Uncategorized';
@@ -1861,124 +2105,91 @@ async function renderFullEpg() {
         return true;
     });
 
-    channelsToRender.sort((a, b) => sortAlphaNum(a.title, b.title));
+    epgChannelsToRender.sort((a, b) => sortAlphaNum(a.title, b.title));
 
-    // Estimate scroll height down for the current time indicator redline
-    const gridHeight = 50 + (channelsToRender.length * 60);
+    epgGridState = { gridStart, gridEnd, totalWidth, pxPerMinute, now };
+    epgLastStartIndex = -1;
+    epgLastEndIndex = -1;
+    epgLastScrollLeft = -1;
+    epgCache = {};
+    epgLoadingSet.clear();
 
-
-    // Dynamically retrieve EPG for visible channels from SQLite
-    const epgIdsToFetch = new Set();
-    channelsToRender.forEach(ch => {
-        const mappedId = channelMappings[ch.title];
-        if (mappedId) epgIdsToFetch.add(mappedId);
-        else {
-            if (ch.tvg_id) epgIdsToFetch.add(ch.tvg_id);
-            if (ch.tvg_name) epgIdsToFetch.add(ch.tvg_name);
-        }
-    });
-    console.log('[API] Calling getEpg for full guide view.');
-    const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch));
-
-    let html = `
-    <div id="epg-scroll-container" style="flex-grow: 1; width: 100%; overflow: auto; position: relative; background: #121212; border: 1px solid #333; border-radius: 8px; display: flex; flex-direction: column;">
-        <!-- Header Row (Timestamps) -->
-        <div style="display: flex; width: ${250 + totalWidth}px; position: sticky; top: 0; z-index: 20; background: #1a1a1a; border-bottom: 2px solid #333;">
-            <div style="width: 250px; min-width: 250px; position: sticky; left: 0; z-index: 30; background: #1a1a1a; border-right: 2px solid #333; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #bb86fc; box-sizing: border-box;">Channels</div>
-            <div style="position: relative; width: ${totalWidth}px; height: 50px;">`;
-
+    let headerHtml = '';
     for (let i = 0; i < 24; i++) {
         const headerTime = new Date(gridStart.getTime() + i * 60 * 60 * 1000);
         const timeStr = headerTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        html += `<div style="position: absolute; left: ${i * hourWidth}px; width: ${hourWidth}px; height: 100%; border-right: 1px solid #333; display: flex; align-items: center; padding-left: 10px; color: #888; box-sizing: border-box;">${timeStr}</div>`;
+        headerHtml += `<div style="position: absolute; left: ${i * hourWidth}px; width: ${hourWidth}px; height: 100%; border-right: 1px solid rgba(0,0,0,0.2); display: flex; align-items: center; padding-left: 10px; color: #000; font-weight: bold; box-sizing: border-box;">${timeStr}</div>`;
     }
 
-    // Draw Current Time Live Indicator
     const minutesSinceStart = (now.getTime() - gridStart.getTime()) / 60000;
     const nowPx = minutesSinceStart * pxPerMinute;
+    let redLineHtml = '';
     if (nowPx > 0 && nowPx < totalWidth) {
-        html += `<div style="position: absolute; left: ${nowPx}px; top: 0; height: ${gridHeight}px; width: 2px; background: #cf6679; z-index: 15; pointer-events: none;"></div>`;
+        redLineHtml = `<div id="epg-time-indicator" style="position: absolute; left: ${nowPx}px; top: 0; height: 100%; width: 2px; background: #cf6679; z-index: 15; pointer-events: none;"></div>`;
     }
 
-    html += `</div></div>`; // Close Header Row
-
-    if (channelsToRender.length === 0) {
-        html += `<div style="padding: 20px; color: #888; text-align: center;">No channels match the current filter.</div>`;
-    }
-
-    channelsToRender.forEach(channel => {
-        const globalIdx = allChannels.indexOf(channel);
-        const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.png';
-        
-        html += `
-        <div style="display: flex; width: ${250 + totalWidth}px; border-bottom: 1px solid #2a2a2a; height: 60px;">
-            <!-- Left-Pinned Channel Logo + Name -->
-            <div class="epg-play-channel" data-index="${globalIdx}" style="width: 250px; min-width: 250px; position: sticky; left: 0; z-index: 10; background: #1e1e1e; border-right: 2px solid #333; display: flex; align-items: center; padding: 10px; box-sizing: border-box; cursor: pointer;">
-                <img src="${imgSrc}" style="width: 40px; height: 40px; min-width: 40px; object-fit: contain; margin-right: 15px; background: #ffffff; border-radius: 4px;">
-                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif; color: #e0e0e0;" title="${safeTitle}">${safeTitle}</span>
+    let html = `
+    <div id="epg-scroll-container" style="flex-grow: 1; width: 100%; overflow: auto; position: relative; background: #121212; border: 1px solid #333; border-radius: 8px; display: flex; flex-direction: column;">
+        <div style="display: flex; width: ${250 + totalWidth}px; position: sticky; top: 0; z-index: 20; background: #bb86fc; border-bottom: 2px solid #333;">
+            <div style="width: 250px; min-width: 250px; position: sticky; left: 0; z-index: 30; background: #bb86fc; border-right: 2px solid rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000; box-sizing: border-box;">Channels</div>
+            <div style="position: relative; width: ${totalWidth}px; height: 30px;">
+                ${headerHtml}
             </div>
-            <!-- Right-Side Scrollable Content -->
-            <div style="position: relative; width: ${totalWidth}px; height: 100%; background: #121212;">`;
+        </div>
+        <div id="epg-channels-container" style="position: relative; width: ${250 + totalWidth}px; height: ${epgChannelsToRender.length * 60}px;">
+            ${redLineHtml}
+            <div id="epg-rows-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
+        </div>
+    </div>`;
 
-        const mappedId = channelMappings[channel.title];
-        let programmes = [];
-        if (mappedId && epgData[mappedId]) programmes = epgData[mappedId];
-        else if (channel.tvg_id && epgData[channel.tvg_id]) programmes = epgData[channel.tvg_id];
-        else if (channel.tvg_name && epgData[channel.tvg_name]) programmes = epgData[channel.tvg_name];
-
-        if (programmes.length > 0) {
-            programmes.forEach(prog => {
-                const pStart = parseEpgTime(prog.start);
-                const pEnd = parseEpgTime(prog.stop);
-                
-                if (pEnd > gridStart && pStart < gridEnd) {
-                    let startMin = (pStart.getTime() - gridStart.getTime()) / 60000;
-                    let endMin = (pEnd.getTime() - gridStart.getTime()) / 60000;
-                    
-                    let left = Math.max(0, startMin * pxPerMinute);
-                    let right = Math.min(totalWidth, endMin * pxPerMinute);
-                    let width = right - left;
-
-                    const isCurrent = (now >= pStart && now <= pEnd);
-                    const isFuture = pStart > now;
-                    const bg = isCurrent ? '#2c2c2c' : '#1e1e1e';
-                    const borderCol = isCurrent ? '#bb86fc' : '#444';
-                    const pTitle = (prog.title || 'Unknown').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                    const timeStr = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-                    const isReminderSet = typeof savedReminders !== 'undefined' && savedReminders.some(r => r.progTitle === prog.title && r.startTime === prog.start && r.channelTitle === channel.title);
-                    const reminderStyle = isReminderSet ? 'opacity: 1; filter: drop-shadow(0 0 4px #bb86fc);' : 'opacity: 0.3; filter: grayscale(100%);';
-                    const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
-
-                    html += `
-                    <div class="epg-play-channel epg-program-cell" data-index="${globalIdx}" style="position: absolute; left: ${left}px; width: ${width}px; height: 100%; background: ${bg}; border-right: 1px solid #111; border-top: 2px solid ${borderCol}; box-sizing: border-box; padding: 6px 10px; overflow: hidden; cursor: pointer; transition: background 0.2s;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
-                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${pTitle}</div>
-                        <div style="font-size: 0.75em; color: #888; margin-top: 4px;">${timeStr}</div>
-                    </div>`;
-                }
-            });
-        } else {
-            html += `<div class="epg-play-channel" data-index="${globalIdx}" style="display: flex; align-items: center; padding-left: 20px; height: 100%; color: #555; font-size: 0.9em; width: 100%; cursor: pointer;">No EPG Data</div>`;
-        }
-
-        html += `</div></div>`;
-    });
-
-    html += `</div>`;
     const contentArea = document.getElementById('epg-content-area');
     if (contentArea) {
         contentArea.innerHTML = html;
     }
 
-    // Attach error handlers after inserting into DOM to bypass CSP inline restrictions
-    epgView.querySelectorAll('img').forEach(img => {
-        img.onerror = function() {
-            this.onerror = null;
-            this.src = 'assets/logo.png';
-        };
-    });
+    const channelsContainer = document.getElementById('epg-channels-container');
+    if (channelsContainer) {
+        channelsContainer.addEventListener('click', (e) => {
+            const reminderBtn = e.target.closest('.reminder-btn-full');
+            if (reminderBtn) {
+                e.stopPropagation();
+                const channelTitle = reminderBtn.getAttribute('data-channel');
+                const progTitle = reminderBtn.getAttribute('data-prog');
+                const start = reminderBtn.getAttribute('data-start');
+                const stop = reminderBtn.getAttribute('data-stop');
+                toggleReminder(channelTitle, progTitle, start, stop);
+                const isSet = savedReminders.some(r => r.progTitle === progTitle && r.startTime === start && r.channelTitle === channelTitle);
+                if (isSet) {
+                    reminderBtn.style.opacity = '1';
+                    reminderBtn.style.filter = 'drop-shadow(0 0 4px #bb86fc)';
+                    showToast('Reminder Set: ' + progTitle);
+                } else {
+                    reminderBtn.style.opacity = '0.3';
+                    reminderBtn.style.filter = 'grayscale(100%)';
+                    showToast('Reminder Removed');
+                }
+                return;
+            }
 
-    // 1. Inject Hover Styles
+            const playChannel = e.target.closest('.epg-play-channel');
+            if (playChannel) {
+                const idx = playChannel.getAttribute('data-index');
+                const targetChannel = allChannels[idx];
+                if (targetChannel) {
+                    switchTab('live-tv', document.getElementById('btn-live-tv'));
+                    embedStream(targetChannel);
+                }
+            }
+        });
+    }
+
+    const scrollContainer = document.getElementById('epg-scroll-container');
+    if (scrollContainer) {
+        scrollContainer.addEventListener('scroll', onEpgScroll);
+    }
+
+    renderVisibleEpgRows(true);
+
     if (!document.getElementById('epg-styles')) {
         const style = document.createElement('style');
         style.id = 'epg-styles';
@@ -1989,53 +2200,26 @@ async function renderFullEpg() {
         document.head.appendChild(style);
     }
 
-    // 2. Play Channel Listeners
-    document.querySelectorAll('.epg-play-channel').forEach(el => {
-        el.addEventListener('click', (e) => {
-            if (e.target.closest('.reminder-btn-full')) return;
-            const idx = el.getAttribute('data-index');
-            const targetChannel = allChannels[idx];
-            if (targetChannel) {
-                switchTab('live-tv', document.getElementById('btn-live-tv'));
-                embedStream(targetChannel);
-            }
-        });
-    });
-
-    // 4. Reminder Listeners
-    document.querySelectorAll('.reminder-btn-full').forEach(el => {
-        el.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const channelTitle = el.getAttribute('data-channel');
-            const progTitle = el.getAttribute('data-prog');
-            const start = el.getAttribute('data-start');
-            const stop = el.getAttribute('data-stop');
-            toggleReminder(channelTitle, progTitle, start, stop);
-            const isSet = savedReminders.some(r => r.progTitle === progTitle && r.startTime === start && r.channelTitle === channelTitle);
-            if (isSet) {
-                el.style.opacity = '1';
-                el.style.filter = 'drop-shadow(0 0 4px #bb86fc)';
-                showToast('Reminder Set: ' + progTitle);
-            } else {
-                el.style.opacity = '0.3';
-                el.style.filter = 'grayscale(100%)';
-                showToast('Reminder Removed');
-            }
-        });
-    });
-
-    // 3. Jump to "Now" and default scroll
-    const scrollContainer = document.getElementById('epg-scroll-container');
     const nowBtn = document.getElementById('epg-now-btn');
     if (scrollContainer) {
         const targetScroll = Math.max(0, nowPx - (30 * pxPerMinute)); // Pad back 30 mins from red line
         setTimeout(() => scrollContainer.scrollLeft = targetScroll, 10);
         if (nowBtn) {
-            nowBtn.addEventListener('click', () => {
+            nowBtn.onclick = () => {
                 scrollContainer.scrollTo({ left: targetScroll, behavior: 'smooth' });
-            });
+            };
         }
     }
+
+    window.epgTimeIndicatorInterval = setInterval(() => {
+        const indicator = document.getElementById('epg-time-indicator');
+        if (indicator && epgGridState) {
+            const newNow = new Date();
+            const newMinutesSinceStart = (newNow.getTime() - epgGridState.gridStart.getTime()) / 60000;
+            const newNowPx = newMinutesSinceStart * epgGridState.pxPerMinute;
+            indicator.style.left = `${newNowPx}px`;
+        }
+    }, 60000);
 }
 
 async function embedStream(channel) {
@@ -2093,7 +2277,7 @@ async function embedStream(channel) {
     const mappedId = channelMappings[channel.title];
     const epgIds = [mappedId, channel.tvg_id, channel.tvg_name].filter(Boolean);
     console.log('[API] Calling getEpg for current stream.');
-    const epgData = await window.iptvAPI.getEpg(epgIds);
+    const epgData = await window.iptvAPI.getEpg(epgIds, null, null);
     
     let programmes = [];
     for (const id of epgIds) {
@@ -2451,7 +2635,7 @@ async function backgroundAutoUpdate() {
                     });
                 }
             });
-            const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch));
+            const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch), null, null);
             savedPlaylists.forEach(p => {
                 if (p.channels) {
                     p.channels.forEach(ch => {

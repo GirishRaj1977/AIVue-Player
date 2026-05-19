@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     parseM3u: (source) => ipcRenderer.invoke('parse-m3u', source),
     getEpgChannels: (epg) => ipcRenderer.invoke('get-epg-channels', epg),
     updateEpg: (epgSources, filterIds, forceRefresh) => ipcRenderer.invoke('update-epg', epgSources, filterIds, forceRefresh),
-    getEpg: (channelIds) => ipcRenderer.invoke('get-epg', channelIds),
+    getEpg: (channelIds, startLimit, endLimit) => ipcRenderer.invoke('get-epg', channelIds, startLimit, endLimit),
     getMappings: () => ipcRenderer.invoke('get-mappings'),
     saveMapping: (title, epgId) => ipcRenderer.invoke('save-mapping', title, epgId),
     getExternalEpgs: () => ipcRenderer.invoke('get-external-epgs'),
