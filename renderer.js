@@ -1914,6 +1914,12 @@ function renderVisibleEpgRows(force = false) {
     const viewportWidth = scrollContainer.clientWidth;
     const rowHeight = 60;
     
+    const timeIndicator = document.getElementById('epg-time-indicator');
+    if (timeIndicator) {
+        timeIndicator.style.top = `${scrollTop}px`;
+        timeIndicator.style.height = `${viewportHeight}px`;
+    }
+
     const overscan = 5; // Render a few extra rows above and below
     let startIndex = Math.floor(scrollTop / rowHeight) - overscan;
     let endIndex = Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan;
@@ -2137,8 +2143,8 @@ async function renderFullEpg() {
             </div>
         </div>
         <div id="epg-channels-container" style="position: relative; width: ${250 + totalWidth}px; height: ${epgChannelsToRender.length * 60}px;">
-            ${redLineHtml}
             <div id="epg-rows-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
+            ${redLineHtml}
         </div>
     </div>`;
 
