@@ -221,6 +221,15 @@ aeroStyles.textContent = `
     #player-container:hover #fullscreen-btn {
         opacity: 1;
     }
+
+    #import-submit-btn, #import-cancel-btn {
+        padding: 8px 16px !important;
+        font-size: 0.9em !important;
+        height: auto !important;
+        width: fit-content !important;
+        min-width: 100px;
+        white-space: nowrap;
+    }
 `;
 document.head.appendChild(aeroStyles);
 
@@ -252,6 +261,11 @@ let channelMappings = {};
 
 let savedReminders = JSON.parse(localStorage.getItem('iptv_reminders') || '[]');
 
+// Prevent forms from reloading the Electron application
+document.addEventListener('submit', (e) => {
+    e.preventDefault();
+});
+
 function saveReminders() {
     console.log('[REMINDER] Saving reminders to localStorage');
     localStorage.setItem('iptv_reminders', JSON.stringify(savedReminders));
@@ -277,6 +291,7 @@ function showToast(message) {
         toast = document.createElement('div');
         toast.id = 'toast-notification';
         toast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #bb86fc; color: #000; padding: 12px 24px; border-radius: 30px; z-index: 10000; font-weight: bold; font-family: "Inter", sans-serif; box-shadow: 0 5px 15px rgba(0,0,0,0.5); transition: opacity 0.3s; opacity: 0; pointer-events: none;';
+        toast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #bb86fc; color: #000; padding: 12px 24px; border-radius: 30px; z-index: 10000; font-weight: bold; font-family: "Inter", sans-serif; box-shadow: 0 5px 15px rgba(0,0,0,0.5); transition: opacity 0.3s; opacity: 0; pointer-events: none; white-space: pre-wrap; text-align: center;';
         document.body.appendChild(toast);
     }
     toast.textContent = message;
@@ -370,10 +385,10 @@ async function autoMapChannels(showSummaryAlert = false, skipSave = false) {
         console.log(`[MAPPING] Auto-mapped ${mappedCount} new channels.`);
         updateState(skipSave);
         renderMappingColumns();
-        if (showSummaryAlert) alert(`Successfully auto-mapped ${mappedCount} channels!`);
+        if (showSummaryAlert) showToast(`Successfully auto-mapped ${mappedCount} channels!`);
     } else {
         console.log('[MAPPING] No new channels could be auto-mapped.');
-        if (showSummaryAlert) alert("No new channels could be auto-mapped.");
+        if (showSummaryAlert) showToast("No new channels could be auto-mapped.");
     }
 }
 
@@ -593,7 +608,10 @@ function renderMappingColumns() {
     document.querySelectorAll('.mapping-confirm-btn').forEach(el => {
         el.addEventListener('click', async (e) => {
             e.stopPropagation();
-            if (!mappingSelectedChannel || !mappingSelectedEpg) return alert("Select a channel and an EPG source first.");
+            if (!mappingSelectedChannel || !mappingSelectedEpg) {
+                showToast("Select a channel and an EPG source first.");
+                return;
+            }
             
             const btn = e.target;
             btn.innerHTML = '⏳';
@@ -659,16 +677,26 @@ async function renderSettings() {
         </div>`;
     }).join('') : '<div style="color:#666; font-style: italic;">No upcoming reminders.</div>';
 
+    const remoteSettings = await window.iptvAPI.getRemoteSettings();
+    const ipAddress = await window.iptvAPI.getIpAddress();
+    
+    const port = remoteSettings.port || 8088;
+    const remoteUrl = `http://${ipAddress}:${port}/remote`;
+    let remoteUrlWithAuth = remoteUrl;
+    if (remoteSettings.username && remoteSettings.password) {
+        remoteUrlWithAuth = `http://${encodeURIComponent(remoteSettings.username)}:${encodeURIComponent(remoteSettings.password)}@${ipAddress}:${port}/remote`;
+    }
+
     settingsView.innerHTML = `
-        <div style="padding: 10px; width: 100%; box-sizing: border-box; overflow-y: auto; overflow-x: hidden;">
+        <div style="padding: 20px; width: 100%; max-width: 1000px; margin: 0 auto; box-sizing: border-box; overflow-y: auto; overflow-x: hidden; min-width: 0;">
             <h2 style="color: #bb86fc; border-bottom: 1px solid #333; padding-bottom: 15px; margin-top: 0;">Settings</h2>
             
             <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
                 <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px;">External EPG Sources</h3>
                 <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Add multiple XMLTV EPG URLs to load automatically for your playlists. (Requires refreshing your playlist to take effect).</p>
-                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                    <input type="text" id="settings-new-epg" placeholder="http://.../epg.xml" style="flex: 1; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none;">
-                    <button id="settings-add-epg-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 20px;">Add EPG</button>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <input type="text" id="settings-new-epg" placeholder="http://.../epg.xml" style="flex: 1; min-width: 250px; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                    <button id="settings-add-epg-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 20px; white-space: nowrap;">Add EPG</button>
                 </div>
                 <div id="settings-epg-list">${epgListHtml || '<div style="color:#666; font-style: italic;">No external EPGs added.</div>'}</div>
             </div>
@@ -684,12 +712,12 @@ async function renderSettings() {
 
             <!-- 3-Column Channel Mapping UI -->
             <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; height: 600px; min-width: 0;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                    <div>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
+                    <div style="flex: 1; min-width: 250px;">
                         <h3 style="color: #e0e0e0; margin: 0;">Channel Mapping</h3>
                         <p style="color: #888; font-size: 0.9em; margin: 5px 0 15px 0;">Select a channel on the left and an EPG on the right. Instant apply updates Live TV/Guide immediately.</p>
                     </div>
-                    <button id="mapping-auto-map-btn" class="playlist-btn" style="background: #43CB44; color: black; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 0.9em; cursor: pointer;">Auto Map</button>
+                    <button id="mapping-auto-map-btn" class="playlist-btn" style="background: #43CB44; color: black; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 0.9em; cursor: pointer; white-space: nowrap;">Auto Map</button>
                 </div>
                 
                 <div style="display: flex; gap: 15px; flex-grow: 1; min-height: 0; min-width: 0;">
@@ -725,6 +753,51 @@ async function renderSettings() {
                             <input type="text" id="mapping-mapped-search" placeholder="Search Mapped..." style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; box-sizing: border-box;">
                         </div>
                         <div id="mapping-mapped-list" style="flex-grow: 1; overflow-y: auto; padding: 10px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Remote Control -->
+            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px;">Remote Control</h3>
+                        <p style="color: #888; font-size: 0.9em; margin: 0;">Control AIVue Player from your smartphone or tablet on the same Wi-Fi network.</p>
+                    </div>
+                    <label style="display: flex; align-items: center; cursor: pointer; background: #121212; padding: 8px 12px; border-radius: 6px; border: 1px solid #444;">
+                        <input type="checkbox" id="settings-remote-toggle" ${remoteSettings.enabled ? 'checked' : ''} style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                        <span id="settings-remote-status" style="color: ${remoteSettings.enabled ? '#43CB44' : '#cf6679'}; font-weight: bold;">${remoteSettings.enabled ? 'Enabled' : 'Disabled'}</span>
+                    </label>
+                </div>
+                
+                <div id="settings-remote-config" style="display: ${remoteSettings.enabled ? 'block' : 'none'}; border-top: 1px solid #333; padding-top: 20px; margin-top: 10px;">
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+                        <div style="flex: 1; min-width: 150px;">
+                            <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Port</label>
+                            <input type="number" id="settings-remote-port" value="${port}" placeholder="8088" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                        </div>
+                        <div style="flex: 2; min-width: 200px;">
+                            <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Username (min 5 chars)</label>
+                            <input type="text" id="settings-remote-user" value="${remoteSettings.username || ''}" placeholder="Username" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                        </div>
+                        <div style="flex: 2; min-width: 200px;">
+                            <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Password (min 5 chars)</label>
+                            <input type="password" id="settings-remote-pass" value="${remoteSettings.password || ''}" placeholder="Password" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                        </div>
+                        <div style="display: flex; align-items: flex-end;">
+                            <button id="settings-save-remote-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 24px; height: 39px; white-space: nowrap;">Save Credentials</button>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 10px; background: #252525; border: 1px solid #444; border-radius: 4px;">
+                        <span style="color: #bbb; font-size: 0.9em;">Paired Device: <strong style="color: ${remoteSettings.activeDeviceId ? '#43CB44' : '#888'};">${remoteSettings.activeDeviceId ? 'Connected' : 'None'}</strong></span>
+                        <button id="settings-revoke-device-btn" class="playlist-btn" style="background: ${remoteSettings.activeDeviceId ? '#cf6679' : '#333'}; color: ${remoteSettings.activeDeviceId ? 'black' : '#888'}; font-weight: bold; padding: 6px 12px; border-radius: 4px;" ${!remoteSettings.activeDeviceId ? 'disabled' : ''}>Revoke Access</button>
+                    </div>
+
+                    <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Remote URL</label>
+                    <div style="display: flex; align-items: center; justify-content: space-between; background: #121212; border: 1px solid #444; border-radius: 4px; padding: 10px 15px; gap: 15px; flex-wrap: wrap;">
+                        <span style="font-family: monospace; color: #bb86fc; font-size: 1.1em; word-break: break-all; flex: 1; min-width: 200px;">${remoteUrl}</span>
+                        <button id="settings-copy-remote-btn" class="playlist-btn" data-url="${remoteUrlWithAuth}" style="background: #2a2a2a; color: #e0e0e0; padding: 8px 16px; border-radius: 4px; font-weight: bold; white-space: nowrap; flex-shrink: 0;" title="Copies a link with embedded login credentials">Copy Auto-Login URL</button>
                     </div>
                 </div>
             </div>
@@ -849,6 +922,63 @@ async function renderSettings() {
             }
         });
     });
+
+    document.getElementById('settings-copy-remote-btn').addEventListener('click', (e) => {
+        const url = e.target.getAttribute('data-url');
+        console.log('[SETTINGS] Copy remote URL clicked:', url);
+        window.iptvAPI.copyToClipboard(url);
+        
+        const originalText = e.target.textContent;
+        e.target.textContent = 'Copied!';
+        setTimeout(() => { e.target.textContent = originalText; }, 2000);
+    });
+
+    document.getElementById('settings-remote-toggle').addEventListener('change', async (e) => {
+        const isEnabled = e.target.checked;
+        const configDiv = document.getElementById('settings-remote-config');
+        const statusSpan = document.getElementById('settings-remote-status');
+        
+        configDiv.style.display = isEnabled ? 'block' : 'none';
+        statusSpan.textContent = isEnabled ? 'Enabled' : 'Disabled';
+        statusSpan.style.color = isEnabled ? '#43CB44' : '#cf6679';
+        
+        remoteSettings.enabled = isEnabled;
+        await window.iptvAPI.saveRemoteSettings(remoteSettings);
+        showToast(`Remote Control ${isEnabled ? 'Enabled' : 'Disabled'}`);
+    });
+
+    document.getElementById('settings-save-remote-btn').addEventListener('click', async (e) => {
+        const newPort = parseInt(document.getElementById('settings-remote-port').value) || 8088;
+        const user = document.getElementById('settings-remote-user').value.trim();
+        const pass = document.getElementById('settings-remote-pass').value.trim();
+        
+        if ((user.length > 0 || pass.length > 0) && (user.length < 5 || pass.length < 5)) {
+            showToast('Username and Password must be at least 5 characters long, or completely blank to disable password protection.');
+            document.getElementById('settings-remote-user').focus();
+            return;
+        }
+        
+        remoteSettings.port = newPort;
+        remoteSettings.username = user;
+        remoteSettings.password = pass;
+        await window.iptvAPI.saveRemoteSettings(remoteSettings);
+        
+        const originalText = e.target.textContent;
+        e.target.textContent = 'Saved ✔️';
+        setTimeout(() => { 
+            renderSettings(); // Re-render to update the Auto-Login URL securely
+        }, 1000);
+    });
+
+    const revokeBtn = document.getElementById('settings-revoke-device-btn');
+    if (revokeBtn) {
+        revokeBtn.addEventListener('click', async () => {
+            remoteSettings.activeDeviceId = null;
+            await window.iptvAPI.saveRemoteSettings(remoteSettings);
+            renderSettings();
+            showToast('Paired device revoked.');
+        });
+    }
 
     // Extract all necessary EPG files dynamically through the Python bridge
     const allEpgSources = savedPlaylists.map(p => p.epg).filter(e => e && e !== 'Not Configured');
@@ -1082,9 +1212,9 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
         console.log('[API] Calling parseM3u for new playlist.');
         const result = await window.iptvAPI.parseM3u(source);
         if (result && result.error) {
-            alert(`Failed to import.\nReason: ${result.error}`);
+            showToast(`Failed to import.\nReason: ${result.error}`);
         } else if (!result || (!Array.isArray(result) && !result.channels)) {
-            alert(`Failed to import.\nReason: Received invalid data from source.`);
+            showToast(`Failed to import.\nReason: Received invalid data from source.`);
         } else {
             const channels = Array.isArray(result) ? result : result.channels;
             let finalEpgSource = epgSource || 'Not Configured';
@@ -1148,7 +1278,7 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
             }
         }
     } catch (err) {
-        alert(`UI Error (${source}):\n${err.message}`);
+        showToast(`UI Error (${source}):\n${err.message}`);
     }
 }
 
@@ -1368,7 +1498,12 @@ function renderPlaylists() {
         if (totalPrograms > 0) {
             epgInfo = ` <span style="color: #43CB44; font-size: 0.9em;">(${mappedChannels} channels mapped, ${totalPrograms} programs)</span>`;
         } else if (playlist.epg && playlist.epg !== 'Not Configured') {
-            epgInfo = ` <span style="color: #cf6679; font-size: 0.9em;">(EPG not loaded)</span>`;
+            const isEpgLoaded = epgChannelsData && epgChannelsData.some(e => e.source === playlist.epg);
+            if (isEpgLoaded) {
+                epgInfo = ` <span style="color: #bb86fc; font-size: 0.9em;">(0 channels mapped)</span>`;
+            } else {
+                epgInfo = ` <span style="color: #cf6679; font-size: 0.9em;">(EPG not loaded)</span>`;
+            }
         }
 
         let totalChannels = playlist.channels ? playlist.channels.length : 0;
@@ -1532,10 +1667,10 @@ function renderPlaylists() {
                     }
                     updateState(); // FINAL SAVE
                 } else {
-                    alert('Failed to refresh playlist: ' + (result ? result.error : 'Unknown error'));
+                    showToast('Failed to refresh playlist: ' + (result ? result.error : 'Unknown error'));
                 }
             } catch(err) {
-                alert('Refresh error: ' + err.message);
+                showToast('Refresh error: ' + err.message);
             }
             
             e.target.textContent = originalText;
@@ -1663,7 +1798,8 @@ channelList.addEventListener('click', (e) => {
 let currentImportMode = 'file';
 
 if (btnModeFile) {
-    btnModeFile.addEventListener('click', () => {
+    btnModeFile.addEventListener('click', (e) => {
+        e.preventDefault();
         console.log('[EVENT] Import mode changed to file.');
         currentImportMode = 'file';
         btnModeFile.classList.add('active');
@@ -1674,7 +1810,8 @@ if (btnModeFile) {
 }
 
 if (btnModeUrl) {
-    btnModeUrl.addEventListener('click', () => {
+    btnModeUrl.addEventListener('click', (e) => {
+        e.preventDefault();
         console.log('[EVENT] Import mode changed to url.');
         currentImportMode = 'url';
         btnModeUrl.classList.add('active');
@@ -1685,7 +1822,8 @@ if (btnModeUrl) {
 }
 
 if (importBrowseBtn) {
-    importBrowseBtn.addEventListener('click', async () => {
+    importBrowseBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
         console.log('[API] Calling openFileDialog.');
         const filePaths = await window.iptvAPI.openFileDialog();
         if (filePaths && filePaths.length > 0) {
@@ -1720,27 +1858,46 @@ if (importUrlPath) {
 }
 
 if (importSubmitBtn) {
-    importSubmitBtn.addEventListener('click', async () => {
+    importSubmitBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
         console.log('[EVENT] Import/Update submit button clicked.');
         const name = importNameInput.value.trim();
-        if (!name) return alert("Playlist name is mandatory.");
+        if (!name) {
+            showToast("Playlist name is mandatory.");
+            importNameInput.focus();
+            return;
+        }
 
         let source = '';
         if (currentImportMode === 'file') {
             source = importFilePath.value.trim();
-            if (!source) return alert("Please select a file location.");
+            if (!source) {
+                showToast("Please select a file location.");
+                return;
+            }
         } else {
             source = importUrlPath.value.trim();
-            if (!source) return alert("Please enter a valid M3U URL.");
+            if (!source) {
+                showToast("Please enter a valid M3U URL.");
+                importUrlPath.focus();
+                return;
+            }
         }
 
         let epgSource = importEpgInput ? importEpgInput.value.trim() : '';
-        if (loadingMsg) loadingMsg.style.display = 'block';
-        await addPlaylist(source, name, epgSource, editingPlaylistIndex);
+        
+        const originalText = importSubmitBtn.textContent;
+        importSubmitBtn.textContent = 'Importing...';
+        importSubmitBtn.disabled = true;
         if (loadingMsg) loadingMsg.style.display = 'none';
+
+        await addPlaylist(source, name, epgSource, editingPlaylistIndex);
         
         editingPlaylistIndex = -1;
-        if (importSubmitBtn) importSubmitBtn.textContent = 'Import';
+        if (importSubmitBtn) {
+            importSubmitBtn.textContent = 'Import';
+            importSubmitBtn.disabled = false;
+        }
         if (importCancelBtn) importCancelBtn.style.display = 'none';
 
         importNameInput.value = '';
@@ -1751,7 +1908,8 @@ if (importSubmitBtn) {
 }
 
 if (importCancelBtn) {
-    importCancelBtn.addEventListener('click', () => {
+    importCancelBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         console.log('[EVENT] Import cancel button clicked.');
         editingPlaylistIndex = -1;
         if (importSubmitBtn) importSubmitBtn.textContent = 'Import';
@@ -1764,7 +1922,8 @@ if (importCancelBtn) {
 }
 
 if (clearBtn) {
-    clearBtn.addEventListener('click', async () => {
+    clearBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
         console.log('[EVENT] Clear all playlists button clicked.');
         savedPlaylists.forEach(p => {
             if (p.source) window.iptvAPI.clearCache(p.source);
@@ -2271,7 +2430,10 @@ async function embedStream(channel) {
 
     document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
     const activeEl = document.querySelector(`.channel-item[data-index="${currentPlayingChannelIndex}"]`);
-    if (activeEl) activeEl.classList.add('active');
+    if (activeEl) {
+        activeEl.classList.add('active');
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
 
     const fsBtn = document.getElementById('fullscreen-btn');
     if (fsBtn) fsBtn.style.display = 'block';
@@ -2392,13 +2554,55 @@ window.iptvAPI.onMpvExit((code) => {
     }
 });
 
+window.iptvAPI.onRemoteSettingsUpdated(() => {
+    if (document.getElementById('settings-view') && document.getElementById('settings-view').style.display === 'flex') {
+        renderSettings();
+    }
+});
+
+window.iptvAPI.onRemoteError((msg) => {
+    showToast("Remote Server Error: " + msg + "\n\nPlease choose a different port in Settings and try again.");
+});
+
+function getVisibleChannels() {
+    const filterSelect = document.getElementById('playlist-filter');
+    const filterVal = filterSelect ? filterSelect.value : 'all';
+
+    const groupFilter = document.getElementById('group-filter');
+    const groupVal = groupFilter ? groupFilter.value : 'all';
+
+    const channelSearch = document.getElementById('channel-search');
+    const searchVal = channelSearch ? channelSearch.value.toLowerCase() : '';
+
+    return allChannels.filter(channel => {
+        if (filterVal === 'favs' && !channel.favourite) return false;
+        if (filterVal !== 'all' && filterVal !== 'favs' && String(channel.playlistId) !== String(filterVal)) return false;
+        
+        const channelGroup = channel.group || 'Uncategorized';
+        if (groupVal !== 'all' && channelGroup !== groupVal) return false;
+
+        const rawTitle = channel.title || 'Unknown Channel';
+        if (searchVal && !rawTitle.toLowerCase().includes(searchVal)) return false;
+
+        return true;
+    });
+}
+
 window.iptvAPI.onPreviousChannel(() => {
     const currentUrl = localStorage.getItem('lastPlayedChannelUrl');
     const detailName = document.getElementById('detail-name');
     const currentTitle = detailName ? detailName.textContent : '';
-    const idx = allChannels.findIndex(c => c.url === currentUrl && (c.title || 'Unknown Channel') === currentTitle);
+    
+    let visibleChannels = getVisibleChannels();
+    if (visibleChannels.length === 0) visibleChannels = allChannels;
+
+    const idx = visibleChannels.findIndex(c => c.url === currentUrl && (c.title || 'Unknown Channel') === currentTitle);
     if (idx > 0) {
-        embedStream(allChannels[idx - 1]);
+        embedStream(visibleChannels[idx - 1]);
+    } else if (idx === 0 && visibleChannels.length > 0) {
+        embedStream(visibleChannels[visibleChannels.length - 1]); // Wrap around
+    } else if (idx === -1 && visibleChannels.length > 0) {
+        embedStream(visibleChannels[0]);
     }
 });
 
@@ -2406,10 +2610,98 @@ window.iptvAPI.onNextChannel(() => {
     const currentUrl = localStorage.getItem('lastPlayedChannelUrl');
     const detailName = document.getElementById('detail-name');
     const currentTitle = detailName ? detailName.textContent : '';
-    const idx = allChannels.findIndex(c => c.url === currentUrl && (c.title || 'Unknown Channel') === currentTitle);
-    if (idx >= 0 && idx < allChannels.length - 1) {
-        embedStream(allChannels[idx + 1]);
+
+    let visibleChannels = getVisibleChannels();
+    if (visibleChannels.length === 0) visibleChannels = allChannels;
+
+    const idx = visibleChannels.findIndex(c => c.url === currentUrl && (c.title || 'Unknown Channel') === currentTitle);
+    if (idx >= 0 && idx < visibleChannels.length - 1) {
+        embedStream(visibleChannels[idx + 1]);
+    } else if (idx === visibleChannels.length - 1 && visibleChannels.length > 0) {
+        embedStream(visibleChannels[0]); // Wrap around
+    } else if (idx === -1 && visibleChannels.length > 0) {
+        embedStream(visibleChannels[0]);
     }
+});
+
+window.iptvAPI.onRemoteAction((cmd) => {
+    console.log('[REMOTE] Action received:', cmd);
+    switch (cmd) {
+        case 'power':
+            let exitToast = document.getElementById('remote-exit-toast');
+            if (exitToast) exitToast.remove();
+            
+            exitToast = document.createElement('div');
+            exitToast.id = 'remote-exit-toast';
+            exitToast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1e1e1e; border: 1px solid #cf6679; color: #fff; padding: 20px; border-radius: 12px; z-index: 2147483647; box-shadow: 0 10px 30px rgba(0,0,0,0.8); text-align: center; font-family: "Inter", sans-serif; min-width: 300px; transition: opacity 0.3s; opacity: 1;';
+            exitToast.innerHTML = `
+                <div style="font-weight: bold; margin-bottom: 10px; color: #cf6679; font-size: 1.1em;">Exit Application</div>
+                <div style="margin-bottom: 20px; font-size: 0.9em; color: #ccc;">Do you want to exit?</div>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="btn-remote-exit-yes" class="playlist-btn" style="background: #cf6679; color: black; font-weight: bold; padding: 10px 16px; flex: 1;">Yes</button>
+                    <button id="btn-remote-exit-no" class="playlist-btn" style="background: #333; color: white; font-weight: bold; padding: 10px 16px; flex: 1;">No</button>
+                </div>
+            `;
+            document.body.appendChild(exitToast);
+            
+            document.getElementById('btn-remote-exit-yes').addEventListener('click', () => {
+                window.close(); // Gracefully closes the window and terminates MPV
+            });
+            document.getElementById('btn-remote-exit-no').addEventListener('click', () => {
+                exitToast.style.opacity = '0';
+                setTimeout(() => exitToast.remove(), 300);
+            });
+            break;
+        case 'home':
+            switchTab('live-tv', document.getElementById('btn-live-tv'));
+            break;
+        case 'back':
+            switchTab(previousTabId, document.getElementById('btn-' + previousTabId));
+            break;
+        case 'guide':
+            switchTab('epg', document.getElementById('btn-epg'));
+            break;
+        case 'favorites':
+            const filter = document.getElementById('playlist-filter');
+            if (filter) {
+                filter.value = filter.value === 'favs' ? 'all' : 'favs';
+                filter.dispatchEvent(new Event('change'));
+            }
+            break;
+        case 'search':
+            const search = document.getElementById('channel-search');
+            if (search) search.focus();
+            break;
+    }
+});
+
+window.iptvAPI.onShowRemoteOverrideToast((deviceId) => {
+    let toast = document.getElementById('remote-override-toast');
+    if (toast) toast.remove();
+    
+    toast = document.createElement('div');
+    toast.id = 'remote-override-toast';
+    toast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1e1e1e; border: 1px solid #bb86fc; color: #fff; padding: 20px; border-radius: 12px; z-index: 2147483647; box-shadow: 0 10px 30px rgba(0,0,0,0.8); text-align: center; font-family: "Inter", sans-serif; min-width: 300px; transition: opacity 0.3s; opacity: 1;';
+    toast.innerHTML = `
+        <div style="font-weight: bold; margin-bottom: 10px; color: #bb86fc; font-size: 1.1em;">New Remote Connection</div>
+        <div style="margin-bottom: 20px; font-size: 0.9em; color: #ccc;">A new device is trying to connect.<br>Allow the new device and disconnect the old one?</div>
+        <div style="display: flex; gap: 10px; justify-content: center;">
+            <button id="btn-remote-allow" class="playlist-btn" style="background: #43CB44; color: black; font-weight: bold; padding: 10px 16px; flex: 1;">Allow</button>
+            <button id="btn-remote-deny" class="playlist-btn" style="background: #cf6679; color: black; font-weight: bold; padding: 10px 16px; flex: 1;">Keep Old</button>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    
+    document.getElementById('btn-remote-allow').addEventListener('click', () => {
+        window.iptvAPI.sendRemoteOverrideResponse(true);
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    });
+    document.getElementById('btn-remote-deny').addEventListener('click', () => {
+        window.iptvAPI.sendRemoteOverrideResponse(false);
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    });
 });
 
 // Use ResizeObserver to track exact pixel coordinates perfectly
@@ -2484,8 +2776,15 @@ const navButtons = document.querySelectorAll('.nav-btn:not(#btn-exit)');
 const sidebar = document.getElementById('sidebar');
 const mainView = document.getElementById('main-view');
 
+let currentTabId = 'playlist';
+let previousTabId = 'playlist';
+
 function switchTab(tabId, clickedBtn) {
     console.log('[UI] Switching tab to:', tabId);
+    if (currentTabId !== tabId) {
+        previousTabId = currentTabId;
+        currentTabId = tabId;
+    }
     // Update active styling
     navButtons.forEach(btn => btn.classList.remove('active'));
     if (clickedBtn) clickedBtn.classList.add('active');
@@ -2558,7 +2857,7 @@ if (navBarNode) {
         btn.style.justifyContent = 'center';
         btn.innerHTML = comingSoonIcons[name] || `<span style="font-weight: bold;">${name}</span>`;
         btn.addEventListener('click', function() {
-            if (!this.disabled) alert('Coming in Next Version');
+            if (!this.disabled) showToast('Coming in Next Version');
         });
         navBarNode.appendChild(btn);
     });
@@ -2788,7 +3087,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                     btn.style.background = '#2a2a2a';
                     btn.addEventListener('click', (e) => {
                         e.preventDefault();
-                        alert('Coming in Next Version');
+                        showToast('Coming in Next Version');
                     });
                 }
                 tabContainer.appendChild(btn);
@@ -2900,9 +3199,11 @@ window.addEventListener('DOMContentLoaded', async () => {
                 const cancelBtn = document.getElementById('import-cancel-btn');
                 const loadingIndicator = document.getElementById('loading');
 
-                if (loadingIndicator) actionsRow.appendChild(loadingIndicator);
                 if (cancelBtn) actionsRow.appendChild(cancelBtn);
                 if (submitBtn) actionsRow.appendChild(submitBtn);
+
+                // If loadingIndicator exists, hide it outright so it doesn't take space
+                if (loadingIndicator) loadingIndicator.style.display = 'none';
 
                 card.appendChild(actionsRow);
 

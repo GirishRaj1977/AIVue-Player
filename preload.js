@@ -24,5 +24,14 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
     clearCache: (url) => ipcRenderer.invoke('clear-cache', url),
     factoryReset: () => ipcRenderer.invoke('factory-reset'),
-    hideSplash: () => ipcRenderer.send('hide-splash')
+    hideSplash: () => ipcRenderer.send('hide-splash'),
+    getIpAddress: () => ipcRenderer.invoke('get-ip-address'),
+    copyToClipboard: (text) => ipcRenderer.send('copy-to-clipboard', text),
+    getRemoteSettings: () => ipcRenderer.invoke('get-remote-settings'),
+    saveRemoteSettings: (settings) => ipcRenderer.invoke('save-remote-settings', settings),
+    onRemoteSettingsUpdated: (callback) => ipcRenderer.on('remote-settings-updated', callback),
+    onRemoteError: (callback) => ipcRenderer.on('remote-error', (_event, msg) => callback(msg)),
+    onRemoteAction: (callback) => ipcRenderer.on('remote-action', (_event, cmd) => callback(cmd)),
+    onShowRemoteOverrideToast: (callback) => ipcRenderer.on('show-remote-override-toast', (_event, deviceId) => callback(deviceId)),
+    sendRemoteOverrideResponse: (allow) => ipcRenderer.send('remote-override-response', allow)
 });

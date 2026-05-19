@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, clipboard } = require('electron');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
 const net = require('net');
@@ -81,6 +81,26 @@ try {
     console.warn("[DB] better-sqlite3 not installed yet. Run 'npm install better-sqlite3'.");
 }
 
+// --- Remote Settings Initialization ---
+let remoteSettings = { enabled: false, username: '', password: '', port: 8088, activeDeviceId: null };
+const remoteSettingsPath = path.join(app.getPath('userData'), 'remote_settings.json');
+try {
+    if (fs.existsSync(remoteSettingsPath)) {
+        remoteSettings = { ...remoteSettings, ...JSON.parse(fs.readFileSync(remoteSettingsPath, 'utf8')) };
+    }
+} catch (e) {
+    console.error("Failed to load remote settings", e);
+}
+
+ipcMain.handle('get-remote-settings', () => remoteSettings);
+ipcMain.handle('save-remote-settings', (event, settings) => {
+    const needsRestart = (remoteSettings.enabled !== settings.enabled) || (remoteSettings.port !== settings.port);
+    remoteSettings = settings;
+    try { fs.writeFileSync(remoteSettingsPath, JSON.stringify(remoteSettings)); } catch (e) { return false; }
+    if (needsRestart) initRemoteServer();
+    return true;
+});
+
 let mainWindow;
 let playerWindow;
 let mpvProcess;
@@ -119,6 +139,7 @@ function checkAndShowMainWindow() {
         }
         if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
             mainWindow.show();
+            syncPlayerWindow();
         }
     }
 }
@@ -238,7 +259,7 @@ function createWindow() {
 function syncPlayerWindow() {
     console.log('[SYNC] Syncing player window bounds');
     if (playerWindow && mainWindow && !mainWindow.isDestroyed() && currentDOMBounds) {
-        if (!isMpvReady || currentDOMBounds.width === 0 || currentDOMBounds.height === 0) {
+        if (!isMpvReady || currentDOMBounds.width === 0 || currentDOMBounds.height === 0 || !mainWindow.isVisible()) {
             playerWindow.setOpacity(0); // Make completely invisible (Bypasses OS bounds clamping)
             playerWindow.setBounds({ x: -10000, y: -10000, width: 10, height: 10 });
             return;
@@ -256,9 +277,379 @@ function syncPlayerWindow() {
     }
 }
 
+let expressServer = null;
+
+function initRemoteServer() {
+    if (expressServer) {
+        expressServer.close();
+        expressServer = null;
+    }
+    if (!remoteSettings.enabled) return;
+
+    const getCookie = (req, name) => {
+        if (!req.headers.cookie) return null;
+        const match = req.headers.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+        return match ? decodeURIComponent(match[2]) : null;
+    };
+
+    let pendingDevicePrompt = false;
+
+    try {
+        const express = require('express');
+        const app = express();
+        const port = remoteSettings.port || 8088;
+
+        app.use(express.urlencoded({ extended: true }));
+        app.use(express.json());
+
+        app.use(async (req, res, next) => {
+            console.log(`[REMOTE API] Incoming request: ${req.method} ${req.path} (IP: ${req.ip})`);
+
+            if (!remoteSettings.enabled) {
+                return res.status(403).send('Remote control is disabled in Settings.');
+            }
+
+
+            if (remoteSettings.username && remoteSettings.password) {
+                const expectedAuth = Buffer.from(remoteSettings.username + ':' + remoteSettings.password).toString('base64');
+                const authCookie = getCookie(req, 'aivue_auth');
+                
+                // Support legacy basic auth (for the auto-login URL)
+                const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
+                const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
+                const isBasicAuthValid = (login === remoteSettings.username && password === remoteSettings.password);
+
+                if (authCookie !== expectedAuth && !isBasicAuthValid) {
+                    console.log(`[REMOTE API] Auth failed or missing for path: ${req.path}`);
+                    if (req.path === '/login' || req.path === '/manifest.json' || req.path === '/icon.svg' || req.path === '/sw.js' || req.path === '/favicon.ico') {
+                        console.log(`[REMOTE API] Bypassing auth for public path: ${req.path}`);
+                        return next();
+                    }
+                    if (req.path.startsWith('/cmd/')) {
+                        console.log(`[REMOTE API] Rejecting unauthorized command: ${req.path}`);
+                        return res.status(401).send('Unauthorized');
+                    }
+                    console.log(`[REMOTE API] Redirecting unauthorized user to /login`);
+                    return res.redirect('/login');
+                }
+                console.log(`[REMOTE API] Auth successful for path: ${req.path}`);
+            }
+
+            let deviceId = getCookie(req, 'aivue_device_id');
+            if (!deviceId) {
+                deviceId = require('crypto').randomUUID();
+                res.cookie('aivue_device_id', deviceId, { maxAge: 31536000000, httpOnly: true });
+            }
+
+            console.log(`[REMOTE API] Current Device ID: ${deviceId} | Active Paired Device: ${remoteSettings.activeDeviceId}`);
+
+            if (req.path === '/manifest.json' || req.path === '/icon.svg' || req.path === '/sw.js' || req.path === '/login' || req.path === '/favicon.ico') {
+                console.log(`[REMOTE API] Bypassing device lock for public path: ${req.path}`);
+                return next();
+            }
+
+            if (!remoteSettings.activeDeviceId) {
+                console.log(`[REMOTE API] No active device found. Auto-pairing with: ${deviceId}`);
+                remoteSettings.activeDeviceId = deviceId;
+                try { fs.writeFileSync(remoteSettingsPath, JSON.stringify(remoteSettings)); } catch(e) {}
+                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-settings-updated');
+            } else if (remoteSettings.activeDeviceId !== deviceId) {
+                console.log(`[REMOTE API] Device mismatch detected. (Current: ${deviceId}, Active: ${remoteSettings.activeDeviceId})`);
+                if (pendingDevicePrompt) {
+                    console.log(`[REMOTE API] Toast prompt already pending. Sending wait message.`);
+                    return res.status(403).send('<html style="background:#121212;color:white;font-family:sans-serif;text-align:center;padding:50px;"><h2>Access Denied</h2><p>Waiting for pairing approval on PC...</p></html>');
+                }
+                pendingDevicePrompt = true;
+                let response = 1;
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    console.log(`[REMOTE API] Triggering new device override toast on PC.`);
+                    if (mainWindow.isFullScreen()) {
+                        console.log(`[REMOTE API] Exiting fullscreen to show toast.`);
+                        mainWindow.setFullScreen(false);
+                        // Give the window a moment to resize before showing the toast
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                    response = await new Promise(resolve => {
+                        let responded = false;
+                        const handler = (event, res) => {
+                            if (responded) return;
+                            responded = true;
+                            console.log(`[REMOTE API] PC user responded to toast: ${res ? 'Allow' : 'Deny'}`);
+                            clearTimeout(timeout);
+                            resolve(res ? 0 : 1);
+                        };
+                        const timeout = setTimeout(() => {
+                            if (responded) return;
+                            responded = true;
+                            console.log(`[REMOTE API] Toast timed out. Defaulting to deny.`);
+                            ipcMain.removeListener('remote-override-response', handler);
+                            resolve(1);
+                        }, 30000); // 30s timeout defaults to keep old
+                        ipcMain.once('remote-override-response', handler);
+                        mainWindow.webContents.send('show-remote-override-toast', deviceId);
+                    });
+                }
+                pendingDevicePrompt = false;
+
+                if (response === 0) {
+                    console.log(`[REMOTE API] New device allowed. Overriding active device.`);
+                    remoteSettings.activeDeviceId = deviceId;
+                    try { fs.writeFileSync(remoteSettingsPath, JSON.stringify(remoteSettings)); } catch(e) {}
+                    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-settings-updated');
+                    next();
+                } else {
+                    console.log(`[REMOTE API] New device denied.`);
+                    return res.status(403).send('<html style="background:#121212;color:white;font-family:sans-serif;text-align:center;padding:50px;"><h2>Access Denied</h2><p>Another device is currently paired with AIVue Player.</p><p style="color:#888;">Please revoke access from the Remote Control settings on your PC to connect a new device.</p></html>');
+                }
+            } else {
+                console.log(`[REMOTE API] Device matches active device. Proceeding.`);
+                next();
+            }
+        });
+
+        app.get('/login', (req, res) => {
+            if (remoteSettings.username && remoteSettings.password) {
+                const expectedAuth = Buffer.from(remoteSettings.username + ':' + remoteSettings.password).toString('base64');
+                if (getCookie(req, 'aivue_auth') === expectedAuth) {
+                    console.log(`[REMOTE API] User already authenticated. Redirecting /login to /remote`);
+                    return res.redirect('/remote');
+                }
+            }
+            res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+<title>Login - AIVue Remote</title>
+<style>
+* { box-sizing: border-box; }
+body { background:#0f172a; color:white; font-family:Arial,sans-serif; display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh; margin:0; padding: 20px; }
+form { background:#1e293b; padding:30px 25px; border-radius:16px; display:flex; flex-direction:column; gap:15px; width:100%; max-width:340px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+input { padding:14px; border-radius:8px; border:1px solid #334155; background:#0f172a; color:white; font-size:16px; outline:none; transition: 0.2s; }
+input:focus { border-color: #7c3aed; }
+button { padding:14px; border-radius:8px; border:none; background:#7c3aed; color:white; font-size:16px; font-weight:bold; cursor:pointer; transition: 0.2s; }
+button:active { transform: scale(0.95); }
+h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bottom: 5px; }
+.err { background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color:#ef4444; padding: 10px; border-radius: 8px; text-align:center; font-size:14px; margin-bottom: 5px; }
+</style>
+</head>
+<body>
+<form action="/login" method="POST">
+    <h2>AIVue Remote</h2>
+    ${req.query.error ? '<div class="err">Invalid username or password.</div>' : ''}
+    <input type="text" name="username" placeholder="Username" required autocomplete="username">
+    <input type="password" name="password" placeholder="Password" required autocomplete="current-password">
+    <button type="submit">Connect</button>
+</form>
+</body>
+</html>`);
+        });
+
+        app.post('/login', (req, res) => {
+            console.log(`[REMOTE API] POST /login attempt from IP: ${req.ip} for user: ${req.body.username}`);
+            const { username, password } = req.body;
+            if (username === remoteSettings.username && password === remoteSettings.password) {
+                console.log(`[REMOTE API] Login successful. Redirecting to /remote`);
+                const token = Buffer.from(username + ':' + password).toString('base64');
+                res.cookie('aivue_auth', token, { maxAge: 31536000000, httpOnly: true });
+                return res.redirect('/remote');
+            }
+            console.log(`[REMOTE API] Login failed (invalid credentials). Redirecting back to /login.`);
+            res.redirect('/login?error=1');
+        });
+
+        // Helper to send commands to MPV using existing IPC client
+        const sendMpvCommand = (args) => {
+            if (ipcClient && !ipcClient.destroyed) {
+                console.log('[MPV IPC SEND]', JSON.stringify({ command: args }));
+                ipcClient.write(JSON.stringify({ command: args }) + '\n');
+            }
+        };
+
+        // ------------------ Playback Commands ------------------
+        app.get('/playpause', (req, res) => { sendMpvCommand(['cycle', 'pause']); res.send('OK'); });
+        app.get('/stop', (req, res) => { sendMpvCommand(['stop']); res.send('OK'); });
+        app.get('/mute', (req, res) => { sendMpvCommand(['cycle', 'mute']); res.send('OK'); });
+        app.get('/volumeup', (req, res) => { sendMpvCommand(['add', 'volume', 5]); res.send('OK'); });
+        app.get('/volumedown', (req, res) => { sendMpvCommand(['add', 'volume', -5]); res.send('OK'); });
+        app.get('/seekfwd', (req, res) => { sendMpvCommand(['seek', 30]); res.send('OK'); });
+        app.get('/seekback', (req, res) => { sendMpvCommand(['seek', -30]); res.send('OK'); });
+        
+        // ------------------ Electron Intercepts ------------------
+        app.get('/fullscreen', (req, res) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.setFullScreen(!mainWindow.isFullScreen());
+            }
+            res.send('OK');
+        });
+        app.get('/nextchannel', (req, res) => {
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mpv-next-channel');
+            res.send('OK');
+        });
+        app.get('/previouschannel', (req, res) => {
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mpv-previous-channel');
+            res.send('OK');
+        });
+
+        // ------------------ Unified Command API ------------------
+        app.get('/cmd/:command', (req, res) => {
+            const cmd = req.params.command;
+            switch(cmd) {
+                case 'playpause': case 'ok': sendMpvCommand(['cycle', 'pause']); break;
+                case 'mute': sendMpvCommand(['cycle', 'mute']); break;
+                case 'volup': case 'up': sendMpvCommand(['add', 'volume', 5]); break;
+                case 'voldown': case 'down': sendMpvCommand(['add', 'volume', -5]); break;
+                case 'forward': sendMpvCommand(['seek', 30]); break;
+                case 'rewind': sendMpvCommand(['seek', -30]); break;
+                case 'right': sendMpvCommand(['seek', 10]); break;
+                case 'left': sendMpvCommand(['seek', -10]); break;
+                case 'chup': 
+                    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mpv-next-channel');
+                    break;
+                case 'chdown': 
+                    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mpv-previous-channel');
+                    break;
+                case 'power': case 'home': case 'back': case 'guide': case 'favorites': case 'search':
+                    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-action', cmd);
+                    break;
+            }
+            res.send('OK');
+        });
+
+        app.get('/favicon.ico', (req, res) => {
+            res.sendFile(path.join(__dirname, 'assets', 'logo.ico'));
+        });
+
+        // ------------------ PWA Endpoints ------------------
+        app.get('/manifest.json', (req, res) => {
+            res.json({
+                name: "AIVue Remote",
+                short_name: "AIVue",
+                description: "Remote control for AIVue Player",
+                start_url: "/remote",
+                display: "standalone",
+                background_color: "#0f172a",
+                theme_color: "#0f172a",
+                icons: [
+                    { src: "/icon.svg", sizes: "192x192 512x512", type: "image/svg+xml", purpose: "any maskable" }
+                ]
+            });
+        });
+
+        app.get('/sw.js', (req, res) => {
+            res.setHeader('Content-Type', 'application/javascript');
+            res.send("self.addEventListener('install', e => self.skipWaiting());\nself.addEventListener('activate', e => e.waitUntil(clients.claim()));\nself.addEventListener('fetch', e => { e.respondWith(fetch(e.request).catch(() => new Response('AIVue Remote is offline.'))); });");
+        });
+
+        app.get('/icon.svg', (req, res) => {
+            res.setHeader('Content-Type', 'image/svg+xml');
+            res.send('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#7c3aed"/><text x="50%" y="50%" font-family="Arial, sans-serif" font-size="240" font-weight="bold" fill="white" dominant-baseline="central" text-anchor="middle">AV</text></svg>');
+        });
+
+        // ------------------ Web UI Remote ------------------
+        app.get('/remote', (req, res) => {
+            res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<link rel="apple-touch-icon" href="/icon.svg">
+<title>AIVue Remote</title>
+<style>
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body{ background:#0f172a; font-family:Arial,sans-serif; color:white; min-height:100vh; display:flex; justify-content:center; align-items:center; padding:15px; }
+.remote{ width:100%; max-width:420px; display:flex; flex-direction:column; gap:14px; }
+.row{ display:grid; gap:10px; }
+.row-4{ grid-template-columns:repeat(4,1fr); }
+.row-3{ grid-template-columns:repeat(3,1fr); }
+.row-2{ grid-template-columns:repeat(2,1fr); }
+button{ border:none; border-radius:16px; background:#1e293b; color:white; font-size:18px; font-weight:600; height:60px; cursor:pointer; transition:.15s; }
+button:active{ transform:scale(.95); }
+.top-btn{ height:55px; }
+.power{ background:#dc2626; }
+.guide{ background:#7c3aed; }
+.dpad{ display:flex; flex-direction:column; align-items:center; gap:10px; }
+.dpad button{ width:70px; height:70px; }
+.middle{ display:flex; align-items:center; gap:10px; }
+.ok{ width:90px !important; height:90px !important; border-radius:50%; background:#7c3aed; font-size:22px; }
+.playback button{ font-size:24px; }
+.secondary{ background:#334155; }
+.title{ text-align:center; font-size:22px; font-weight:bold; margin-bottom:5px; color:#cbd5e1; }
+</style>
+</head>
+<body>
+<div class="remote">
+    <div class="title">AIVue Remote</div>
+    <!-- Top Buttons -->
+    <div class="row row-4">
+        <button class="top-btn power" data-cmd="power" style="display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M16.56,5.44L15.11,6.89C16.84,7.94 18,9.83 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12C6,9.83 7.16,7.94 8.88,6.88L7.44,5.44C5.36,6.88 4,9.28 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12C20,9.28 18.64,6.88 16.56,5.44M11,3V13H13V3H11Z"/></svg></button>
+        <button class="top-btn" data-cmd="home">⌂</button>
+        <button class="top-btn" data-cmd="back">←</button>
+        <button class="top-btn guide" data-cmd="guide">EPG</button>
+    </div>
+    <!-- D-Pad -->
+    <div class="dpad">
+        <button data-cmd="up">▲</button>
+        <div class="middle">
+            <button data-cmd="left">◄</button>
+            <button class="ok" data-cmd="ok">OK</button>
+            <button data-cmd="right">►</button>
+        </div>
+        <button data-cmd="down">▼</button>
+    </div>
+    <!-- Volume / Channel -->
+    <div class="row row-2">
+        <button data-cmd="volup">VOL +</button>
+        <button data-cmd="chup">CH +</button>
+        <button data-cmd="voldown">VOL −</button>
+        <button data-cmd="chdown">CH −</button>
+    </div>
+    <!-- Extras -->
+    <div class="row row-3">
+        <button class="secondary" data-cmd="mute">🔇</button>
+        <button class="secondary" data-cmd="favorites">⭐</button>
+        <button class="secondary" data-cmd="search">🔍</button>
+    </div>
+</div>
+<script>
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(e => console.error('SW reg failed', e));
+}
+document.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const cmd = btn.dataset.cmd;
+        fetch('/cmd/' + cmd).catch(e => console.error(e));
+        if(navigator.vibrate) navigator.vibrate(50);
+    });
+});
+</script>
+</body>
+</html>
+            `);
+        });
+
+        expressServer = app.listen(port, '0.0.0.0', () => {
+            console.log(`[REMOTE] Express API listening on port ${port}`);
+            console.log(`[REMOTE] Web remote available at http://localhost:${port}/remote`);
+        }).on('error', (err) => {
+            console.warn('[REMOTE] Express Server Error:', err.message);
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-error', err.message);
+        });
+    } catch (err) {
+        console.warn("[REMOTE] Express not installed. Run 'npm install express' to enable the web remote API.");
+    }
+}
+
 app.whenReady().then(() => {
     createWindow();
     initMpv();
+    initRemoteServer(); // Spin up the HTTP API server
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
@@ -544,6 +935,25 @@ const cacheDir = path.join(app.getPath('userData'), 'cache');
 if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
 }
+
+ipcMain.handle('get-ip-address', () => {
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    for (const devName in interfaces) {
+        const iface = interfaces[devName];
+        for (let i = 0; i < iface.length; i++) {
+            const alias = iface[i];
+            if (alias.family === 'IPv4' && alias.address !== '127.0.0.1' && !alias.internal) {
+                return alias.address;
+            }
+        }
+    }
+    return 'localhost';
+});
+
+ipcMain.on('copy-to-clipboard', (event, text) => {
+    clipboard.writeText(text);
+});
 
 // M3U Parsing backend wrapper
 ipcMain.handle('parse-m3u', async (event, source, epgSource, mappings, forceRefresh) => {
