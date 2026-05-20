@@ -21,33 +21,60 @@ Modern IPTV player built with Electron and MPV.
 
 ## 📸 Screenshots
 
-### Home / Channel List
-![Channel List](screenshots/AIVUE1.png)
+## 📸 Screenshots
 
-### EPG Guide
-![EPG Guide](screenshots/AIVUE2.png)
+<table>
+<tr>
+<td align="center">
+<b>Home / Channel List</b><br>
+<img src="screenshots/AIVUE1.png" width="300">
+</td>
 
-### Add Playlist
-![Add Playlist](screenshots/AIVUE3.png)
+<td align="center">
+<b>EPG Guide</b><br>
+<img src="screenshots/AIVUE2.png" width="300">
+</td>
 
-### Manage Channels
-![Manage Channels](screenshots/AIVUE4.png)
+<td align="center">
+<b>Add Playlist</b><br>
+<img src="screenshots/AIVUE3.png" width="300">
+</td>
+</tr>
 
-### Settings
-![Settings](screenshots/AIVUE5.png)
+<tr>
+<td align="center">
+<b>Manage Channels</b><br>
+<img src="screenshots/AIVUE4.png" width="300">
+</td>
 
-### Channel Mapping
-![Channel Mapping](screenshots/AIVUE6.png)
+<td align="center">
+<b>Settings</b><br>
+<img src="screenshots/AIVUE5.png" width="300">
+</td>
 
-### Remote Setup
-![Remote Setup](screenshots/AIVUE7.png)
+<td align="center">
+<b>Channel Mapping</b><br>
+<img src="screenshots/AIVUE6.png" width="300">
+</td>
+</tr>
 
-### Mobile Remote
-![Mobile Remote](screenshots/AIVUE8.jpg)
+<tr>
+<td align="center">
+<b>Remote Setup</b><br>
+<img src="screenshots/AIVUE7.png" width="300">
+</td>
 
-### Mobile Remote
-![Mobile Remote](screenshots/AIVUE9.jpg)
+<td align="center">
+<b>Mobile Remote</b><br>
+<img src="screenshots/AIVUE8.jpg" width="300">
+</td>
 
+<td align="center">
+<b>Mobile Search</b><br>
+<img src="screenshots/AIVUE9.jpg" width="300">
+</td>
+</tr>
+</table>
 ---
 
 ## 🛠 Installation
