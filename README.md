@@ -72,13 +72,15 @@
 
 <td align="center">
 <b>Mobile Remote</b><br>
-<img src="screenshots/AIVUE8.jpg" width="300">
+<img src="screenshots/AIVUE9.jpg" width="300">
 </td>
 
 <td align="center">
 <b>Mobile Search</b><br>
-<img src="screenshots/AIVUE9.jpg" width="300">
+<img src="screenshots/AIVUE8.jpg" width="300">
 </td>
+
+
 </tr>
 </table>
 ---
