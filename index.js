@@ -524,6 +524,35 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             res.send('OK');
         });
 
+        app.get('/api/reminders', async (req, res) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                try {
+                    const remindersJSON = await mainWindow.webContents.executeJavaScript('localStorage.getItem("iptv_reminders");', true);
+                    res.json(JSON.parse(remindersJSON || '[]'));
+                } catch (e) {
+                    console.error('[REMOTE API] Error getting reminders:', e);
+                    res.status(500).json({ error: 'Failed to get reminders' });
+                }
+            } else {
+                res.status(503).json({ error: 'Main window not available' });
+            }
+        });
+
+        app.post('/api/toggle-reminder', (req, res) => {
+            const { channelTitle, progTitle, startTime, stopTime } = req.body;
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                try {
+                    mainWindow.webContents.executeJavaScript(`toggleReminder(${JSON.stringify(channelTitle)}, ${JSON.stringify(progTitle)}, ${JSON.stringify(startTime)}, ${JSON.stringify(stopTime)})`);
+                    res.send('OK');
+                } catch (e) {
+                    console.error('[REMOTE API] Error toggling reminder:', e);
+                    res.status(500).send('Failed to toggle reminder');
+                }
+            } else {
+                res.status(503).send('Main window not available');
+            }
+        });
+
         app.get('/api/channels', (req, res) => {
             const playlists = loadChannelsFromDb();
             let channels = [];
