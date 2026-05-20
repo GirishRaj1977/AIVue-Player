@@ -177,14 +177,17 @@ aeroStyles.textContent = `
 
     /* Live TV Screen Split Layout */
     #sidebar {
-        flex: 3 !important;
-        max-width: none !important;
-        width: auto !important;
+        flex: 0 0 30% !important;
+        max-width: 30% !important;
+        width: 30% !important;
         min-width: 0 !important;
         min-height: 0 !important;
+        overflow: hidden !important;
     }
     #main-view {
-        flex: 7 !important;
+        flex: 0 0 70% !important;
+        max-width: 70% !important;
+        width: 70% !important;
         display: flex !important;
         flex-direction: column !important;
         min-width: 0 !important;
@@ -208,7 +211,8 @@ aeroStyles.textContent = `
         min-height: 0 !important;
     }
     #player-wrapper {
-        flex: 2 !important;
+        flex: 5 !important;
+        order: 2 !important;
         background-color: #333 !important;
         padding: 1px !important;
         box-sizing: border-box !important;
@@ -230,7 +234,8 @@ aeroStyles.textContent = `
         background: #000 !important;
     }
     #channel-details {
-        flex: 1 !important;
+        flex: 2 !important;
+        order: 1 !important;
         overflow-y: auto !important;
         min-width: 0 !important;
         min-height: 0 !important;
@@ -249,7 +254,9 @@ aeroStyles.textContent = `
         height: 32px;
         font-size: 20px;
         line-height: 32px;
-        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         cursor: pointer;
         z-index: 100;
         transition: opacity 0.3s;
@@ -2084,7 +2091,6 @@ function renderEpg(programmes) {
         const reminderHtml = isFuture ? `<button class="reminder-btn-sidebar" data-prog="${title.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="background: transparent; border: none; padding: 0; font-size: 1.2em; cursor: pointer; margin-right: 5px; transition: 0.2s; ${reminderStyle}" title="Set Reminder">🔔</button>` : '';
         
         html += `
-            <div style="background: #1e1e1e; padding: 12px; border-radius: 8px; border-left: 4px solid ${isCurrent ? '#43CB44' : '#444'};">
             <div class="live-epg-item" tabindex="0" style="background: #1e1e1e; padding: 12px; border-radius: 8px; border-left: 4px solid ${isCurrent ? '#43CB44' : '#444'}; outline: none; cursor: default; transition: 0.2s;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px;">
                     <div style="font-weight: ${isCurrent ? 'bold' : 'normal'}; color: ${color}; font-size: 1.1em; margin-bottom: 5px; display: flex; align-items: center;">${reminderHtml}<span>${title}</span></div>
@@ -2140,6 +2146,15 @@ async function fetchEpgDataForChannels(channels) {
 function onEpgScroll() {
     if (!epgScrollTicking) {
         window.requestAnimationFrame(() => {
+            const scrollContainer = document.getElementById('epg-scroll-container');
+            const headerScroll = document.getElementById('epg-header-scroll');
+            const channelsCol = document.getElementById('epg-channels-col');
+            
+            if (scrollContainer && headerScroll && channelsCol) {
+                headerScroll.scrollLeft = scrollContainer.scrollLeft;
+                channelsCol.scrollTop = scrollContainer.scrollTop;
+            }
+            
             renderVisibleEpgRows();
             epgScrollTicking = false;
         });
@@ -2150,7 +2165,8 @@ function onEpgScroll() {
 function renderVisibleEpgRows(force = false) {
     const scrollContainer = document.getElementById('epg-scroll-container');
     const rowsLayer = document.getElementById('epg-rows-layer');
-    if (!scrollContainer || !rowsLayer || !epgGridState) return;
+    const channelsInner = document.getElementById('epg-channels-inner');
+    if (!scrollContainer || !rowsLayer || !channelsInner || !epgGridState) return;
     
     const scrollTop = scrollContainer.scrollTop;
     const scrollLeft = scrollContainer.scrollLeft;
@@ -2164,7 +2180,7 @@ function renderVisibleEpgRows(force = false) {
         timeIndicator.style.height = `${viewportHeight}px`;
     }
 
-    const overscan = 5; // Render a few extra rows above and below
+    const overscan = 5; 
     let startIndex = Math.floor(scrollTop / rowHeight) - overscan;
     let endIndex = Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan;
     
@@ -2172,7 +2188,7 @@ function renderVisibleEpgRows(force = false) {
     endIndex = Math.min(epgChannelsToRender.length - 1, endIndex);
     
     if (!force && startIndex === epgLastStartIndex && endIndex === epgLastEndIndex && Math.abs(scrollLeft - epgLastScrollLeft) < (viewportWidth / 2)) {
-        return; // No change in visible rows or horizontal overscan, so do nothing.
+        return; 
     }
     
     epgLastStartIndex = startIndex;
@@ -2180,11 +2196,11 @@ function renderVisibleEpgRows(force = false) {
     epgLastScrollLeft = scrollLeft;
     
     const { gridStart, totalWidth, pxPerMinute, now } = epgGridState;
-    let html = '';
+    let gridHtml = '';
+    let channelsHtml = '';
     const channelsToFetch = [];
     
-    // Calculate visible time window for program rendering
-    const horizontalOverscanPx = viewportWidth; // Overscan one viewport width left and right
+    const horizontalOverscanPx = viewportWidth; 
     const viewStartPx = scrollLeft - horizontalOverscanPx;
     const viewEndPx = scrollLeft + viewportWidth + horizontalOverscanPx;
 
@@ -2223,7 +2239,6 @@ function renderVisibleEpgRows(force = false) {
                     let right = Math.min(totalWidth, endMin * pxPerMinute);
                     let width = right - left;
 
-                    // Optimization: only render programs that are horizontally in view
                     if (right < viewStartPx || left > viewEndPx) {
                         continue;
                     }
@@ -2239,34 +2254,34 @@ function renderVisibleEpgRows(force = false) {
                     const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
 
                     programsHtml += `
-                    <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; width: ${width}px; height: 100%; background: ${bg}; border-right: 1px solid #111; border-top: 2px solid ${borderCol}; box-sizing: border-box; padding: 6px 10px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
+                    <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 60px; background: ${bg}; border-right: 1px solid #111; border-top: 2px solid ${borderCol}; border-bottom: 1px solid #2a2a2a; box-sizing: border-box; padding: 6px 10px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
                         <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${pTitle}</div>
                         <div style="font-size: 0.75em; color: #888; margin-top: 4px;">${timeStr}</div>
                     </div>`;
                 }
             } else {
-                programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="display: flex; align-items: center; padding-left: 20px; height: 100%; color: #555; font-size: 0.9em; width: 100%; cursor: pointer;">No EPG Data</div>`;
+                programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 60px; border-bottom: 1px solid #2a2a2a; box-sizing: border-box; color: #555; font-size: 0.9em; width: 100%; cursor: pointer;">No EPG Data</div>`;
             }
         } else {
-            programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="display: flex; align-items: center; padding-left: 20px; height: 100%; color: #888; font-size: 0.9em; width: 100%; cursor: pointer;">Loading...</div>`;
+            programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 60px; border-bottom: 1px solid #2a2a2a; box-sizing: border-box; color: #888; font-size: 0.9em; width: 100%; cursor: pointer;">Loading...</div>`;
         }
         
-        html += `
-        <div style="position: absolute; top: ${topPos}px; left: 0; display: flex; width: ${250 + totalWidth}px; border-bottom: 1px solid #2a2a2a; height: 60px; box-sizing: border-box;">
-            <!-- Left-Pinned Channel Logo + Name -->
-            <div class="epg-play-channel" tabindex="0" data-index="${globalIdx}" style="width: 250px; min-width: 250px; position: sticky; left: 0; z-index: 10; background: #1e1e1e; border-right: 2px solid #333; display: flex; align-items: center; padding: 10px; box-sizing: border-box; cursor: pointer; outline: none;">
-                <img src="${imgSrc}" data-eh="0" style="width: 40px; height: 40px; min-width: 40px; object-fit: contain; margin-right: 15px; background: #ffffff; border-radius: 4px;">
-                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif; color: #e0e0e0;" title="${safeTitle}">${safeTitle}</span>
-            </div>
-            <!-- Right-Side Content -->
-            <div style="position: relative; width: ${totalWidth}px; height: 100%; background: #121212;">${programsHtml}</div>
+        channelsHtml += `
+        <div class="epg-play-channel" tabindex="0" data-index="${globalIdx}" style="position: absolute; top: ${topPos}px; left: 0; width: 250px; height: 60px; background: #1e1e1e; border-bottom: 1px solid #2a2a2a; display: flex; align-items: center; padding: 10px; box-sizing: border-box; cursor: pointer; outline: none;">
+            <img src="${imgSrc}" data-eh="0" style="width: 40px; height: 40px; min-width: 40px; object-fit: contain; margin-right: 15px; background: #ffffff; border-radius: 4px;">
+            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif; color: #e0e0e0;" title="${safeTitle}">${safeTitle}</span>
+        </div>`;
+        
+        gridHtml += `
+        <div style="position: absolute; top: ${topPos}px; left: 0; width: ${totalWidth}px; height: 60px;">
+            ${programsHtml}
         </div>`;
     }
     
-    rowsLayer.innerHTML = html;
+    channelsInner.innerHTML = channelsHtml;
+    rowsLayer.innerHTML = gridHtml;
 
-    // Apply CSP-safe image error handlers dynamically 
-    rowsLayer.querySelectorAll('img[data-eh="0"]').forEach(img => {
+    channelsInner.querySelectorAll('img[data-eh="0"]').forEach(img => {
         img.setAttribute('data-eh', '1');
         img.onerror = function() {
             this.onerror = null;
@@ -2368,27 +2383,44 @@ async function renderFullEpg() {
     for (let i = 0; i < 24; i++) {
         const headerTime = new Date(gridStart.getTime() + i * 60 * 60 * 1000);
         const timeStr = headerTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        headerHtml += `<div style="position: absolute; left: ${i * hourWidth}px; width: ${hourWidth}px; height: 100%; border-right: 1px solid rgba(0,0,0,0.2); display: flex; align-items: center; padding-left: 10px; color: #000; font-weight: bold; box-sizing: border-box;">${timeStr}</div>`;
+        headerHtml += `<div style="position: absolute; left: ${i * hourWidth}px; width: ${hourWidth}px; height: 100%; border-right: 1px solid rgba(0,0,0,0.2); border-bottom: 2px solid #333; display: flex; align-items: center; padding-left: 10px; color: #000; font-weight: bold; box-sizing: border-box;">${timeStr}</div>`;
     }
 
     const minutesSinceStart = (now.getTime() - gridStart.getTime()) / 60000;
     const nowPx = minutesSinceStart * pxPerMinute;
     let redLineHtml = '';
     if (nowPx > 0 && nowPx < totalWidth) {
-        redLineHtml = `<div id="epg-time-indicator" style="position: absolute; left: ${250 + nowPx}px; top: 0; height: 100%; width: 2px; background: #cf6679; z-index: 15; pointer-events: none;"></div>`;
+        redLineHtml = `<div id="epg-time-indicator" style="position: absolute; left: ${nowPx}px; top: 0; height: 100%; width: 2px; background: #cf6679; z-index: 15; pointer-events: none;"></div>`;
     }
 
     let html = `
-    <div id="epg-scroll-container" style="flex-grow: 1; width: 100%; overflow: auto; position: relative; background: #121212; border: 1px solid #333; border-radius: 8px; display: flex; flex-direction: column;">
-        <div style="display: flex; width: ${250 + totalWidth}px; position: sticky; top: 0; z-index: 20; background: #bb86fc; border-bottom: 2px solid #333;">
-            <div style="width: 250px; min-width: 250px; position: sticky; left: 0; z-index: 30; background: #bb86fc; border-right: 2px solid rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000; box-sizing: border-box;">Channels</div>
-            <div style="position: relative; width: ${totalWidth}px; height: 30px;">
-                ${headerHtml}
+    <div id="epg-layout-wrapper" style="display: flex; flex-direction: column; flex-grow: 1; width: 100%; height: 100%; overflow: hidden; background: #121212; border: 1px solid #333; border-radius: 8px;">
+        <!-- Header Row -->
+        <div style="display: flex; width: 100%; background: #bb86fc; z-index: 20;">
+            <div style="width: 250px; min-width: 250px; background: #bb86fc; border-bottom: 2px solid #333; border-right: 2px solid rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000; box-sizing: border-box; height: 30px;">Channels</div>
+            <div id="epg-header-scroll" style="flex-grow: 1; overflow: hidden; position: relative; height: 30px;">
+                <div style="width: ${totalWidth}px; height: 100%; position: relative;">
+                    ${headerHtml}
+                </div>
             </div>
+            <!-- Scrollbar Spacer -->
+            <div id="epg-header-spacer" style="width: 14px; min-width: 14px; background: #bb86fc; border-bottom: 2px solid #333; flex-shrink: 0; box-sizing: border-box;"></div>
         </div>
-        <div id="epg-channels-container" style="position: relative; width: ${250 + totalWidth}px; height: ${epgChannelsToRender.length * 60}px;">
-            <div id="epg-rows-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
-            ${redLineHtml}
+        
+        <!-- Content Area -->
+        <div style="display: flex; flex-grow: 1; overflow: hidden; width: 100%;">
+            <!-- Left Pinned Channels -->
+            <div id="epg-channels-col" style="width: 250px; min-width: 250px; background: #1a1a1a; overflow: hidden; border-right: 2px solid #333; z-index: 10; position: relative;">
+                <div id="epg-channels-inner" style="position: relative; width: 100%; height: ${epgChannelsToRender.length * 60}px;"></div>
+            </div>
+            
+            <!-- Right Scrolling Grid -->
+            <div id="epg-scroll-container" style="flex-grow: 1; overflow-y: scroll; overflow-x: auto; position: relative; background: #121212;">
+                <div id="epg-grid-inner" style="width: ${totalWidth}px; height: ${epgChannelsToRender.length * 60}px; position: relative;">
+                    <div id="epg-rows-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
+                    ${redLineHtml}
+                </div>
+            </div>
         </div>
     </div>`;
 
@@ -2397,9 +2429,10 @@ async function renderFullEpg() {
         contentArea.innerHTML = html;
     }
 
-    const channelsContainer = document.getElementById('epg-channels-container');
-    if (channelsContainer) {
-        channelsContainer.addEventListener('click', (e) => {
+    const channelsContainer = document.getElementById('epg-channels-col');
+    const gridContainer = document.getElementById('epg-scroll-container');
+    
+    const handleEpgClick = (e) => {
             const reminderBtn = e.target.closest('.reminder-btn-full');
             if (reminderBtn) {
                 e.stopPropagation();
@@ -2436,7 +2469,17 @@ async function renderFullEpg() {
                     embedStream(targetChannel);
                 }
             }
-        });
+    };
+    
+    if (channelsContainer) channelsContainer.addEventListener('click', handleEpgClick);
+    if (gridContainer) gridContainer.addEventListener('click', handleEpgClick);
+    
+    if (channelsContainer && gridContainer) {
+        channelsContainer.addEventListener('wheel', (e) => {
+            gridContainer.scrollTop += e.deltaY;
+            gridContainer.scrollLeft += e.deltaX;
+            e.preventDefault();
+        }, { passive: false });
     }
 
     const scrollContainer = document.getElementById('epg-scroll-container');
@@ -2452,6 +2495,10 @@ async function renderFullEpg() {
         style.textContent = `
             .epg-program-cell:hover { background: #333 !important; }
             .epg-play-channel:hover { background-color: #2a2a2a !important; }
+            #epg-scroll-container::-webkit-scrollbar { width: 14px; height: 14px; }
+            #epg-scroll-container::-webkit-scrollbar-track { background: #121212; border-left: 1px solid #333; border-top: 1px solid #333; }
+            #epg-scroll-container::-webkit-scrollbar-thumb { background: #444; border-radius: 7px; border: 3px solid #121212; }
+            #epg-scroll-container::-webkit-scrollbar-corner { background: #121212; }
         `;
         document.head.appendChild(style);
     }
@@ -2459,7 +2506,11 @@ async function renderFullEpg() {
     const nowBtn = document.getElementById('epg-now-btn');
     if (scrollContainer) {
         const targetScroll = Math.max(0, nowPx - (30 * pxPerMinute)); // Pad back 30 mins from red line
-        setTimeout(() => scrollContainer.scrollLeft = targetScroll, 10);
+        setTimeout(() => {
+            scrollContainer.scrollLeft = targetScroll;
+            const headerScroll = document.getElementById('epg-header-scroll');
+            if (headerScroll) headerScroll.scrollLeft = targetScroll;
+        }, 10);
         if (nowBtn) {
             nowBtn.onclick = () => {
                 scrollContainer.scrollTo({ left: targetScroll, behavior: 'smooth' });
@@ -2473,7 +2524,7 @@ async function renderFullEpg() {
             const newNow = new Date();
             const newMinutesSinceStart = (newNow.getTime() - epgGridState.gridStart.getTime()) / 60000;
             const newNowPx = newMinutesSinceStart * epgGridState.pxPerMinute;
-            indicator.style.left = `${250 + newNowPx}px`;
+            indicator.style.left = `${newNowPx}px`;
         }
     }, 60000);
 }
@@ -3291,7 +3342,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Add custom fullscreen button to the player container
     const fsBtn = document.createElement('button');
     fsBtn.id = 'fullscreen-btn';
-    fsBtn.innerHTML = '⛶';
+    fsBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>';
     fsBtn.title = 'Toggle Fullscreen';
     fsBtn.style.display = 'none'; // Initially hidden
     playerContainer.appendChild(fsBtn);

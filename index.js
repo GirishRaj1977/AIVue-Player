@@ -138,6 +138,7 @@ function checkAndShowMainWindow() {
             splashWindow.destroy();
         }
         if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+                mainWindow.maximize();
                 mainWindow.setAlwaysOnTop(true);
             mainWindow.show();
                 mainWindow.setAlwaysOnTop(false);
