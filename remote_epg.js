@@ -426,6 +426,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const playChannelEl = e.target.closest('.epg-play-channel');
         
         if (programCell) {
+            const internalReminderBtn = programCell.querySelector('.reminder-btn-full');
+            if (internalReminderBtn) {
+                internalReminderBtn.click();
+                return;
+            }
+
             const channelData = JSON.parse(programCell.dataset.channel);
             const progData = JSON.parse(programCell.dataset.program);
             
