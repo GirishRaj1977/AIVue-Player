@@ -293,10 +293,10 @@ local icon_theme = {
     ["fluent"] = {
         iconfont = "fluent-system-icons",
         window = {
-            maximize = "\238\159\171",
-            unmaximize = "\238\174\150",
-            minimize = "\238\175\144",
-            close = "\239\141\169",
+            maximize = "\238\164\162",
+            unmaximize = "\238\164\163",
+            minimize = "\238\164\161",
+            close = "\238\164\160",
         },
         audio = "\238\175\139",
         subtitle = "\238\175\141",
@@ -421,6 +421,21 @@ local language = {
         downloading = "Downloading",
         downloaded = "Already downloaded",
         menu = "Menu",
+        close = "Close",
+        minimize = "Minimize",
+        maximize = "Maximize",
+        restore = "Restore Down",
+        previous = "Previous",
+        next = "Next",
+        play = "Play",
+        pause = "Pause",
+        replay = "Replay",
+        jump_backward = "Jump backward",
+        jump_forward = "Jump forward",
+        previous_chapter = "Previous chapter",
+        next_chapter = "Next chapter",
+        fullscreen = "Fullscreen",
+        exit_fullscreen = "Exit Fullscreen",
     },
 }
 
@@ -2624,21 +2639,27 @@ local function osc_init()
     -- Close: 🗙
     ne = new_element("close", "button")
     ne.content = icons.window.close
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = user_opts.tooltip_hints and locale.close or ""
     ne.eventresponder["mbtn_left_up"] = function () mp.commandv("quit") end
 
     -- Minimize: 🗕
     ne = new_element("minimize", "button")
     ne.content = icons.window.minimize
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = user_opts.tooltip_hints and locale.minimize or ""
     ne.eventresponder["mbtn_left_up"] = function () mp.commandv("cycle", "window-minimized") end
 
     -- Maximize: 🗖 /🗗
     ne = new_element("maximize", "button")
     ne.content = function () return (state.maximized or state.fullscreen) and icons.window.unmaximize or icons.window.maximize end
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = function () return user_opts.tooltip_hints and ((state.maximized or state.fullscreen) and locale.restore or locale.maximize) or "" end
     ne.eventresponder["mbtn_left_up"] = function ()
         if state.fullscreen then
             mp.set_property("fullscreen", "no")
         else
-            mp.commandv("cycle", "window-maximized")
+            mp.commandv("script-message", "electron-maximize-toggle")
         end
     end
 
@@ -2714,8 +2735,11 @@ local function osc_init()
     ne = new_element("playlist_prev", "button")
     ne.visible = true
     ne.content = icons.previous
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = user_opts.tooltip_hints and locale.previous or ""
     ne.enabled = true
     ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.playlist_prev_mbtn_left_command)
+    ne.eventresponder["mbtn_left_up"] = function () mp.commandv("script-message", "electron-previous-channel") end
     ne.eventresponder["mbtn_right_up"] = command_callback(user_opts.playlist_prev_mbtn_right_command)
     ne.eventresponder["shift+mbtn_left_down"] = command_callback(user_opts.playlist_prev_mbtn_mid_command)
 
@@ -2723,8 +2747,11 @@ local function osc_init()
     ne = new_element("playlist_next", "button")
     ne.visible = true
     ne.content = icons.next
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = user_opts.tooltip_hints and locale.next or ""
     ne.enabled = true
     ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.playlist_next_mbtn_left_command)
+    ne.eventresponder["mbtn_left_up"] = function () mp.commandv("script-message", "electron-next-channel") end
     ne.eventresponder["mbtn_right_up"] = command_callback(user_opts.playlist_next_mbtn_right_command)
     ne.eventresponder["shift+mbtn_left_down"] = command_callback(user_opts.playlist_next_mbtn_mid_command)
 
@@ -2738,6 +2765,17 @@ local function osc_init()
             return icons.play
         else
             return icons.pause
+        end
+    end
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = function ()
+        if not user_opts.tooltip_hints then return "" end
+        if mp.get_property("eof-reached") == "yes" then
+            return locale.replay
+        elseif mp.get_property("pause") == "yes" and not state.playing_and_seeking then
+            return locale.play
+        else
+            return locale.pause
         end
     end
     ne.eventresponder["mbtn_left_up"] = function ()
@@ -2772,6 +2810,8 @@ local function osc_init()
     ne = new_element("jump_backward", "button")
     ne.softrepeat = user_opts.jump_softrepeat == true
     ne.content = jump_icon[1]
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = user_opts.tooltip_hints and (locale.jump_backward .. " " .. jump_amount .. "s") or ""
     ne.eventresponder["mbtn_left_down"] = function () mp.commandv("seek", -jump_amount, jump_mode) end
     ne.eventresponder["mbtn_right_down"] = function () mp.commandv("seek", -jump_more_amount, jump_mode) end
     ne.eventresponder["shift+mbtn_left_down"] = function () mp.commandv("frame-back-step") end
@@ -2780,6 +2820,8 @@ local function osc_init()
     ne = new_element("jump_forward", "button")
     ne.softrepeat = user_opts.jump_softrepeat == true
     ne.content = jump_icon[2]
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = user_opts.tooltip_hints and (locale.jump_forward .. " " .. jump_amount .. "s") or ""
     ne.eventresponder["mbtn_left_down"] = function () mp.commandv("seek", jump_amount, jump_mode) end
     ne.eventresponder["mbtn_right_down"] = function () mp.commandv("seek", jump_more_amount, jump_mode) end
     ne.eventresponder["shift+mbtn_left_down"] = function () mp.commandv("frame-step") end
@@ -2790,6 +2832,8 @@ local function osc_init()
     ne.softrepeat = user_opts.chapter_softrepeat == true
     ne.content = icons.rewind
     ne.enabled = (have_ch) -- disables button when no chapters available.
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = user_opts.tooltip_hints and locale.previous_chapter or ""
     ne.eventresponder["mbtn_left_down"] = command_callback(user_opts.chapter_prev_mbtn_left_command)
     ne.eventresponder["mbtn_right_down"] = command_callback(user_opts.chapter_prev_mbtn_right_command)
     ne.eventresponder["shift+mbtn_left_down"] = command_callback(user_opts.chapter_prev_mbtn_mid_command)
@@ -2801,6 +2845,8 @@ local function osc_init()
     ne.softrepeat = user_opts.chapter_softrepeat == true
     ne.content = icons.forward
     ne.enabled = (have_ch) -- disables button when no chapters available.
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = user_opts.tooltip_hints and locale.next_chapter or ""
     ne.eventresponder["mbtn_left_down"] = command_callback(user_opts.chapter_next_mbtn_left_command)
     ne.eventresponder["mbtn_right_down"] = command_callback(user_opts.chapter_next_mbtn_right_command)
     ne.eventresponder["shift+mbtn_left_down"] = command_callback(user_opts.chapter_next_mbtn_mid_command)
@@ -2975,6 +3021,8 @@ local function osc_init()
     --tog_fullscreen
     ne = new_element("tog_fullscreen", "button")
     ne.content = function () return state.fullscreen and icons.fullscreen_exit or icons.fullscreen end
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = function () return user_opts.tooltip_hints and (state.fullscreen and locale.exit_fullscreen or locale.fullscreen) or "" end
     ne.visible = (osc_param.playresx >= visible_min_width)
     ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.fullscreen_mbtn_left_command)
     ne.eventresponder["mbtn_right_up"] = command_callback(user_opts.fullscreen_mbtn_right_command)
