@@ -2648,7 +2648,12 @@ window.iptvAPI.onMpvExit((code) => {
 
         const playerOverlay = document.getElementById('player-overlay');
         if (playerOverlay) {
-            playerOverlay.innerHTML = `<span style="color: #cf6679;">Loading failed or playback stopped.</span>`;
+            playerOverlay.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
+                    <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
+                    <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Channel not available at the moment</span>
+                </div>
+            `;
         }
 
         const fsBtn = document.getElementById('fullscreen-btn');
