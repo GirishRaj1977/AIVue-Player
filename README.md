@@ -1,4 +1,16 @@
-<img width="275" height="300" alt="Player" src="https://github.com/user-attachments/assets/9746beb4-df53-4e1e-9dd8-c9e75ea3872e" />
+<p align="center">
+  <img width="275" alt="AIVue Player" src="https://github.com/user-attachments/assets/9746beb4-df53-4e1e-9dd8-c9e75ea3872e">
+</p>
+
+<h1 align="center">AIVue Player</h1>
+
+<p align="center">
+  Modern IPTV Player powered by MPV
+</p>
+
+<p align="center">
+  IPTV • EPG • MPV • Mobile Remote
+</p>
 
 # AIVue Player
 
@@ -18,8 +30,6 @@ Modern IPTV player built with Electron and MPV.
 - Fast UI optimized for TV and desktop use
 
 ---
-
-## 📸 Screenshots
 
 ## 📸 Screenshots
 
