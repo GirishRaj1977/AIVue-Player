@@ -2694,6 +2694,7 @@ function getFocusableElements() {
     return Array.from(rootNode.querySelectorAll(focusableSelectors.join(', ')))
         .filter(el => {
             if (!el) return false;
+                if (!activeToast && el.closest('#nav-bar')) return false;
             if (!activeToast && (el.closest('#channel-details') || el.closest('#player-wrapper'))) return false;
             const rect = el.getBoundingClientRect();
             const style = window.getComputedStyle(el);
@@ -2804,6 +2805,9 @@ function handleOkPress() {
                 current.removeEventListener('blur', onBlur);
             });
         }
+    } else if (current && current.tagName === 'INPUT' && ['text', 'password', 'number', 'search'].includes(current.type)) {
+        if (window.iptvAPI.focusRemoteSearch) window.iptvAPI.focusRemoteSearch();
+        current.click();
     } else if (current && ['BUTTON', 'A', 'INPUT'].includes(current.tagName)) {
         current.click();
     } else if (current && (current.classList.contains('channel-item') || current.classList.contains('mapping-ch-item') || current.classList.contains('mapping-epg-item') || current.classList.contains('epg-play-channel'))) {
@@ -2825,19 +2829,19 @@ function handleOkPress() {
 window.iptvAPI.onRemoteSearch((text) => {
     let activeSearch = null;
     
-    const manageModal = document.getElementById('manage-channels-modal');
-    const settingsView = document.getElementById('settings-view');
-    
-    if (manageModal && manageModal.style.display !== 'none') {
-        activeSearch = document.getElementById('modal-channel-search');
-    } else if (settingsView && settingsView.style.display !== 'none') {
-        if (document.activeElement && document.activeElement.tagName === 'INPUT' && document.activeElement.id.startsWith('mapping')) {
-            activeSearch = document.activeElement;
-        } else {
-            activeSearch = document.getElementById('mapping-channel-search');
-        }
+    if (document.activeElement && document.activeElement.tagName === 'INPUT' && ['text', 'password', 'number', 'search'].includes(document.activeElement.type)) {
+        activeSearch = document.activeElement;
     } else {
-        activeSearch = document.getElementById('channel-search');
+        const manageModal = document.getElementById('manage-channels-modal');
+        const settingsView = document.getElementById('settings-view');
+        
+        if (manageModal && manageModal.style.display !== 'none') {
+            activeSearch = document.getElementById('modal-channel-search');
+        } else if (settingsView && settingsView.style.display !== 'none') {
+            activeSearch = document.getElementById('mapping-channel-search');
+        } else {
+            activeSearch = document.getElementById('channel-search');
+        }
     }
 
     if (activeSearch) {
@@ -2850,12 +2854,6 @@ window.iptvAPI.onRemoteSearch((text) => {
 document.addEventListener('input', (e) => {
     if (e.isTrusted && e.target.tagName === 'INPUT' && ['channel-search', 'modal-channel-search', 'mapping-channel-search', 'mapping-epg-search', 'mapping-mapped-search'].includes(e.target.id)) {
         if (window.iptvAPI.syncRemoteSearch) window.iptvAPI.syncRemoteSearch(e.target.value);
-    }
-});
-
-document.addEventListener('focusin', (e) => {
-    if (e.target.tagName === 'INPUT' && ['channel-search', 'modal-channel-search', 'mapping-channel-search', 'mapping-epg-search', 'mapping-mapped-search'].includes(e.target.id)) {
-        if (window.iptvAPI.focusRemoteSearch) window.iptvAPI.focusRemoteSearch();
     }
 });
 
@@ -2927,6 +2925,9 @@ window.iptvAPI.onRemoteAction((cmd) => {
             break;
         case 'settings':
             switchTab('settings', document.getElementById('btn-settings'));
+            break;
+        case 'fullscreen':
+            window.iptvAPI.toggleFullscreen();
             break;
         case 'favorites':
             const filter = document.getElementById('playlist-filter');
@@ -3106,6 +3107,13 @@ function switchTab(tabId, clickedBtn) {
             window.iptvAPI.updateMpvBounds({ x: 0, y: 0, width: 0, height: 0 });
         }
     }
+
+    setTimeout(() => {
+        const focusables = getFocusableElements();
+        if (focusables.length > 0) {
+            focusables[0].focus();
+        }
+    }, 100);
 }
 
 document.getElementById('btn-live-tv').addEventListener('click', function() { if (!this.disabled) switchTab('live-tv', this); });
@@ -3641,5 +3649,15 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (focusables.length > 0) {
             focusables[0].focus();
         }
+        
+        setInterval(() => {
+            if (!document.hasFocus()) return;
+            if (!document.activeElement || document.activeElement === document.body) {
+                const focusables = getFocusableElements();
+                if (focusables.length > 0) {
+                    focusables[0].focus();
+                }
+            }
+        }, 500);
     }, 1000);
 });
