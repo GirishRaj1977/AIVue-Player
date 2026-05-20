@@ -1,6 +1,0 @@
-#EXTM3U url-tvg="https://www.open-epg.com/generate/qTaXXwwF9W.xml.gz"
-#EXTINF:-1 group-title="Business" tvg-logo="http://192.168.0.116:5001/jtvimage/CNBCTV18Prime.png" tvg-id="143",CNBC TV18 Prime
-http://192.168.0.116:5001/live/high/143.m3u8
-#EXTINF:-1 group-title="Business" tvg-logo="http://192.168.0.116:5001/jtvimage/ET_Now.png" tvg-id="212",ET Now
-http://192.168.0.116:5001/live/high/212.m3u8
-#EXTINF:-1 group-title="Business" tvg-logo="http://192.168.0.116:5001/jtvimage/NDTV_Profit.png" tvg-id="259",NDTV Profit
