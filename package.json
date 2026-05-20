@@ -1,33 +1,41 @@
 {
-  "name": "play",
+  "name": "aivue-player",
   "version": "1.0.0",
   "description": "Python Electron IPTV Player",
   "main": "index.js",
+  "type": "commonjs",
+
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
     "build": "electron-builder build --win"
   },
+
   "keywords": [],
   "author": "My Name",
   "license": "ISC",
-  "type": "commonjs",
+
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
     "electron": "^38.8.6",
     "electron-builder": "^25.1.8"
   },
+
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "express": "^4.22.2"
+  },
+
   "build": {
-    "appId": "com.iptv.player",
-    "productName": "IPTV Player",
+    "appId": "com.aivue.player",
+    "productName": "AIVue Player",
     "asar": true,
+
+    "icon": "assets/logo.ico",
+
     "extraResources": [
       "bin/**/*",
       "backend/**/*"
     ]
-  },
-  "dependencies": {
-    "better-sqlite3": "^12.10.0",
-    "express": "^4.22.2"
   }
 }

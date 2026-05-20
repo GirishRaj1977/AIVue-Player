@@ -10,9 +10,14 @@ release/
 # Logs
 *.log
 
+# M3U Playlists (if they are examples or local-only)
+*.m3u
+
 # SQLite DB
 *.db
 *.sqlite
+*.db-shm
+*.db-wal
 
 # Cache
 .cache/
