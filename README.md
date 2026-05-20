@@ -5,16 +5,12 @@
 <h1 align="center">AIVue Player</h1>
 
 <p align="center">
-  Modern IPTV Player powered by MPV
+  Modern IPTV Player built with Electron and powered by MPV
 </p>
 
 <p align="center">
   IPTV • EPG • MPV • Mobile Remote
 </p>
-
-# AIVue Player
-
-Modern IPTV player built with Electron and MPV.
 
 ---
 
