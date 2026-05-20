@@ -47,14 +47,6 @@ Modern IPTV player built with Electron and MPV.
 
 ---
 
-## 📥 Download
-
-Get the latest release here:
-
-👉 https://github.com/GirishRaj1977/AIVue-Player/releases/latest
-
----
-
 ## 🛠 Installation
 
 1. Download the installer from Releases
@@ -102,9 +94,12 @@ AIVue supports mobile/web remote control:
 
 ---
 
-## 👤 Author
+## 📥 Download
 
-Built by Girish
+Get the latest release here:
+
+👉 https://github.com/GirishRaj1977/AIVue-Player/releases/latest
 
 ---
+
 
