@@ -50,17 +50,13 @@ aeroStyles.textContent = `
         outline-offset: 2px;
     }
 
-    .channel-item:focus, .mapping-ch-item:focus, .mapping-epg-item:focus, .epg-program-cell:focus, .epg-play-channel:focus, .playlist-btn:focus, .nav-btn:focus, button:focus, input:focus, select:focus {
     .channel-item:focus, .mapping-ch-item:focus, .playlist-btn:focus, .nav-btn:focus, button:focus, input:focus, select:focus {
         background-color: rgba(187, 134, 252, 0.3) !important;
         outline: 2px solid #bb86fc !important;
         outline-offset: -2px;
     }
     
-    .epg-program-cell:focus, .epg-play-channel:focus {
-        background-color: rgba(187, 134, 252, 0.5) !important;
     .mapping-epg-item:focus, .epg-program-cell:focus, .epg-play-channel:focus {
-        background: #bb86fc !important;
         background-color: #bb86fc !important;
         outline: 2px solid #bb86fc !important;
         outline-offset: -2px;
@@ -177,17 +173,16 @@ aeroStyles.textContent = `
 
     /* Live TV Screen Split Layout */
     #sidebar {
-        flex: 0 0 30% !important;
-        max-width: 30% !important;
-        width: 30% !important;
+        flex: 0 0 22.5% !important;
+        max-width: 22.5% !important;
+        width: 22.5% !important;
         min-width: 0 !important;
         min-height: 0 !important;
         overflow: hidden !important;
+        box-sizing: border-box !important;
     }
     #main-view {
-        flex: 0 0 70% !important;
-        max-width: 70% !important;
-        width: 70% !important;
+        flex: 1 !important;
         display: flex !important;
         flex-direction: column !important;
         min-width: 0 !important;
@@ -3123,23 +3118,18 @@ function switchTab(tabId, clickedBtn) {
     const isEpg = tabId === 'epg';
     const isSettings = tabId === 'settings';
 
-    if (sidebar) sidebar.style.display = isLive ? 'flex' : 'none';
-    if (mainView) mainView.style.display = isLive ? 'flex' : 'none';
     if (sidebar) sidebar.style.setProperty('display', isLive ? 'flex' : 'none', 'important');
     if (mainView) mainView.style.setProperty('display', isLive ? 'flex' : 'none', 'important');
     
     const playlistView = document.getElementById('playlist-view');
-    if (playlistView) playlistView.style.display = isPlaylist ? 'flex' : 'none';
     if (playlistView) playlistView.style.setProperty('display', isPlaylist ? 'flex' : 'none', 'important');
     
     const epgView = document.getElementById('epg-view');
-    if (epgView) epgView.style.display = isEpg ? 'flex' : 'none';
     if (epgView) epgView.style.setProperty('display', isEpg ? 'flex' : 'none', 'important');
     
     if (isEpg) renderFullEpg();
     
     const settingsView = document.getElementById('settings-view');
-    if (settingsView) settingsView.style.display = isSettings ? 'flex' : 'none';
     if (settingsView) settingsView.style.setProperty('display', isSettings ? 'flex' : 'none', 'important');
 
     if (isSettings) renderSettings();
