@@ -2469,13 +2469,16 @@ async function renderFullEpg() {
     if (channelsContainer) channelsContainer.addEventListener('click', handleEpgClick);
     if (gridContainer) gridContainer.addEventListener('click', handleEpgClick);
     
-    if (channelsContainer && gridContainer) {
-        channelsContainer.addEventListener('wheel', (e) => {
+    const handleEpgWheel = (e) => {
+        if (gridContainer) {
             gridContainer.scrollTop += e.deltaY;
             gridContainer.scrollLeft += e.deltaX;
-            e.preventDefault();
-        }, { passive: false });
-    }
+        }
+        e.preventDefault();
+    };
+
+    if (channelsContainer) channelsContainer.addEventListener('wheel', handleEpgWheel, { passive: false });
+    if (gridContainer) gridContainer.addEventListener('wheel', handleEpgWheel, { passive: false });
 
     const scrollContainer = document.getElementById('epg-scroll-container');
     if (scrollContainer) {
