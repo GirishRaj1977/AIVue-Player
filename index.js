@@ -524,10 +524,142 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             res.send('OK');
         });
 
+        app.get('/api/channels', (req, res) => {
+            const playlists = loadChannelsFromDb();
+            let channels = [];
+            playlists.forEach(p => {
+                if (p.channels && !p.disabled) {
+                    channels.push(...p.channels.map(c => ({...c, playlistId: p.id, playlistName: p.name})));
+                }
+            });
+            res.json(channels);
+        });
+
+        app.get('/api/mappings', (req, res) => {
+            if (!db) return res.json({});
+            try {
+                const rows = db.prepare('SELECT channel_title, epg_id FROM mappings').all();
+                const map = rows.reduce((acc, row) => {
+                    acc[row.channel_title] = row.epg_id;
+                    return acc;
+                }, {});
+                res.json(map);
+            } catch (e) {
+                res.status(500).json({ error: 'Failed to get mappings' });
+            }
+        });
+
+        app.post('/api/epg', (req, res) => {
+            const { ids, start, end } = req.body;
+            if (!db || !ids || !Array.isArray(ids) || ids.length === 0) {
+                return res.json({});
+            }
+            const epgData = getEpgDataFromDb(ids, start, end);
+            res.json(epgData);
+        });
+
+        app.post('/api/play', (req, res) => {
+            const { url, title } = req.body;
+            if (mainWindow && !mainWindow.isDestroyed() && url && title) {
+                mainWindow.webContents.send('remote-play-channel', { url, title });
+            }
+            res.send('OK');
+        });
+
+        app.get('/epg', (req, res) => {
+            res.send(`
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                    <title>Guide - AIVue Remote</title>
+                    <style>
+                        body { background:#121212; color:white; font-family:Arial,sans-serif; margin:0; }
+                        #epg-view { display: flex; flex-direction: column; height: 100vh; }
+                        .top-bar { padding: 10px; background: #1e1e1e; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #333; flex-wrap: wrap; }
+                        .top-bar select, .top-bar input, .top-bar button { background: #2a2a2a; color: white; border: 1px solid #444; padding: 8px; border-radius: 6px; outline: none; }
+                        .top-bar input { flex-grow: 1; min-width: 150px; }
+                        #epg-content-area { flex-grow: 1; overflow: hidden; position: relative; }
+                        #epg-layout-wrapper { display: flex; flex-direction: column; height: 100%; }
+                        #epg-header-row { display: flex; width: 100%; background: #bb86fc; z-index: 20; flex-shrink: 0; height: 30px; border-bottom: 2px solid #333; box-sizing: border-box; }
+                        #epg-channels-header { width: 120px; min-width: 120px; background: #bb86fc; border-right: 2px solid rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000; box-sizing: border-box; height: 100%; font-size: 0.9em; }
+                        #epg-header-scroll { flex-grow: 1; overflow: hidden; position: relative; height: 30px; }
+                        #epg-header-inner { height: 100%; position: relative; }
+                        #epg-main-content { display: flex; flex-grow: 1; overflow: visible; }
+                        #epg-channels-col { width: 120px; min-width: 120px; background: #1a1a1a; overflow: hidden; border-right: 2px solid #333; z-index: 10; }
+                        #epg-channels-inner { position: relative; width: 100%; }
+                        #epg-scroll-container { flex-grow: 1; overflow: auto; position: relative; }
+                        #epg-grid-inner { position: relative; }
+                        #epg-rows-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+                        #epg-time-indicator { position: absolute; top: 0; width: 2px; background: #cf6679; z-index: 5; pointer-events: none; }
+                        .epg-play-channel { cursor: pointer; }
+                        .epg-play-channel:active { background-color: #2a2a2a !important; }
+                        .epg-program-cell:active { background: #333 !important; }
+                        .loader { text-align: center; padding: 50px; color: #888; }
+                        
+                        /* Modal Styles */
+                        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
+                        .modal-content { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px; color: white; border: 1px solid #333; }
+                        .modal-title { color: #bb86fc; font-size: 1.2em; font-weight: bold; margin-bottom: 10px; }
+                        .modal-subtitle { color: #aaa; font-size: 0.9em; margin-bottom: 15px; }
+                        .modal-desc { color: #ccc; font-size: 0.85em; margin-bottom: 20px; line-height: 1.4; max-height: 150px; overflow-y: auto; }
+                        .modal-buttons { display: flex; gap: 10px; justify-content: flex-end; }
+                        .modal-btn { padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+                        .modal-btn.watch { background: #43CB44; color: black; }
+                        .modal-btn.close { background: #333; color: white; }
+                        
+                        #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #bb86fc; color: #000; padding: 10px 20px; border-radius: 20px; font-weight: bold; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 2000; }
+                    </style>
+                </head>
+                <body>
+                    <div id="epg-view">
+                        <div class="top-bar">
+                            <a href="/remote" style="background: #334155; color: white; padding: 8px 12px; border-radius: 6px; text-decoration: none; font-weight: bold;">&larr; Back</a>
+                            <select id="epg-playlist-filter"><option value="all">All Playlists</option></select>
+                            <select id="epg-group-filter"><option value="all">All Groups</option></select>
+                            <input type="text" id="epg-search" placeholder="Search Channels...">
+                            <button id="epg-now-btn">Now</button>
+                        </div>
+                        <div id="epg-content-area" class="loader">Loading EPG...</div>
+                    </div>
+                    
+                    <div id="program-modal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div id="modal-prog-title" class="modal-title"></div>
+                            <div id="modal-prog-channel" class="modal-subtitle"></div>
+                            <div id="modal-prog-desc" class="modal-desc"></div>
+                            <div class="modal-buttons">
+                                <button id="modal-close-btn" class="modal-btn close">Close</button>
+                                <button id="modal-watch-btn" class="modal-btn watch">Watch TV</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="toast"></div>
+    
+                    <script src="/epg.js"></script>
+                </body>
+                </html>
+            `);
+        });
+
+        app.get('/epg.js', (req, res) => {
+            res.setHeader('Content-Type', 'application/javascript');
+            try {
+                res.send(fs.readFileSync(path.join(__dirname, 'remote_epg.js'), 'utf8'));
+            } catch(e) {
+                res.status(404).send('console.error("remote_epg.js not found");');
+            }
+        });
+
         // ------------------ Unified Command API ------------------
         app.get('/cmd/:command', (req, res) => {
             const cmd = req.params.command;
             switch(cmd) {
+                case 'guide':
+                    res.redirect('/epg');
+                    return;
                 case 'playpause': sendMpvCommand(['cycle', 'pause']); break;
                 case 'mute': sendMpvCommand(['cycle', 'mute']); break;
                 case 'volup': sendMpvCommand(['add', 'volume', 5]); break;
@@ -604,8 +736,8 @@ body{ background:#0f172a; font-family:Arial,sans-serif; color:white; min-height:
 .row-4{ grid-template-columns:repeat(4,1fr); }
 .row-3{ grid-template-columns:repeat(3,1fr); }
 .row-2{ grid-template-columns:repeat(2,1fr); }
-button{ border:none; border-radius:12px; background:#1e293b; color:white; font-size:16px; font-weight:600; height:50px; cursor:pointer; transition:.15s; }
-button:active{ transform:scale(.95); }
+button, a.top-btn { border:none; border-radius:12px; background:#1e293b; color:white; font-size:16px; font-weight:600; height:50px; cursor:pointer; transition:.15s; text-decoration:none; display:flex; align-items:center; justify-content:center; }
+button:active, a.top-btn:active { transform:scale(.95); }
 .top-btn{ height:45px; }
 .power{ background:#dc2626; }
 .guide{ background:#7c3aed; }
@@ -631,7 +763,7 @@ button:active{ transform:scale(.95); }
         <button class="top-btn" data-cmd="playlist" style="background:#22c55e; display:flex; align-items:center; justify-content:center;">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2 14H8V16H2M2 10H12V12H2M2 6H14V8H2M16 14V8H18V14H22V16H16V14Z"/></svg>
         </button>
-        <button class="top-btn" data-cmd="guide" style="background:#eab308; display:flex; align-items:center; justify-content:center;">
+        <button class="top-btn" onclick="window.location.href='/epg'" style="background:#eab308; display:flex; align-items:center; justify-content:center;">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19,4H18V2H16V4H8V2H6V4H5C3.89,4 3.01,4.9 3.01,6L3,20A2,2 0 0,0 5,22H19A2,2 0 0,0 21,20V6A2,2 0 0,0 19,4M19,20H5V10H19V20M9,14H7V12H9V14M13,14H11V12H13V14M17,14H15V12H17V14M9,18H7V16H9V18M13,18H11V16H13V18M17,18H15V16H17V18Z"/></svg>
         </button>
         <button class="top-btn" data-cmd="settings" style="background:#3b82f6; display:flex; align-items:center; justify-content:center;">
@@ -676,11 +808,13 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(e => console.error('SW reg failed', e));
 }
 document.querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const cmd = btn.dataset.cmd;
-        fetch('/cmd/' + cmd).catch(e => console.error(e));
-        if(navigator.vibrate) navigator.vibrate(50);
-    });
+    if (btn.dataset.cmd) {
+        btn.addEventListener('click', () => {
+            const cmd = btn.dataset.cmd;
+            fetch('/cmd/' + cmd).catch(e => console.error(e));
+            if(navigator.vibrate) navigator.vibrate(50);
+        });
+    }
 });
 
 const searchBox = document.getElementById('remoteSearchBox');
@@ -1180,13 +1314,8 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
     return true;
 });
 
-ipcMain.handle('get-epg', (event, channelIds) => {
-    console.log('[IPC HANDLE] get-epg START', { channelIds_count: channelIds ? channelIds.length : 0 });
-    console.time('get-epg');
-    if (!db || !channelIds || channelIds.length === 0) {
-        console.timeEnd('get-epg');
-        return {};
-    }
+function getEpgDataFromDb(channelIds, startLimit, endLimit) {
+    if (!db || !channelIds || channelIds.length === 0) return {};
     try {
         const result = {};
         // SQLite has a limit on bind variables, process array elements in safe chunks
@@ -1194,8 +1323,17 @@ ipcMain.handle('get-epg', (event, channelIds) => {
         for (let i = 0; i < channelIds.length; i += chunkSize) {
             const chunk = channelIds.slice(i, i + chunkSize);
             const placeholders = chunk.map(() => '?').join(',');
-            const query = `SELECT channel_id, start_time, stop_time, title, description FROM epg WHERE channel_id IN (${placeholders}) ORDER BY start_time ASC`;
-            const rows = db.prepare(query).all(...chunk);
+            
+            let query, params;
+            if (startLimit && endLimit) {
+                query = `SELECT channel_id, start_time, stop_time, title, description FROM epg WHERE channel_id IN (${placeholders}) AND stop_time >= ? AND start_time <= ? ORDER BY start_time ASC`;
+                params = [...chunk, startLimit, endLimit];
+            } else {
+                query = `SELECT channel_id, start_time, stop_time, title, description FROM epg WHERE channel_id IN (${placeholders}) ORDER BY start_time ASC`;
+                params = [...chunk];
+            }
+            
+            const rows = db.prepare(query).all(...params);
             
             for (const row of rows) {
                 if (!result[row.channel_id]) result[row.channel_id] = [];
@@ -1207,14 +1345,20 @@ ipcMain.handle('get-epg', (event, channelIds) => {
                 });
             }
         }
-        console.timeEnd('get-epg');
-        console.log('[IPC HANDLE] get-epg END');
         return result;
     } catch (e) {
         console.error('[DB ERR] Failed to get EPG:', e);
-        console.timeEnd('get-epg');
-        throw e;
+        return {};
     }
+}
+
+ipcMain.handle('get-epg', (event, channelIds, startLimit, endLimit) => {
+    console.log('[IPC HANDLE] get-epg START', { channelIds_count: channelIds ? channelIds.length : 0 });
+    console.time('get-epg');
+    const result = getEpgDataFromDb(channelIds, startLimit, endLimit);
+    console.timeEnd('get-epg');
+    console.log('[IPC HANDLE] get-epg END');
+    return result;
 });
 
 // Native file dialog for selecting playlists
@@ -1353,18 +1497,11 @@ ipcMain.handle('remove-external-epg', (event, url) => {
     }
 });
 
-ipcMain.handle('load-channels', (event) => {
-    console.log('[IPC HANDLE] load-channels START');
-    console.time('load-channels');
+function loadChannelsFromDb() {
     try {
-        if (!db) {
-            console.timeEnd('load-channels');
-            return []; // Fallback if DB failed to load
-        }
+        if (!db) return [];
         const oldFilePath = path.join(app.getPath('userData'), 'saved_channels.json');
-        const bakFilePath = path.join(app.getPath('userData'), 'saved_channels.json.bak');
         
-        // Migration Check: If DB is empty but JSON exists, delete it
         const dbCount = db.prepare(`SELECT COUNT(*) as count FROM playlists`).get();
         if (dbCount.count === 0 && fs.existsSync(oldFilePath)) {
             console.log("[DB] Starting with a blank database, deleting old JSON data...");
@@ -1397,14 +1534,18 @@ ipcMain.handle('load-channels', (event) => {
                 channels: pChannels
             });
         }
-        console.timeEnd('load-channels');
-        console.log('[IPC HANDLE] load-channels END');
         return result;
     } catch (e) {
         console.error('[DB ERR] Failed to load channels:', e);
-        console.timeEnd('load-channels');
         throw e;
     }
+}
+
+ipcMain.handle('load-channels', (event) => {
+    console.log('[IPC HANDLE] load-channels START');
+    const result = loadChannelsFromDb();
+    console.log('[IPC HANDLE] load-channels END');
+    return result;
 });
 
 // Cache deletion

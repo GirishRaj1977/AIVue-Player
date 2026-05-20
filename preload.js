@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     copyToClipboard: (text) => ipcRenderer.send('copy-to-clipboard', text),
     getRemoteSettings: () => ipcRenderer.invoke('get-remote-settings'),
     saveRemoteSettings: (settings) => ipcRenderer.invoke('save-remote-settings', settings),
+    onRemotePlayChannel: (callback) => ipcRenderer.on('remote-play-channel', (_event, info) => callback(info)),
     onRemoteSettingsUpdated: (callback) => ipcRenderer.on('remote-settings-updated', callback),
     onRemoteError: (callback) => ipcRenderer.on('remote-error', (_event, msg) => callback(msg)),
     onRemoteAction: (callback) => ipcRenderer.on('remote-action', (_event, cmd) => callback(cmd)),

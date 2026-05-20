@@ -1291,27 +1291,7 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                 epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
                 await autoMapChannels(false, true); // SKIP SAVE
                 
-                // Fetch the newly updated EPG data from the local database
-                const epgIdsToFetch = new Set();
-                const targetPlaylist = editIndex >= 0 ? savedPlaylists[editIndex] : savedPlaylists[savedPlaylists.length - 1];
-                targetPlaylist.channels.forEach(ch => {
-                    const mappedId = channelMappings[ch.title];
-                    if (mappedId) epgIdsToFetch.add(mappedId);
-                    else {
-                        if (ch.tvg_id) epgIdsToFetch.add(ch.tvg_id);
-                        if (ch.tvg_name) epgIdsToFetch.add(ch.tvg_name);
-                    }
-                });
-                
-                console.log('[API] Calling getEpg to populate new playlist data.');
-                const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch), null, null);
-                targetPlaylist.channels.forEach(ch => {
-                    const mappedId = channelMappings[ch.title];
-                    if (mappedId && epgData[mappedId]) ch.epg_programmes = epgData[mappedId];
-                    else if (ch.tvg_id && epgData[ch.tvg_id]) ch.epg_programmes = epgData[ch.tvg_id];
-                    else if (ch.tvg_name && epgData[ch.tvg_name]) ch.epg_programmes = epgData[ch.tvg_name];
-                });
-                updateState(); // Re-render to clear "(EPG not Loaded)" AND SAVE
+                updateState(); // Re-render and save
             } else {
                 updateState(); // Re-render AND SAVE
             }
@@ -1684,25 +1664,7 @@ function renderPlaylists() {
                         epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
                         await autoMapChannels(false, true); // SKIP SAVE
                         
-                        // Fetch the newly updated EPG data from the local database
-                        const epgIdsToFetch = new Set();
-                        targetPlaylist.channels.forEach(ch => {
-                            const mappedId = channelMappings[ch.title];
-                            if (mappedId) epgIdsToFetch.add(mappedId);
-                            else {
-                                if (ch.tvg_id) epgIdsToFetch.add(ch.tvg_id);
-                                if (ch.tvg_name) epgIdsToFetch.add(ch.tvg_name);
-                            }
-                        });
-                        
-                        console.log('[API] Calling getEpg to populate refreshed playlist data.');
-                        const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch), null, null);
-                        targetPlaylist.channels.forEach(ch => {
-                            const mappedId = channelMappings[ch.title];
-                            if (mappedId && epgData[mappedId]) ch.epg_programmes = epgData[mappedId];
-                            else if (ch.tvg_id && epgData[ch.tvg_id]) ch.epg_programmes = epgData[ch.tvg_id];
-                            else if (ch.tvg_name && epgData[ch.tvg_name]) ch.epg_programmes = epgData[ch.tvg_name];
-                        });
+                        // EPG preloading skipped to load only on view.
                     }
                     updateState(); // FINAL SAVE
                 } else {
@@ -2116,12 +2078,8 @@ async function fetchEpgDataForChannels(channels) {
     if (epgIdsArr.length === 0) return;
     
     const { gridStart, gridEnd } = epgGridState;
-    // Fetch a wider range to accommodate horizontal scrolling without re-fetching
-    const fetchStart = new Date(gridStart.getTime() - 12 * 60 * 60 * 1000);
-    const fetchEnd = new Date(gridEnd.getTime() + 12 * 60 * 60 * 1000);
-    
-    const startLimit = formatDateToEpgString(fetchStart);
-    const endLimit = formatDateToEpgString(fetchEnd);
+    const startLimit = formatDateToEpgString(gridStart);
+    const endLimit = formatDateToEpgString(gridEnd);
     
     console.log(`[API] Fetching EPG for ${epgIdsArr.length} channel IDs...`);
     const epgData = await window.iptvAPI.getEpg(epgIdsArr, startLimit, endLimit);
@@ -2352,10 +2310,10 @@ async function renderFullEpg() {
     
     const gridStart = new Date(now.getTime());
     gridStart.setMinutes(0, 0, 0);
-    gridStart.setHours(gridStart.getHours() - 2);
+    gridStart.setHours(gridStart.getHours() - 1); // -1 hour
     
-    const gridEnd = new Date(gridStart.getTime() + 24 * 60 * 60 * 1000);
-    const totalWidth = 24 * hourWidth;
+    const gridEnd = new Date(gridStart.getTime() + 9 * 60 * 60 * 1000); // +8 hours from now (9 hours total duration)
+    const totalWidth = 9 * hourWidth;
 
     epgChannelsToRender = allChannels.filter(channel => {
         if (epgSelectedPlaylist === 'favs' && !channel.favourite) return false;
@@ -2375,7 +2333,7 @@ async function renderFullEpg() {
     epgLoadingSet.clear();
 
     let headerHtml = '';
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < 9; i++) {
         const headerTime = new Date(gridStart.getTime() + i * 60 * 60 * 1000);
         const timeStr = headerTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         headerHtml += `<div style="position: absolute; left: ${i * hourWidth}px; width: ${hourWidth}px; height: 100%; border-right: 1px solid rgba(0,0,0,0.2); border-bottom: 2px solid #333; display: flex; align-items: center; padding-left: 10px; color: #000; font-weight: bold; box-sizing: border-box;">${timeStr}</div>`;
@@ -2661,6 +2619,20 @@ window.iptvAPI.onMpvExit((code) => {
 
         const fsBtn = document.getElementById('fullscreen-btn');
         if (fsBtn) fsBtn.style.display = 'none';
+    }
+});
+
+window.iptvAPI.onRemotePlayChannel(({ url, title }) => {
+    console.log('[REMOTE] Received play request for:', { url, title });
+    const targetChannel = allChannels.find(c => c.url === url && c.title === title);
+    if (targetChannel) {
+        switchTab('live-tv', document.getElementById('btn-live-tv'));
+        embedStream(targetChannel);
+        showToast(`Playing ${targetChannel.title}`);
+        
+        if (mainWindow && !mainWindow.isMinimized()) {
+            mainWindow.focus();
+        }
     }
 });
 
@@ -3569,33 +3541,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             savedPlaylists = data;
         }
         
-        console.log('[STARTUP] Pre-loading EPG data for playlist stats.');
-        // Pre-load EPG data into memory for playlist stats on startup
-        const epgIdsToFetch = new Set();
-        savedPlaylists.forEach(p => {
-            if (p.channels) {
-                p.channels.forEach(ch => {
-                    const mappedId = channelMappings[ch.title];
-                    if (mappedId) epgIdsToFetch.add(mappedId);
-                    else {
-                        if (ch.tvg_id) epgIdsToFetch.add(ch.tvg_id);
-                        if (ch.tvg_name) epgIdsToFetch.add(ch.tvg_name);
-                    }
-                });
-            }
-        });
-        const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch));
-        savedPlaylists.forEach(p => {
-            if (p.channels) {
-                p.channels.forEach(ch => {
-                    const mappedId = channelMappings[ch.title];
-                    if (mappedId && epgData[mappedId]) ch.epg_programmes = epgData[mappedId];
-                    else if (ch.tvg_id && epgData[ch.tvg_id]) ch.epg_programmes = epgData[ch.tvg_id];
-                    else if (ch.tvg_name && epgData[ch.tvg_name]) ch.epg_programmes = epgData[ch.tvg_name];
-                });
-            }
-        });
-
+        console.log('[STARTUP] EPG pre-loading skipped to load only on view.');
         updateState();
         
         if (allChannels.length > 0) {
