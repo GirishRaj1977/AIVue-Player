@@ -40,7 +40,7 @@ Modern IPTV player built with Electron and MPV.
 ![Channel Mapping](screenshots/AIVUE6.png)
 
 ### Remote Setup
-![Remote Setup](screenshots/AIVUE7.png)
+![Remote Setup](screenshots/AIVUE7.jpg)
 
 ### Mobile Remote
 ![Mobile Remote](screenshots/AIVUE8.jpg)
