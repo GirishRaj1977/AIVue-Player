@@ -1247,6 +1247,27 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                 finalEpgSource = result.epg_url;
             }
 
+            if (editIndex >= 0 && savedPlaylists[editIndex] && savedPlaylists[editIndex].channels) {
+                const oldMap = new Map();
+                savedPlaylists[editIndex].channels.forEach(c => oldMap.set(c.title, c));
+                channels.forEach(newCh => {
+                    const old = oldMap.get(newCh.title);
+                    if (old) {
+                        newCh.disabled = old.disabled;
+                        newCh.favourite = old.favourite;
+                        if (old.isNew) newCh.isNew = true;
+                    } else {
+                        newCh.disabled = true;
+                        newCh.isNew = true;
+                    }
+                });
+            } else {
+                channels.forEach(newCh => {
+                    newCh.disabled = true;
+                    newCh.isNew = true;
+                });
+            }
+
             const tempPlaylist = {
                 id: editIndex >= 0 ? savedPlaylists[editIndex].id : (Date.now() + Math.random()),
                 source: source,
@@ -1301,15 +1322,9 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
     const tempDisabled = new Set();
     const tempSelected = new Set();
     
-    if (!isNew) {
-        originalChannels.forEach((c, idx) => {
-            if (c.disabled) tempDisabled.add(idx);
-        });
-    } else {
-        originalChannels.forEach((c, idx) => {
-            tempDisabled.add(idx);
-        });
-    }
+    originalChannels.forEach((c, idx) => {
+        if (c.disabled !== false) tempDisabled.add(idx);
+    });
 
     let currentGroupFilter = sortedGroups.length > 0 ? sortedGroups[0] : null;
 
@@ -1329,11 +1344,17 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                         Groups
                     </div>
                     <div id="modal-groups-list" style="flex-grow: 1; overflow-y: auto; padding: 10px 0;">
-                        ${sortedGroups.map(g => `
+                        ${sortedGroups.map(g => {
+                            const total = groupsMap[g].length;
+                            const enabled = groupsMap[g].filter(item => !tempDisabled.has(item.originalIndex)).length;
+                            const hasNew = groupsMap[g].some(item => item.channel.isNew);
+                            const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
+                            return `
                             <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 20px; cursor: pointer; border-left: 4px solid transparent; color: #e0e0e0; transition: 0.2s; font-family: 'Inter', sans-serif; font-size: 0.9em;">
-                                ${g.replace(/</g, '&lt;').replace(/>/g, '&gt;')} <span style="color: #666; font-size: 0.85em; float: right;">(${groupsMap[g].length})</span>
+                                ${g.replace(/</g, '&lt;').replace(/>/g, '&gt;')}${newLabel} <span class="group-count-span" style="color: #666; font-size: 0.85em; float: right;">${enabled} (${total})</span>
                             </div>
-                        `).join('')}
+                            `;
+                        }).join('')}
                     </div>
                 </div>
 
@@ -1395,12 +1416,16 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             const { channel, originalIndex } = item;
             const isDisabled = tempDisabled.has(originalIndex);
             const isSelected = tempSelected.has(originalIndex);
+            const isNew = channel.isNew;
             const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            
+            const newLabel = isNew ? ' <span style="color: #FFD700;">(New)</span>' : '';
+            const titleColor = isNew ? '#FFD700' : (isDisabled ? '#cf6679' : '#43CB44');
 
             return `
                 <label style="display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #333; cursor: pointer; background: ${isSelected ? '#2a2a2a' : 'transparent'};">
                     <input type="checkbox" class="channel-select-cb" data-idx="${originalIndex}" ${isSelected ? 'checked' : ''} style="margin-right: 15px; width: 18px; height: 18px;">
-                    <span style="flex-grow: 1; color: ${isDisabled ? '#cf6679' : '#43CB44'}; font-weight: bold; font-size: 0.85em; font-family: 'Inter', sans-serif;">${safeTitle}</span>
+                    <span style="flex-grow: 1; color: ${titleColor}; font-weight: bold; font-size: 0.85em; font-family: 'Inter', sans-serif;">${safeTitle}${newLabel}</span>
                 </label>
             `;
         }).join('');
@@ -1444,7 +1469,13 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         });
         
         document.querySelectorAll('.modal-group-item').forEach(el => {
-            if (el.getAttribute('data-group') === currentGroupFilter) {
+            const g = el.getAttribute('data-group');
+            const total = groupsMap[g].length;
+            const enabled = groupsMap[g].filter(item => !tempDisabled.has(item.originalIndex)).length;
+            const countSpan = el.querySelector('.group-count-span');
+            if (countSpan) countSpan.textContent = `${enabled} (${total})`;
+
+            if (g === currentGroupFilter) {
                 el.style.borderLeftColor = '#bb86fc';
                 el.style.background = '#2a2a2a';
                 el.style.color = '#bb86fc';
@@ -1507,8 +1538,11 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         modal.style.display = 'none';
         modal.innerHTML = '';
         
-        const enabledChannels = originalChannels.filter((c, idx) => !tempDisabled.has(idx));
-        playlist.channels = enabledChannels;
+        originalChannels.forEach((c, idx) => {
+            c.disabled = tempDisabled.has(idx);
+            delete c.isNew;
+        });
+        playlist.channels = originalChannels;
 
         if (isNew) {
             if (playlist.editIndex >= 0) {
@@ -1759,32 +1793,29 @@ function renderPlaylists() {
                         if (old) {
                             newCh.disabled = old.disabled;
                             newCh.favourite = old.favourite;
+                            if (old.isNew) newCh.isNew = true;
+                        } else {
+                            newCh.disabled = true;
+                            newCh.isNew = true;
                         }
                     });
                     
-                    targetPlaylist.channels = channels;
+                    let finalEpgSource = targetPlaylist.epg;
                     if (!isStalker && result.epg_url && (!targetPlaylist.epg || targetPlaylist.epg === 'Not Configured')) {
-                        targetPlaylist.epg = result.epg_url;
+                        finalEpgSource = result.epg_url;
                     }
                     
-                    if (!window.activeEpgParsing) window.activeEpgParsing = new Set();
-                    if (!isStalker && targetPlaylist.epg && targetPlaylist.epg !== 'Not Configured') {
-                        window.activeEpgParsing.add(targetPlaylist.epg);
-                    }
-                    updateState(true); // SKIP SAVE
+                    const tempPlaylist = {
+                        id: targetPlaylist.id,
+                        source: targetPlaylist.source,
+                        name: targetPlaylist.name,
+                        channels: channels,
+                        epg: finalEpgSource,
+                        disabled: targetPlaylist.disabled,
+                        editIndex: idx
+                    };
                     
-                    // Trigger EPG update and auto-map
-                    if (!isStalker && allEpgSources.length > 0) {
-                        console.log('[API] Calling updateEpg after refresh.');
-                        await window.iptvAPI.updateEpg(combinedEpgs, null, true);
-                        epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
-                        await autoMapChannels(false, true); // SKIP SAVE
-                    }
-                    
-                    if (!isStalker && targetPlaylist.epg && targetPlaylist.epg !== 'Not Configured') {
-                        window.activeEpgParsing.delete(targetPlaylist.epg);
-                    }
-                    updateState(); // FINAL SAVE
+                    openManageChannelsModal(-1, tempPlaylist);
                 } else {
                     showToast('Failed to refresh playlist: ' + (result ? result.error : 'Unknown error'));
                 }
@@ -3964,6 +3995,10 @@ async function backgroundAutoUpdate() {
                 if (old) {
                     newCh.disabled = old.disabled;
                     newCh.favourite = old.favourite;
+                    if (old.isNew) newCh.isNew = true;
+                } else {
+                    newCh.disabled = true;
+                    newCh.isNew = true;
                 }
             });
 
