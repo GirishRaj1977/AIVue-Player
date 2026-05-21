@@ -1833,48 +1833,31 @@ ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
             const catRes = await stalkerRequest(url, mac, 'get_genres', { type: 'itv' });
             const catData = catRes.js?.data || (Array.isArray(catRes.js) ? catRes.js : []);
             itvCategories = catData.map(c => ({ id: c.id, name: c.title || c.name || 'Live TV' }));
+            
+            itvCategories.forEach(c => {
+                allParsed.push({
+                    tvg_id: c.id,
+                    title: c.name,
+                    group: 'Live TV',
+                    logo: '',
+                    url: `stalker-category:itv|${c.id}`,
+                    type: 'itv_category'
+                });
+            });
         } catch (e) {
             console.error('[STALKER] Failed to load ITV categories:', e);
         }
 
-        // Fetch Live TV channels per category sequentially to prevent rate limits
-        for (const cat of itvCategories) {
-            try {
-                const chList = await fetchAllStalkerPages(url, mac, 'get_ordered_list', { type: 'itv', genre: cat.id });
-                chList.forEach(c => {
-                    allParsed.push({
-                        tvg_id: c.tvg_id || '',
-                        tvg_name: c.name || '',
-                        title: c.name || 'Unknown Channel',
-                        logo: c.logo ? (c.logo.startsWith('http') ? c.logo : `${url.substring(0, url.lastIndexOf('/'))}/${c.logo}`) : '',
-                        group: cat.name,
-                        url: `stalker-cmd:itv|${c.cmd || ''}`,
-                        type: 'live'
-                    });
-                });
-            } catch (e) {
-                console.error(`[STALKER] Failed to load channels for genre ${cat.id}:`, e);
-            }
-        }
-        
         // Fallback for ITV
         if (itvCategories.length === 0) {
-            try {
-                const chList = await fetchAllStalkerPages(url, mac, 'get_all_channels', { type: 'itv' });
-                chList.forEach(c => {
-                    allParsed.push({
-                        tvg_id: c.tvg_id || '',
-                        tvg_name: c.name || '',
-                        title: c.name || 'Unknown Channel',
-                        logo: c.logo ? (c.logo.startsWith('http') ? c.logo : `${url.substring(0, url.lastIndexOf('/'))}/${c.logo}`) : '',
-                        group: 'Live TV',
-                        url: `stalker-cmd:itv|${c.cmd || ''}`,
-                        type: 'live'
-                    });
-                });
-            } catch (e) {
-                console.error('[STALKER] Fallback get_all_channels failed:', e);
-            }
+            allParsed.push({
+                tvg_id: 'all',
+                title: 'All Channels',
+                group: 'Live TV',
+                logo: '',
+                url: 'stalker-category:itv|all',
+                type: 'itv_category'
+            });
         }
 
         // 2. Fetch VOD Categories (Lazy Load Placeholders)
@@ -1934,31 +1917,59 @@ ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
     }
 });
 
-ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, isSeries }) => {
+ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, isSeries, categoryType, categoryName }) => {
     try {
-        console.log('[STALKER IPC] Fetching category:', categoryId, 'isSeries:', isSeries);
-        const itemList = await fetchAllStalkerPages(url, mac, 'get_ordered_list', { type: 'vod', category: categoryId });
+        console.log(`[STALKER IPC] Fetching category: ${categoryId}, type: ${categoryType || (isSeries ? 'series' : 'movie')}`);
         
-        return itemList.filter(m => {
-            const isItemSeries = m.is_series == 1 || m.is_series == "1" || m.is_series == true;
-            return isSeries ? isItemSeries : !isItemSeries;
-        }).map(m => {
-            if (isSeries) {
-                return {
-                    id: m.id || '',
-                    name: m.name || 'Unknown Series',
-                    logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
-                    url: `stalker-series:${m.id}`
-                };
+        let action = 'get_ordered_list';
+        let params = {};
+
+        if (categoryType === 'itv') {
+            params.type = 'itv';
+            if (categoryId === 'all') {
+                action = 'get_all_channels';
             } else {
-                return {
-                    id: m.id || '',
-                    name: m.name || 'Unknown Movie',
-                    logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
-                    url: `stalker-cmd:vod|${m.cmd || ''}`
-                };
+                params.genre = categoryId;
             }
-        });
+        } else {
+            params.type = 'vod';
+            params.category = categoryId;
+        }
+
+        const itemList = await fetchAllStalkerPages(url, mac, action, params);
+        
+        if (categoryType === 'itv') {
+            return itemList.map(c => ({
+                tvg_id: c.tvg_id || '',
+                tvg_name: c.name || '',
+                title: c.name || 'Unknown Channel',
+                logo: c.logo ? (c.logo.startsWith('http') ? c.logo : `${url.substring(0, url.lastIndexOf('/'))}/${c.logo}`) : '',
+                group: categoryName || 'Live TV',
+                url: `stalker-cmd:itv|${c.cmd || ''}`,
+                type: 'live'
+            }));
+        } else {
+            return itemList.filter(m => {
+                const isItemSeries = m.is_series == 1 || m.is_series == "1" || m.is_series == true;
+                return isSeries ? isItemSeries : !isItemSeries;
+            }).map(m => {
+                if (isSeries) {
+                    return {
+                        id: m.id || '',
+                        name: m.name || 'Unknown Series',
+                        logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
+                        url: `stalker-series:${m.id}`
+                    };
+                } else {
+                    return {
+                        id: m.id || '',
+                        name: m.name || 'Unknown Movie',
+                        logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
+                        url: `stalker-cmd:vod|${m.cmd || ''}`
+                    };
+                }
+            });
+        }
     } catch (e) {
         return [];
     }

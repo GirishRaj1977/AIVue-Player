@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('iptvAPI', {
-    parseM3u: (source) => ipcRenderer.invoke('parse-m3u', source),
+    parseM3u: (source, epgSource, mappings, forceRefresh) => ipcRenderer.invoke('parse-m3u', source, epgSource, mappings, forceRefresh),
     getEpgChannels: (epg) => ipcRenderer.invoke('get-epg-channels', epg),
     updateEpg: (epgSources, filterIds, forceRefresh) => ipcRenderer.invoke('update-epg', epgSources, filterIds, forceRefresh),
     getEpg: (channelIds, startLimit, endLimit) => ipcRenderer.invoke('get-epg', channelIds, startLimit, endLimit),

@@ -1249,6 +1249,7 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
 
             if (editIndex >= 0 && savedPlaylists[editIndex] && savedPlaylists[editIndex].channels) {
                 const oldMap = new Map();
+            let newCount = 0;
                 savedPlaylists[editIndex].channels.forEach(c => oldMap.set(c.title, c));
                 channels.forEach(newCh => {
                     const old = oldMap.get(newCh.title);
@@ -1259,8 +1260,10 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                     } else {
                         newCh.disabled = true;
                         newCh.isNew = true;
+                        newCount++;
                     }
                 });
+            if (newCount > 0) showToast(`Update complete: Found ${newCount} new channels.`);
             } else {
                 channels.forEach(newCh => {
                     newCh.disabled = true;
@@ -1328,10 +1331,13 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
 
     let currentGroupFilter = sortedGroups.length > 0 ? sortedGroups[0] : null;
 
+    const newCount = originalChannels.filter(c => c.isNew).length;
+    const newTitleStr = newCount > 0 ? ` <span style="color: #FFD700; font-size: 0.85em; font-weight: normal;">(${newCount} New Channels Found)</span>` : '';
+
     modal.innerHTML = `
         <div style="background: #1e1e1e; border: 1px solid #333; border-radius: 8px; width: 90%; max-width: 1000px; height: 85%; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
             <div style="padding: 15px 20px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: #252525;">
-                <h2 style="margin: 0; color: #bb86fc; font-size: 1.2em;">Manage Channels: ${playlist.name}</h2>
+                <h2 style="margin: 0; color: #bb86fc; font-size: 1.2em;">Manage Channels: ${playlist.name}${newTitleStr}</h2>
                 <div style="display: flex; gap: 10px;">
                     <input type="text" id="modal-channel-search" placeholder="Search channels..." value="" style="background: #121212; color: #fff; border: 1px solid #444; padding: 6px 12px; border-radius: 4px; outline: none; width: 250px;">
                 </div>
@@ -1510,12 +1516,14 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
     document.getElementById('modal-enable-btn').addEventListener('click', () => {
         if (tempSelected.size === 0) return;
         tempSelected.forEach(idx => tempDisabled.delete(idx));
+        tempSelected.clear();
         renderChannelsList();
     });
 
     document.getElementById('modal-disable-btn').addEventListener('click', () => {
         if (tempSelected.size === 0) return;
         tempSelected.forEach(idx => tempDisabled.add(idx));
+        tempSelected.clear();
         renderChannelsList();
     });
 
@@ -1772,6 +1780,11 @@ function renderPlaylists() {
             e.target.disabled = true;
 
             try {
+                if (!isStalker) {
+                    console.log('[API] Wiping cache before refresh for:', source);
+                    if (window.iptvAPI.clearCache) await window.iptvAPI.clearCache(source);
+                }
+
                 let result;
                 if (isStalker) {
                     console.log('[API] Calling parseStalker for refresh.');
@@ -1788,6 +1801,7 @@ function renderPlaylists() {
                     if (targetPlaylist.channels) {
                         targetPlaylist.channels.forEach(c => oldMap.set(c.title, c));
                     }
+                    let newCount = 0;
                     channels.forEach(newCh => {
                         const old = oldMap.get(newCh.title);
                         if (old) {
@@ -1797,8 +1811,15 @@ function renderPlaylists() {
                         } else {
                             newCh.disabled = true;
                             newCh.isNew = true;
+                            newCount++;
                         }
                     });
+                    
+                    if (newCount > 0) {
+                        showToast(`Refresh complete: Found ${newCount} new channels.`);
+                    } else {
+                        showToast(`Refresh complete: No new channels found.`);
+                    }
                     
                     let finalEpgSource = targetPlaylist.epg;
                     if (!isStalker && result.epg_url && (!targetPlaylist.epg || targetPlaylist.epg === 'Not Configured')) {
