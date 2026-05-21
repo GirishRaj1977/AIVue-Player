@@ -280,18 +280,27 @@ const loadingMsg = document.getElementById('loading');
 const importNameInput = document.getElementById('import-name');
 const btnModeFile = document.getElementById('btn-mode-file');
 const btnModeUrl = document.getElementById('btn-mode-url');
-const btnModeStalker = document.getElementById('btn-mode-stalker');
 const containerFile = document.getElementById('input-container-file');
 const containerUrl = document.getElementById('input-container-url');
-const containerStalker = document.getElementById('input-container-stalker');
 const importFilePath = document.getElementById('import-file-path');
 const importUrlPath = document.getElementById('import-url-path');
-const importStalkerUrl = document.getElementById('import-stalker-url');
-const importStalkerMac = document.getElementById('import-stalker-mac');
 const importBrowseBtn = document.getElementById('import-browse-btn');
 const importSubmitBtn = document.getElementById('import-submit-btn');
 const importEpgInput = document.getElementById('import-epg-path'); // New Input Field
 const importCancelBtn = document.getElementById('import-cancel-btn');
+
+const importStalkerName = document.getElementById('import-stalker-name');
+const importStalkerUrl = document.getElementById('import-stalker-url');
+const importStalkerMac = document.getElementById('import-stalker-mac');
+const importStalkerSubmitBtn = document.getElementById('import-stalker-submit-btn');
+const importStalkerCancelBtn = document.getElementById('import-stalker-cancel-btn');
+
+const importXtremeName = document.getElementById('import-xtreme-name');
+const importXtremeUrl = document.getElementById('import-xtreme-url');
+const importXtremeUser = document.getElementById('import-xtreme-user');
+const importXtremePass = document.getElementById('import-xtreme-pass');
+const importXtremeSubmitBtn = document.getElementById('import-xtreme-submit-btn');
+const importXtremeCancelBtn = document.getElementById('import-xtreme-cancel-btn');
 
 let savedPlaylists = [];
 let allChannels = [];
@@ -1267,8 +1276,10 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
         }
         if (result && result.error) {
             showToast(`Failed to import.\nReason: ${result.error}`);
+            return false;
         } else if (!result || (!Array.isArray(result) && !result.channels)) {
             showToast(`Failed to import.\nReason: Received invalid data from source.`);
+            return false;
         } else {
             const channels = Array.isArray(result) ? result : result.channels;
             let finalEpgSource = epgSource || 'Not Configured';
@@ -1315,9 +1326,11 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                     updateState(); // Re-render AND SAVE
                 }
             }
+            return true;
         }
     } catch (err) {
         showToast(`UI Error (${source}):\n${err.message}`);
+        return false;
     }
 }
 
@@ -1599,56 +1612,35 @@ function renderPlaylists() {
             const playlist = savedPlaylists[idx];
             editingPlaylistIndex = idx;
             
-            if (importNameInput) importNameInput.value = playlist.name;
             if (playlist.epg && playlist.epg.startsWith('stalker:')) {
-                currentImportMode = 'stalker';
-                if (btnModeStalker) btnModeStalker.classList.add('active');
-                if (btnModeFile) btnModeFile.classList.remove('active');
-                if (btnModeUrl) btnModeUrl.classList.remove('active');
-                if (containerStalker) containerStalker.style.display = 'flex';
-                if (containerFile) containerFile.style.display = 'none';
-                if (containerUrl) containerUrl.style.display = 'none';
+                if (importStalkerName) importStalkerName.value = playlist.name;
                 if (importStalkerUrl) importStalkerUrl.value = playlist.source;
                 const mac = playlist.epg.substring(8);
                 if (importStalkerMac) importStalkerMac.value = mac;
-                if (importFilePath) importFilePath.value = '';
-                if (importUrlPath) importUrlPath.value = '';
-                if (importEpgInput) importEpgInput.style.display = 'none';
+                
+                if (importStalkerSubmitBtn) importStalkerSubmitBtn.textContent = 'Update';
+                if (importStalkerCancelBtn) importStalkerCancelBtn.style.display = 'block';
             } else if (playlist.source.startsWith('http://') || playlist.source.startsWith('https://')) {
-                currentImportMode = 'url';
-                if (btnModeUrl) btnModeUrl.classList.add('active');
-                if (btnModeFile) btnModeFile.classList.remove('active');
-                if (btnModeStalker) btnModeStalker.classList.remove('active');
-                if (containerUrl) containerUrl.style.display = 'block';
-                if (containerFile) containerFile.style.display = 'none';
-                if (containerStalker) containerStalker.style.display = 'none';
+                if (importNameInput) importNameInput.value = playlist.name;
+                if (btnModeUrl) btnModeUrl.click();
                 if (importUrlPath) importUrlPath.value = playlist.source;
                 if (importFilePath) importFilePath.value = '';
-                if (importStalkerUrl) importStalkerUrl.value = '';
-                if (importStalkerMac) importStalkerMac.value = '';
                 if (importEpgInput) {
-                    importEpgInput.style.display = 'block';
                     importEpgInput.value = playlist.epg === 'Not Configured' ? '' : playlist.epg;
                 }
+                if (importSubmitBtn) importSubmitBtn.textContent = 'Update';
+                if (importCancelBtn) importCancelBtn.style.display = 'block';
             } else {
-                currentImportMode = 'file';
-                if (btnModeFile) btnModeFile.classList.add('active');
-                if (btnModeUrl) btnModeUrl.classList.remove('active');
-                if (btnModeStalker) btnModeStalker.classList.remove('active');
-                if (containerFile) containerFile.style.display = 'flex';
-                if (containerUrl) containerUrl.style.display = 'none';
-                if (containerStalker) containerStalker.style.display = 'none';
+                if (importNameInput) importNameInput.value = playlist.name;
+                if (btnModeFile) btnModeFile.click();
                 if (importFilePath) importFilePath.value = playlist.source;
                 if (importUrlPath) importUrlPath.value = '';
-                if (importStalkerUrl) importStalkerUrl.value = '';
-                if (importStalkerMac) importStalkerMac.value = '';
                 if (importEpgInput) {
-                    importEpgInput.style.display = 'block';
                     importEpgInput.value = playlist.epg === 'Not Configured' ? '' : playlist.epg;
                 }
+                if (importSubmitBtn) importSubmitBtn.textContent = 'Update';
+                if (importCancelBtn) importCancelBtn.style.display = 'block';
             }
-            if (importSubmitBtn) importSubmitBtn.textContent = 'Update';
-            if (importCancelBtn) importCancelBtn.style.display = 'block';
             
             const view = document.getElementById('playlist-view');
             if (view) view.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1872,11 +1864,8 @@ if (btnModeFile) {
         currentImportMode = 'file';
         btnModeFile.classList.add('active');
         btnModeUrl.classList.remove('active');
-        if (btnModeStalker) btnModeStalker.classList.remove('active');
         containerFile.style.display = 'flex';
         containerUrl.style.display = 'none';
-        if (containerStalker) containerStalker.style.display = 'none';
-        if (importEpgInput) importEpgInput.style.display = 'block';
     });
 }
 
@@ -1887,26 +1876,8 @@ if (btnModeUrl) {
         currentImportMode = 'url';
         btnModeUrl.classList.add('active');
         btnModeFile.classList.remove('active');
-        if (btnModeStalker) btnModeStalker.classList.remove('active');
         containerUrl.style.display = 'block';
         containerFile.style.display = 'none';
-        if (containerStalker) containerStalker.style.display = 'none';
-        if (importEpgInput) importEpgInput.style.display = 'block';
-    });
-}
-
-if (btnModeStalker) {
-    btnModeStalker.addEventListener('click', (e) => {
-        e.preventDefault();
-        console.log('[EVENT] Import mode changed to stalker.');
-        currentImportMode = 'stalker';
-        btnModeStalker.classList.add('active');
-        btnModeFile.classList.remove('active');
-        btnModeUrl.classList.remove('active');
-        if (containerStalker) containerStalker.style.display = 'flex';
-        containerFile.style.display = 'none';
-        containerUrl.style.display = 'none';
-        if (importEpgInput) importEpgInput.style.display = 'none';
     });
 }
 
@@ -1949,7 +1920,7 @@ if (importUrlPath) {
 if (importSubmitBtn) {
     importSubmitBtn.addEventListener('click', async (e) => {
         e.preventDefault();
-        console.log('[EVENT] Import/Update submit button clicked.');
+        console.log('[EVENT] M3U Import/Update submit button clicked.');
         const name = importNameInput.value.trim();
         if (!name) {
             showToast("Playlist name is mandatory.");
@@ -1960,27 +1931,7 @@ if (importSubmitBtn) {
         let source = '';
         let epgSource = '';
 
-        if (currentImportMode === 'stalker') {
-            source = importStalkerUrl.value.trim();
-            const mac = importStalkerMac.value.trim();
-            if (!source) {
-                showToast("Please enter Stalker Portal URL.");
-                importStalkerUrl.focus();
-                return;
-            }
-            if (!mac) {
-                showToast("Please enter MAC Address.");
-                importStalkerMac.focus();
-                return;
-            }
-            const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
-            if (!macRegex.test(mac)) {
-                showToast("Invalid MAC Address format.\nExample: 00:1A:79:00:11:22");
-                importStalkerMac.focus();
-                return;
-            }
-            epgSource = `stalker:${mac.toUpperCase()}`;
-        } else if (currentImportMode === 'file') {
+        if (currentImportMode === 'file') {
             source = importFilePath.value.trim();
             if (!source) {
                 showToast("Please select a file location.");
@@ -2002,21 +1953,81 @@ if (importSubmitBtn) {
         importSubmitBtn.disabled = true;
         if (loadingMsg) loadingMsg.style.display = 'none';
 
-        await addPlaylist(source, name, epgSource, editingPlaylistIndex);
+        const success = await addPlaylist(source, name, epgSource, editingPlaylistIndex);
         
-        editingPlaylistIndex = -1;
         if (importSubmitBtn) {
-            importSubmitBtn.textContent = 'Import';
+            importSubmitBtn.textContent = originalText;
             importSubmitBtn.disabled = false;
         }
-        if (importCancelBtn) importCancelBtn.style.display = 'none';
 
-        importNameInput.value = '';
-        importFilePath.value = '';
-        importUrlPath.value = '';
-        if (importStalkerUrl) importStalkerUrl.value = '';
-        if (importStalkerMac) importStalkerMac.value = '';
-        if (importEpgInput) importEpgInput.value = '';
+        if (success) {
+            editingPlaylistIndex = -1;
+            if (importCancelBtn) importCancelBtn.style.display = 'none';
+            if (importNameInput) importNameInput.value = '';
+            if (importFilePath) importFilePath.value = '';
+            if (importUrlPath) importUrlPath.value = '';
+            if (importEpgInput) importEpgInput.value = '';
+        }
+    });
+}
+
+if (importStalkerSubmitBtn) {
+    importStalkerSubmitBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        console.log('[EVENT] Stalker Import/Update submit button clicked.');
+        const name = importStalkerName.value.trim();
+        if (!name) {
+            showToast("Playlist name is mandatory.");
+            importStalkerName.focus();
+            return;
+        }
+
+        let source = importStalkerUrl.value.trim();
+        const mac = importStalkerMac.value.trim();
+        if (!source) {
+            showToast("Please enter Stalker Portal URL.");
+            importStalkerUrl.focus();
+            return;
+        }
+        if (!mac) {
+            showToast("Please enter MAC Address.");
+            importStalkerMac.focus();
+            return;
+        }
+        const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
+        if (!macRegex.test(mac)) {
+            showToast("Invalid MAC Address format.\nExample: 00:1A:79:00:11:22");
+            importStalkerMac.focus();
+            return;
+        }
+        let epgSource = `stalker:${mac.toUpperCase()}`;
+        
+        const originalText = importStalkerSubmitBtn.textContent;
+        importStalkerSubmitBtn.textContent = 'Importing...';
+        importStalkerSubmitBtn.disabled = true;
+        if (loadingMsg) loadingMsg.style.display = 'none';
+
+        const success = await addPlaylist(source, name, epgSource, editingPlaylistIndex);
+        
+        if (importStalkerSubmitBtn) {
+            importStalkerSubmitBtn.textContent = originalText;
+            importStalkerSubmitBtn.disabled = false;
+        }
+
+        if (success) {
+            editingPlaylistIndex = -1;
+            if (importStalkerCancelBtn) importStalkerCancelBtn.style.display = 'none';
+            if (importStalkerName) importStalkerName.value = '';
+            if (importStalkerUrl) importStalkerUrl.value = '';
+            if (importStalkerMac) importStalkerMac.value = '';
+        }
+    });
+}
+
+if (importXtremeSubmitBtn) {
+    importXtremeSubmitBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        showToast('Coming in Next Version');
     });
 }
 
@@ -2030,9 +2041,20 @@ if (importCancelBtn) {
         if (importNameInput) importNameInput.value = '';
         if (importFilePath) importFilePath.value = '';
         if (importUrlPath) importUrlPath.value = '';
+        if (importEpgInput) importEpgInput.value = '';
+    });
+}
+
+if (importStalkerCancelBtn) {
+    importStalkerCancelBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        console.log('[EVENT] Stalker cancel button clicked.');
+        editingPlaylistIndex = -1;
+        if (importStalkerSubmitBtn) importStalkerSubmitBtn.textContent = 'Import';
+        if (importStalkerCancelBtn) importStalkerCancelBtn.style.display = 'none';
+        if (importStalkerName) importStalkerName.value = '';
         if (importStalkerUrl) importStalkerUrl.value = '';
         if (importStalkerMac) importStalkerMac.value = '';
-        if (importEpgInput) importEpgInput.value = '';
     });
 }
 
@@ -2605,6 +2627,29 @@ async function embedStream(channel) {
     
     localStorage.setItem('lastPlayedChannelUrl', channel.url);
     
+    let finalStreamUrl = channel.url;
+    const playlist = savedPlaylists.find(p => String(p.id) === String(channel.playlistId));
+
+    if (playlist && playlist.epg && playlist.epg.startsWith('stalker:') && !finalStreamUrl.startsWith('stalker-cmd:') && !finalStreamUrl.startsWith('stalker-series:')) {
+        finalStreamUrl = `stalker-cmd:${channel.type === 'live' ? 'itv' : 'vod'}|${finalStreamUrl}`;
+    }
+
+    if (finalStreamUrl.startsWith('stalker-cmd:')) {
+        const parts = finalStreamUrl.substring(12).split('|');
+        const type = parts[0];
+        const cmd = parts.slice(1).join('|');
+        
+        if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
+            const mac = playlist.epg.substring(8);
+            const resolved = await window.iptvAPI.resolveStalkerLink({ url: playlist.source, mac, type, cmd });
+            if (resolved) finalStreamUrl = resolved;
+            else {
+                showToast("Failed to authenticate stream link.");
+                return;
+            }
+        }
+    }
+
     const detailInfo = document.getElementById('detail-info');
     if (detailInfo) detailInfo.style.display = 'block';
 
@@ -2691,7 +2736,7 @@ async function embedStream(channel) {
     const rect = playerContainer.getBoundingClientRect();
     console.log('[API] Calling playMpvEmbedded.');
     window.iptvAPI.playMpvEmbedded({
-        url: channel.url,
+        url: finalStreamUrl,
         title: channel.title,
         bounds: {
             x: Math.round(rect.x),
@@ -3473,7 +3518,8 @@ async function openEpisodesModal(playlistId, seriesId, seriesTitle) {
                     embedStream({
                         title: `${seriesTitle} - S${seasonNum}E${ep.episodeNum} - ${ep.name || 'Episode'}`,
                         url: ep.url,
-                        logo: seriesPoster
+                        logo: seriesPoster,
+                        playlistId: playlist.id
                     });
                 });
                 
@@ -3682,178 +3728,6 @@ window.addEventListener('DOMContentLoaded', async () => {
         });
         // Fallback 
         if (epgBtn.innerHTML.includes('EPG')) epgBtn.innerHTML = epgBtn.innerHTML.replace(/\bEPG\b/i, 'Guide');
-    }
-
-    // Inject Playlist Format Tabs into the Add Playlist card
-    const importNameInputNode = document.getElementById('import-name');
-    if (importNameInputNode) {
-        let card = importNameInputNode.parentElement;
-        while (card && !card.querySelector('h2, h3')) {
-            card = card.parentElement;
-            if (card === document.body) break;
-        }
-        
-        if (card && card !== document.body) {
-            const tabContainer = document.createElement('div');
-            tabContainer.style.display = 'flex';
-            tabContainer.style.gap = '10px';
-            tabContainer.style.marginBottom = '20px';
-            tabContainer.style.borderBottom = '1px solid #333';
-            tabContainer.style.paddingBottom = '15px';
-            tabContainer.style.marginTop = '15px';
-            
-            // Force text inputs to be active (in case the HTML had them disabled by default or form state locked)
-            ['import-name', 'import-file-path', 'import-url-path', 'import-epg-path'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) {
-                    el.disabled = false;
-                    el.removeAttribute('disabled');
-                    el.style.pointerEvents = 'auto';
-                    el.style.opacity = '1';
-                }
-            });
-
-            ['M3U', 'Xtreme', 'Stalker'].forEach((name, idx) => {
-                const btn = document.createElement('button');
-                btn.className = 'playlist-btn';
-                btn.type = 'button'; // Prevent accidental form submissions
-                btn.textContent = name;
-                btn.style.padding = '8px 20px';
-                btn.style.fontSize = '0.95em';
-                if (idx === 0) {
-                    btn.style.background = '#bb86fc';
-                    btn.style.color = '#000';
-                    btn.style.fontWeight = 'bold';
-                } else {
-                    btn.style.background = '#2a2a2a';
-                    btn.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        showToast('Coming in Next Version');
-                    });
-                }
-                tabContainer.appendChild(btn);
-            });
-
-            const heading = card.querySelector('h2, h3');
-            if (heading) {
-                heading.parentNode.insertBefore(tabContainer, heading.nextSibling);
-            }
-
-            // --- REDESIGN ADD PLAYLIST CARD FOR HORIZONTAL COMPACT LAYOUT ---
-            card.style.width = '100%';
-            card.style.maxWidth = '100%';
-            card.style.boxSizing = 'border-box';
-
-            const nameNode = document.getElementById('import-name');
-            const fileContainerNode = document.getElementById('input-container-file');
-            const urlContainerNode = document.getElementById('input-container-url');
-            const epgNode = document.getElementById('import-epg-path');
-
-            if (nameNode && fileContainerNode && urlContainerNode && epgNode) {
-                const flexContainer = document.createElement('div');
-                flexContainer.style.display = 'flex';
-                flexContainer.style.flexDirection = 'row';
-                flexContainer.style.flexWrap = 'wrap';
-                flexContainer.style.gap = '20px';
-                flexContainer.style.width = '100%';
-                flexContainer.style.alignItems = 'flex-end';
-                flexContainer.style.marginTop = '10px';
-                flexContainer.style.marginBottom = '20px';
-
-                function createCol(idList) {
-                    const col = document.createElement('div');
-                    col.style.display = 'flex';
-                    col.style.flexDirection = 'column';
-                    col.style.flex = '1 1 250px';
-                    col.style.minWidth = '0';
-                    col.style.gap = '8px';
-
-                    idList.forEach(id => {
-                        const el = document.getElementById(id);
-                        if (el) {
-                            let prev = el.previousElementSibling;
-                            while (prev && prev.tagName === 'BR') {
-                                prev.style.display = 'none';
-                                prev = prev.previousElementSibling;
-                            }
-                            if (prev && ['LABEL', 'STRONG', 'B', 'SPAN'].includes(prev.tagName)) {
-                                col.appendChild(prev);
-                            }
-                            col.appendChild(el);
-                            el.style.width = '100%';
-                            el.style.boxSizing = 'border-box';
-                        }
-                    });
-                    return col;
-                }
-
-                const col1 = createCol(['import-name']);
-
-                const col2 = document.createElement('div');
-                col2.style.display = 'flex';
-                col2.style.flexDirection = 'column';
-                col2.style.flex = '1 1 250px';
-                col2.style.minWidth = '0';
-                col2.style.gap = '8px';
-
-                const modeFileBtn = document.getElementById('btn-mode-file');
-                if (modeFileBtn && modeFileBtn.parentElement) {
-                    const modeContainer = modeFileBtn.parentElement;
-                    let prev = modeContainer.previousElementSibling;
-                    while (prev && prev.tagName === 'BR') {
-                        prev.style.display = 'none';
-                        prev = prev.previousElementSibling;
-                    }
-                    if (prev && ['LABEL', 'STRONG', 'B', 'SPAN'].includes(prev.tagName)) {
-                        col2.appendChild(prev);
-                    }
-                    col2.appendChild(modeContainer);
-                }
-
-                if (urlContainerNode) {
-                    col2.appendChild(urlContainerNode);
-                    urlContainerNode.style.width = '100%';
-                }
-                if (fileContainerNode) {
-                    col2.appendChild(fileContainerNode);
-                    fileContainerNode.style.width = '100%';
-                }
-
-                const col3 = createCol(['import-epg-path']);
-
-                flexContainer.appendChild(col1);
-                flexContainer.appendChild(col2);
-                flexContainer.appendChild(col3);
-
-                const submitBtn = document.getElementById('import-submit-btn');
-                if (submitBtn) {
-                    submitBtn.parentElement.insertBefore(flexContainer, submitBtn);
-                }
-
-                const actionsRow = document.createElement('div');
-                actionsRow.style.display = 'flex';
-                actionsRow.style.justifyContent = 'flex-end';
-                actionsRow.style.alignItems = 'center';
-                actionsRow.style.gap = '15px';
-                actionsRow.style.width = '100%';
-
-                const cancelBtn = document.getElementById('import-cancel-btn');
-                const loadingIndicator = document.getElementById('loading');
-
-                if (cancelBtn) actionsRow.appendChild(cancelBtn);
-                if (submitBtn) actionsRow.appendChild(submitBtn);
-
-                // If loadingIndicator exists, hide it outright so it doesn't take space
-                if (loadingIndicator) loadingIndicator.style.display = 'none';
-
-                card.appendChild(actionsRow);
-
-                // Clean up any stray <br> tags left behind in the card body
-                Array.from(card.children).forEach(child => {
-                    if (child.tagName === 'BR') child.style.display = 'none';
-                });
-            }
-        }
     }
 
     console.log('[API] Calling getMappings on startup.');

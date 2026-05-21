@@ -1,0 +1,719 @@
+﻿diff --git a/renderer.js b/renderer.js
+index a1df3a3..6cf4e1d 100644
+--- a/renderer.js
++++ b/renderer.js
+@@ -280,10 +280,14 @@ const loadingMsg = document.getElementById('loading');
+ const importNameInput = document.getElementById('import-name');
+ const btnModeFile = document.getElementById('btn-mode-file');
+ const btnModeUrl = document.getElementById('btn-mode-url');
++const btnModeStalker = document.getElementById('btn-mode-stalker');
+ const containerFile = document.getElementById('input-container-file');
+ const containerUrl = document.getElementById('input-container-url');
++const containerStalker = document.getElementById('input-container-stalker');
+ const importFilePath = document.getElementById('import-file-path');
+ const importUrlPath = document.getElementById('import-url-path');
++const importStalkerUrl = document.getElementById('import-stalker-url');
++const importStalkerMac = document.getElementById('import-stalker-mac');
+ const importBrowseBtn = document.getElementById('import-browse-btn');
+ const importSubmitBtn = document.getElementById('import-submit-btn');
+ const importEpgInput = document.getElementById('import-epg-path'); // New Input Field
+@@ -1166,6 +1170,10 @@ function updateState(skipSave = false) {
+             
+             p.channels.forEach(c => {
+                 if (c.disabled) return;
++                // Segregate Stalker Movies/Series out of Live channels
++                const channelType = c.type || 'live';
++                if (channelType !== 'live') return;
++                
+                 c.playlistId = p.id; // Attach playlist ID for easy filtering
+                 const groupName = c.group || 'Uncategorized';
+                 if (!groupedChannels[groupName]) {
+@@ -1248,8 +1256,15 @@ function updateState(skipSave = false) {
+ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
+     console.log('[PLAYLIST] Adding/editing playlist:', { source, customName, epgSource, editIndex });
+     try {
+-        console.log('[API] Calling parseM3u for new playlist.');
+-        const result = await window.iptvAPI.parseM3u(source);
++        const isStalker = epgSource && epgSource.startsWith('stalker:');
++        let result;
++        if (isStalker) {
++            console.log('[API] Calling parseStalker for new playlist.');
++            result = await window.iptvAPI.parseStalker({ url: source, mac: epgSource.substring(8) });
++        } else {
++            console.log('[API] Calling parseM3u for new playlist.');
++            result = await window.iptvAPI.parseM3u(source);
++        }
+         if (result && result.error) {
+             showToast(`Failed to import.\nReason: ${result.error}`);
+         } else if (!result || (!Array.isArray(result) && !result.channels)) {
+@@ -1258,7 +1273,7 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
+             const channels = Array.isArray(result) ? result : result.channels;
+             let finalEpgSource = epgSource || 'Not Configured';
+             
+-            if ((!epgSource || epgSource === 'Not Configured') && result.epg_url) {
++            if (!isStalker && (!epgSource || epgSource === 'Not Configured') && result.epg_url) {
+                 finalEpgSource = result.epg_url;
+             }
+ 
+@@ -1279,21 +1294,26 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
+             }
+             updateState(true); // SKIP SAVE
+             
+-            // Auto-fetch EPG data in background to cache in SQLite
+-            let allEpgSources = savedEpgs.slice();
+-            if (finalEpgSource && finalEpgSource !== 'Not Configured' && !allEpgSources.includes(finalEpgSource)) {
+-                allEpgSources.push(finalEpgSource);
+-            }
+-            if (allEpgSources.length > 0) {
+-                console.log('[API] Calling updateEpg after adding playlist.');
+-                const combinedEpgs = allEpgSources.join(',');
+-                await window.iptvAPI.updateEpg(combinedEpgs, null, true);
+-                epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
+-                await autoMapChannels(false, true); // SKIP SAVE
+-                
++            if (isStalker) {
++                // Skip XMLTV EPG updates as Stalker is self-contained.
+                 updateState(); // Re-render and save
+             } else {
+-                updateState(); // Re-render AND SAVE
++                // Auto-fetch EPG data in background to cache in SQLite
++                let allEpgSources = savedEpgs.slice();
++                if (finalEpgSource && finalEpgSource !== 'Not Configured' && !allEpgSources.includes(finalEpgSource)) {
++                    allEpgSources.push(finalEpgSource);
++                }
++                if (allEpgSources.length > 0) {
++                    console.log('[API] Calling updateEpg after adding playlist.');
++                    const combinedEpgs = allEpgSources.join(',');
++                    await window.iptvAPI.updateEpg(combinedEpgs, null, true);
++                    epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
++                    await autoMapChannels(false, true); // SKIP SAVE
++                    
++                    updateState(); // Re-render and save
++                } else {
++                    updateState(); // Re-render AND SAVE
++                }
+             }
+         }
+     } catch (err) {
+@@ -1580,25 +1600,53 @@ function renderPlaylists() {
+             editingPlaylistIndex = idx;
+             
+             if (importNameInput) importNameInput.value = playlist.name;
+-            if (playlist.source.startsWith('http://') || playlist.source.startsWith('https://')) {
++            if (playlist.epg && playlist.epg.startsWith('stalker:')) {
++                currentImportMode = 'stalker';
++                if (btnModeStalker) btnModeStalker.classList.add('active');
++                if (btnModeFile) btnModeFile.classList.remove('active');
++                if (btnModeUrl) btnModeUrl.classList.remove('active');
++                if (containerStalker) containerStalker.style.display = 'flex';
++                if (containerFile) containerFile.style.display = 'none';
++                if (containerUrl) containerUrl.style.display = 'none';
++                if (importStalkerUrl) importStalkerUrl.value = playlist.source;
++                const mac = playlist.epg.substring(8);
++                if (importStalkerMac) importStalkerMac.value = mac;
++                if (importFilePath) importFilePath.value = '';
++                if (importUrlPath) importUrlPath.value = '';
++                if (importEpgInput) importEpgInput.style.display = 'none';
++            } else if (playlist.source.startsWith('http://') || playlist.source.startsWith('https://')) {
+                 currentImportMode = 'url';
+                 if (btnModeUrl) btnModeUrl.classList.add('active');
+                 if (btnModeFile) btnModeFile.classList.remove('active');
++                if (btnModeStalker) btnModeStalker.classList.remove('active');
+                 if (containerUrl) containerUrl.style.display = 'block';
+                 if (containerFile) containerFile.style.display = 'none';
++                if (containerStalker) containerStalker.style.display = 'none';
+                 if (importUrlPath) importUrlPath.value = playlist.source;
+                 if (importFilePath) importFilePath.value = '';
++                if (importStalkerUrl) importStalkerUrl.value = '';
++                if (importStalkerMac) importStalkerMac.value = '';
++                if (importEpgInput) {
++                    importEpgInput.style.display = 'block';
++                    importEpgInput.value = playlist.epg === 'Not Configured' ? '' : playlist.epg;
++                }
+             } else {
+                 currentImportMode = 'file';
+                 if (btnModeFile) btnModeFile.classList.add('active');
+                 if (btnModeUrl) btnModeUrl.classList.remove('active');
++                if (btnModeStalker) btnModeStalker.classList.remove('active');
+                 if (containerFile) containerFile.style.display = 'flex';
+                 if (containerUrl) containerUrl.style.display = 'none';
++                if (containerStalker) containerStalker.style.display = 'none';
+                 if (importFilePath) importFilePath.value = playlist.source;
+                 if (importUrlPath) importUrlPath.value = '';
++                if (importStalkerUrl) importStalkerUrl.value = '';
++                if (importStalkerMac) importStalkerMac.value = '';
++                if (importEpgInput) {
++                    importEpgInput.style.display = 'block';
++                    importEpgInput.value = playlist.epg === 'Not Configured' ? '' : playlist.epg;
++                }
+             }
+-            
+-            if (importEpgInput) importEpgInput.value = playlist.epg === 'Not Configured' ? '' : playlist.epg;
+             if (importSubmitBtn) importSubmitBtn.textContent = 'Update';
+             if (importCancelBtn) importCancelBtn.style.display = 'block';
+             
+@@ -1623,6 +1671,8 @@ function renderPlaylists() {
+             const source = targetPlaylist.source;
+             const epgSource = targetPlaylist.epg !== 'Not Configured' ? targetPlaylist.epg : '';
+             
++            const isStalker = targetPlaylist.epg && targetPlaylist.epg.startsWith('stalker:');
++            
+             let allEpgSources = savedEpgs.slice();
+             if (epgSource && !allEpgSources.includes(epgSource)) {
+                 allEpgSources.push(epgSource);
+@@ -1634,8 +1684,15 @@ function renderPlaylists() {
+             e.target.disabled = true;
+ 
+             try {
+-                console.log('[API] Calling parseM3u for refresh.');
+-                const result = await window.iptvAPI.parseM3u(source, null, null, true);
++                let result;
++                if (isStalker) {
++                    console.log('[API] Calling parseStalker for refresh.');
++                    result = await window.iptvAPI.parseStalker({ url: source, mac: targetPlaylist.epg.substring(8) });
++                } else {
++                    console.log('[API] Calling parseM3u for refresh.');
++                    result = await window.iptvAPI.parseM3u(source, null, null, true);
++                }
++                
+                 if (result && !result.error && (Array.isArray(result) || result.channels)) {
+                     const channels = Array.isArray(result) ? result : result.channels;
+                     
+@@ -1652,19 +1709,17 @@ function renderPlaylists() {
+                     });
+                     
+                     targetPlaylist.channels = channels;
+-                    if (result.epg_url && (!targetPlaylist.epg || targetPlaylist.epg === 'Not Configured')) {
++                    if (!isStalker && result.epg_url && (!targetPlaylist.epg || targetPlaylist.epg === 'Not Configured')) {
+                         targetPlaylist.epg = result.epg_url;
+                     }
+                     updateState(true); // SKIP SAVE
+                     
+                     // Trigger EPG update and auto-map
+-                    if (allEpgSources.length > 0) {
++                    if (!isStalker && allEpgSources.length > 0) {
+                         console.log('[API] Calling updateEpg after refresh.');
+                         await window.iptvAPI.updateEpg(combinedEpgs, null, true);
+                         epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
+                         await autoMapChannels(false, true); // SKIP SAVE
+-                        
+-                        // EPG preloading skipped to load only on view.
+                     }
+                     updateState(); // FINAL SAVE
+                 } else {
+@@ -1817,8 +1872,11 @@ if (btnModeFile) {
+         currentImportMode = 'file';
+         btnModeFile.classList.add('active');
+         btnModeUrl.classList.remove('active');
++        if (btnModeStalker) btnModeStalker.classList.remove('active');
+         containerFile.style.display = 'flex';
+         containerUrl.style.display = 'none';
++        if (containerStalker) containerStalker.style.display = 'none';
++        if (importEpgInput) importEpgInput.style.display = 'block';
+     });
+ }
+ 
+@@ -1829,8 +1887,26 @@ if (btnModeUrl) {
+         currentImportMode = 'url';
+         btnModeUrl.classList.add('active');
+         btnModeFile.classList.remove('active');
++        if (btnModeStalker) btnModeStalker.classList.remove('active');
+         containerUrl.style.display = 'block';
+         containerFile.style.display = 'none';
++        if (containerStalker) containerStalker.style.display = 'none';
++        if (importEpgInput) importEpgInput.style.display = 'block';
++    });
++}
++
++if (btnModeStalker) {
++    btnModeStalker.addEventListener('click', (e) => {
++        e.preventDefault();
++        console.log('[EVENT] Import mode changed to stalker.');
++        currentImportMode = 'stalker';
++        btnModeStalker.classList.add('active');
++        btnModeFile.classList.remove('active');
++        btnModeUrl.classList.remove('active');
++        if (containerStalker) containerStalker.style.display = 'flex';
++        containerFile.style.display = 'none';
++        containerUrl.style.display = 'none';
++        if (importEpgInput) importEpgInput.style.display = 'none';
+     });
+ }
+ 
+@@ -1882,12 +1958,35 @@ if (importSubmitBtn) {
+         }
+ 
+         let source = '';
+-        if (currentImportMode === 'file') {
++        let epgSource = '';
++
++        if (currentImportMode === 'stalker') {
++            source = importStalkerUrl.value.trim();
++            const mac = importStalkerMac.value.trim();
++            if (!source) {
++                showToast("Please enter Stalker Portal URL.");
++                importStalkerUrl.focus();
++                return;
++            }
++            if (!mac) {
++                showToast("Please enter MAC Address.");
++                importStalkerMac.focus();
++                return;
++            }
++            const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
++            if (!macRegex.test(mac)) {
++                showToast("Invalid MAC Address format.\nExample: 00:1A:79:00:11:22");
++                importStalkerMac.focus();
++                return;
++            }
++            epgSource = `stalker:${mac.toUpperCase()}`;
++        } else if (currentImportMode === 'file') {
+             source = importFilePath.value.trim();
+             if (!source) {
+                 showToast("Please select a file location.");
+                 return;
+             }
++            epgSource = importEpgInput ? importEpgInput.value.trim() : '';
+         } else {
+             source = importUrlPath.value.trim();
+             if (!source) {
+@@ -1895,9 +1994,8 @@ if (importSubmitBtn) {
+                 importUrlPath.focus();
+                 return;
+             }
++            epgSource = importEpgInput ? importEpgInput.value.trim() : '';
+         }
+-
+-        let epgSource = importEpgInput ? importEpgInput.value.trim() : '';
+         
+         const originalText = importSubmitBtn.textContent;
+         importSubmitBtn.textContent = 'Importing...';
+@@ -1916,6 +2014,8 @@ if (importSubmitBtn) {
+         importNameInput.value = '';
+         importFilePath.value = '';
+         importUrlPath.value = '';
++        if (importStalkerUrl) importStalkerUrl.value = '';
++        if (importStalkerMac) importStalkerMac.value = '';
+         if (importEpgInput) importEpgInput.value = '';
+     });
+ }
+@@ -1930,6 +2030,8 @@ if (importCancelBtn) {
+         if (importNameInput) importNameInput.value = '';
+         if (importFilePath) importFilePath.value = '';
+         if (importUrlPath) importUrlPath.value = '';
++        if (importStalkerUrl) importStalkerUrl.value = '';
++        if (importStalkerMac) importStalkerMac.value = '';
+         if (importEpgInput) importEpgInput.value = '';
+     });
+ }
+@@ -3097,6 +3199,8 @@ function switchTab(tabId, clickedBtn) {
+     const isPlaylist = tabId === 'playlist';
+     const isEpg = tabId === 'epg';
+     const isSettings = tabId === 'settings';
++    const isMovies = tabId === 'movies';
++    const isVod = tabId === 'vod';
+ 
+     if (sidebar) sidebar.style.setProperty('display', isLive ? 'flex' : 'none', 'important');
+     if (mainView) mainView.style.setProperty('display', isLive ? 'flex' : 'none', 'important');
+@@ -3114,6 +3218,14 @@ function switchTab(tabId, clickedBtn) {
+ 
+     if (isSettings) renderSettings();
+ 
++    const moviesView = document.getElementById('movies-view');
++    if (moviesView) moviesView.style.setProperty('display', isMovies ? 'flex' : 'none', 'important');
++    if (isMovies) renderMovies();
++
++    const vodView = document.getElementById('vod-view');
++    if (vodView) vodView.style.setProperty('display', isVod ? 'flex' : 'none', 'important');
++    if (isVod) renderVod();
++
+     // Explicitly hide or restore the video player bounds instantly when switching views
+     if (streamActive) {
+         if (isLive) {
+@@ -3141,47 +3253,284 @@ document.getElementById('btn-live-tv').addEventListener('click', function() { if
+ document.getElementById('btn-playlist').addEventListener('click', function() { switchTab('playlist', this); });
+ document.getElementById('btn-epg').addEventListener('click', function() { if (!this.disabled) switchTab('epg', this); });
+ document.getElementById('btn-settings').addEventListener('click', function() { if (!this.disabled) switchTab('settings', this); });
++document.getElementById('btn-movies').addEventListener('click', function() { if (!this.disabled) switchTab('movies', this); });
++document.getElementById('btn-vod').addEventListener('click', function() { if (!this.disabled) switchTab('vod', this); });
++document.getElementById('btn-recording').addEventListener('click', function() { showToast('Coming in Next Version'); });
++
++function renderMovies() {
++    console.log('[CATALOG] Rendering Movies Catalog');
++    const grid = document.getElementById('movies-grid');
++    const empty = document.getElementById('movies-empty');
++    if (!grid) return;
++    grid.innerHTML = '';
++    
++    let movies = [];
++    savedPlaylists.forEach(p => {
++        if (p.channels && !p.disabled) {
++            p.channels.forEach(c => {
++                if (c.type === 'movie' && !c.disabled) {
++                    c.playlistId = p.id;
++                    movies.push(c);
++                }
++            });
++        }
++    });
+ 
+-// Inject "Coming Soon" buttons
+-const navBarNode = document.getElementById('nav-bar');
+-if (navBarNode) {
+-    const comingSoonIcons = {
+-        'Movies': '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M18 4v1h-2V4c0-.55-.45-1-1-1H9c-.55 0-1 .45-1 1v1H6V4c0-.55-.45-1-1-1s-1 .45-1 1v16c0 .55.45 1 1 1s1-.45 1-1v-1h2v1c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-1h2v1c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1s-1 .45-1 1zM8 17H6v-2h2v2zm0-4H6v-2h2v2zm0-4H6V7h2v2zm10 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z"/></svg>',
+-        'VOD': '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>',
+-        'Recording': '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm4-8c0 2.21-1.79 4-4 4s-4-1.79-4-4 1.79-4 4-4 4 1.79 4 4z"/></svg>'
+-    };
+-    
+-    ['Movies', 'VOD', 'Recording'].forEach(name => {
+-        const btn = document.createElement('button');
+-        btn.id = `btn-${name.toLowerCase()}`;
+-        btn.className = 'nav-btn';
+-        btn.title = name;
+-        btn.style.padding = '12px';
+-        btn.style.display = 'flex';
+-        btn.style.alignItems = 'center';
+-        btn.style.justifyContent = 'center';
+-        btn.innerHTML = comingSoonIcons[name] || `<span style="font-weight: bold;">${name}</span>`;
+-        btn.addEventListener('click', function() {
+-            if (!this.disabled) showToast('Coming in Next Version');
++    if (movies.length === 0) {
++        if (empty) empty.style.display = 'block';
++        return;
++    }
++    if (empty) empty.style.display = 'none';
++
++    movies.sort((a, b) => sortAlphaNum(a.title, b.title));
++
++    movies.forEach(movie => {
++        const card = document.createElement('div');
++        card.className = 'catalog-card';
++        const logoUrl = movie.logo || 'assets/logo.ico';
++        card.innerHTML = `
++            <div class="catalog-poster-wrapper">
++                <img class="catalog-poster" src="${logoUrl}" alt="${movie.title}" onerror="this.onerror=null; this.src='assets/logo.ico';">
++            </div>
++            <div class="catalog-info">
++                <h4 class="catalog-title" title="${movie.title}">${movie.title}</h4>
++                <div class="catalog-meta">
++                    <span class="catalog-badge">Movie</span>
++                </div>
++            </div>
++        `;
++        card.addEventListener('click', () => {
++            console.log('[CATALOG] Playing Movie:', movie.title);
++            switchTab('live-tv', document.getElementById('btn-live-tv'));
++            embedStream(movie);
+         });
+-        navBarNode.appendChild(btn);
+-    });
++        grid.appendChild(card);
++    });
++
++    const searchInput = document.getElementById('movies-search');
++    if (searchInput) {
++        searchInput.replaceWith(searchInput.cloneNode(true));
++        const newSearchInput = document.getElementById('movies-search');
++        newSearchInput.value = '';
++        newSearchInput.addEventListener('keyup', (e) => {
++            const query = e.target.value.toLowerCase().trim();
++            const cards = grid.querySelectorAll('.catalog-card');
++            cards.forEach(card => {
++                const title = card.querySelector('.catalog-title').textContent.toLowerCase();
++                if (title.includes(query)) {
++                    card.style.display = 'flex';
++                } else {
++                    card.style.display = 'none';
++                }
++            });
++        });
++    }
++}
+ 
+-    // Re-order and flatten all buttons into a single group under #nav-bar
+-    const btnOrder = ['btn-live-tv', 'btn-playlist', 'btn-epg', 'btn-movies', 'btn-vod', 'btn-recording', 'btn-settings', 'btn-exit'];
+-    btnOrder.forEach(id => {
+-        const btn = document.getElementById(id);
+-        if (btn) navBarNode.appendChild(btn);
++function renderVod() {
++    console.log('[CATALOG] Rendering VOD/Series Catalog');
++    const grid = document.getElementById('vod-grid');
++    const empty = document.getElementById('vod-empty');
++    if (!grid) return;
++    grid.innerHTML = '';
++    
++    let series = [];
++    savedPlaylists.forEach(p => {
++        if (p.channels && !p.disabled) {
++            p.channels.forEach(c => {
++                if (c.type === 'vod' && !c.disabled) {
++                    c.playlistId = p.id;
++                    series.push(c);
++                }
++            });
++        }
+     });
+ 
+-    // Clean up empty grouping divs
+-    Array.from(navBarNode.children).forEach(child => {
+-        if (child.tagName === 'DIV' && child.children.length === 0) {
+-            child.remove();
++    if (series.length === 0) {
++        if (empty) empty.style.display = 'block';
++        return;
++    }
++    if (empty) empty.style.display = 'none';
++
++    series.sort((a, b) => sortAlphaNum(a.title, b.title));
++
++    series.forEach(s => {
++        const card = document.createElement('div');
++        card.className = 'catalog-card';
++        const logoUrl = s.logo || 'assets/logo.ico';
++        card.innerHTML = `
++            <div class="catalog-poster-wrapper">
++                <img class="catalog-poster" src="${logoUrl}" alt="${s.title}" onerror="this.onerror=null; this.src='assets/logo.ico';">
++            </div>
++            <div class="catalog-info">
++                <h4 class="catalog-title" title="${s.title}">${s.title}</h4>
++                <div class="catalog-meta">
++                    <span class="catalog-badge">Series</span>
++                </div>
++            </div>
++        `;
++        card.addEventListener('click', () => {
++            console.log('[CATALOG] Opening Series Episodes:', s.title);
++            openEpisodesModal(s.playlistId, s.tvg_id, s.title);
++        });
++        grid.appendChild(card);
++    });
++
++    const searchInput = document.getElementById('vod-search');
++    if (searchInput) {
++        searchInput.replaceWith(searchInput.cloneNode(true));
++        const newSearchInput = document.getElementById('vod-search');
++        newSearchInput.value = '';
++        newSearchInput.addEventListener('keyup', (e) => {
++            const query = e.target.value.toLowerCase().trim();
++            const cards = grid.querySelectorAll('.catalog-card');
++            cards.forEach(card => {
++                const title = card.querySelector('.catalog-title').textContent.toLowerCase();
++                if (title.includes(query)) {
++                    card.style.display = 'flex';
++                } else {
++                    card.style.display = 'none';
++                }
++            });
++        });
++    }
++}
++
++async function openEpisodesModal(playlistId, seriesId, seriesTitle) {
++    console.log('[UI] Opening episodes modal for:', seriesTitle, 'playlist:', playlistId, 'seriesId:', seriesId);
++    
++    const modal = document.getElementById('episodes-modal');
++    const modalTitle = document.getElementById('episodes-modal-title');
++    const seasonsSidebar = document.getElementById('seasons-sidebar');
++    const episodesGrid = document.getElementById('episodes-grid');
++    const loader = document.getElementById('episodes-loading');
++    
++    if (!modal) return;
++    
++    modalTitle.textContent = seriesTitle;
++    if (seasonsSidebar) seasonsSidebar.innerHTML = '';
++    if (episodesGrid) episodesGrid.innerHTML = '';
++    if (loader) loader.style.display = 'block';
++    
++    modal.style.display = 'flex';
++    
++    try {
++        const playlist = savedPlaylists.find(p => p.id.toString() === playlistId.toString());
++        if (!playlist || !playlist.epg || !playlist.epg.startsWith('stalker:')) {
++            throw new Error("Stalker playlist credentials not found.");
+         }
+-    });
++        
++        const url = playlist.source;
++        const mac = playlist.epg.substring(8);
++        
++        console.log('[API] Fetching episodes for series:', seriesId);
++        const episodes = await window.iptvAPI.getStalkerEpisodes({ url, mac, seriesId });
++        
++        if (loader) loader.style.display = 'none';
++        
++        if (!episodes || episodes.length === 0) {
++            if (episodesGrid) episodesGrid.innerHTML = '<div style="color: #888; padding: 20px;">No episodes found for this series.</div>';
++            return;
++        }
++        
++        const seasons = {};
++        episodes.forEach(ep => {
++            const sNum = ep.season || 1;
++            if (!seasons[sNum]) {
++                seasons[sNum] = [];
++            }
++            seasons[sNum].push(ep);
++        });
++        
++        Object.keys(seasons).forEach(sNum => {
++            seasons[sNum].sort((a, b) => parseInt(a.episodeNum || 0) - parseInt(b.episodeNum || 0));
++        });
++        
++        const sortedSeasons = Object.keys(seasons).sort((a, b) => parseInt(a) - parseInt(b));
++        
++        const renderSeasonEpisodes = (seasonNum) => {
++            if (!episodesGrid) return;
++            episodesGrid.innerHTML = '';
++            
++            const seasonEpisodes = seasons[seasonNum] || [];
++            seasonEpisodes.forEach(ep => {
++                const epCard = document.createElement('button');
++                epCard.className = 'episode-card';
++                epCard.style.width = '100%';
++                epCard.style.textAlign = 'left';
++                
++                epCard.innerHTML = `
++                    <div class="episode-num">${ep.episodeNum || ''}</div>
++                    <div class="episode-name" title="${ep.name}">${ep.name || `Episode ${ep.episodeNum}`}</div>
++                `;
++                
++                epCard.addEventListener('click', () => {
++                    console.log('[CATALOG] Playing Series Episode:', ep.name, ep.url);
++                    modal.style.display = 'none';
++                    switchTab('live-tv', document.getElementById('btn-live-tv'));
++                    
++                    const seriesPoster = playlist.channels.find(c => c.tvg_id === seriesId)?.logo || 'assets/logo.ico';
++                    embedStream({
++                        title: `${seriesTitle} - S${seasonNum}E${ep.episodeNum} - ${ep.name || 'Episode'}`,
++                        url: ep.url,
++                        logo: seriesPoster
++                    });
++                });
++                
++                episodesGrid.appendChild(epCard);
++            });
++        };
++        
++        if (seasonsSidebar) {
++            sortedSeasons.forEach((seasonNum, index) => {
++                const tab = document.createElement('button');
++                tab.className = `season-tab ${index === 0 ? 'active' : ''}`;
++                tab.textContent = `Season ${seasonNum}`;
++                
++                tab.addEventListener('click', () => {
++                    document.querySelectorAll('.season-tab').forEach(t => t.classList.remove('active'));
++                    tab.classList.add('active');
++                    renderSeasonEpisodes(seasonNum);
++                });
++                
++                seasonsSidebar.appendChild(tab);
++            });
++        }
++        
++        if (sortedSeasons.length > 0) {
++            renderSeasonEpisodes(sortedSeasons[0]);
++        }
++        
++    } catch (err) {
++        console.error('[UI ERR] Failed to open episodes modal:', err);
++        if (loader) loader.style.display = 'none';
++        if (episodesGrid) episodesGrid.innerHTML = `<div style="color: #cf6679; padding: 20px;">Error: ${err.message}</div>`;
++    }
+ }
+ 
++// Modal closing setup
++document.addEventListener('DOMContentLoaded', () => {
++    const modal = document.getElementById('episodes-modal');
++    const closeBtn = document.getElementById('episodes-modal-close');
++    if (closeBtn && modal) {
++        closeBtn.addEventListener('click', () => {
++            modal.style.display = 'none';
++        });
++        modal.addEventListener('click', (e) => {
++            if (e.target === modal) {
++                modal.style.display = 'none';
++            }
++        });
++    }
++    document.addEventListener('keydown', (e) => {
++        if (e.key === 'Escape') {
++            if (modal && modal.style.display === 'flex') {
++                modal.style.display = 'none';
++            }
++        }
++    });
++});
++
+ // Hide the sidebar & title when the app goes fullscreen so the video takes up 100% of the monitor
+ window.iptvAPI.onFullscreenChange((isFullscreen) => {
+     console.log('[API RECV] onFullscreenChange, isFullscreen:', isFullscreen);
+@@ -3229,9 +3578,19 @@ async function backgroundAutoUpdate() {
+     for (let i = 0; i < savedPlaylists.length; i++) {
+         const p = savedPlaylists[i];
+         console.log(`[BACKGROUND] Checking playlist for update: ${p.name}`);
+-        if (p.disabled || !p.source || (!p.source.startsWith('http') && !p.source.startsWith('https'))) continue;
++        if (p.disabled || !p.source) continue;
++        
++        const isStalker = p.epg && p.epg.startsWith('stalker:');
++        if (!isStalker && !p.source.startsWith('http') && !p.source.startsWith('https')) continue;
++
++        let result;
++        if (isStalker) {
++            console.log(`[BACKGROUND] Calling parseStalker for background update: ${p.name}`);
++            result = await window.iptvAPI.parseStalker({ url: p.source, mac: p.epg.substring(8) });
++        } else {
++            result = await window.iptvAPI.parseM3u(p.source);
++        }
+ 
+-        const result = await window.iptvAPI.parseM3u(p.source);
+         if (result && !result.error && (Array.isArray(result) || result.channels)) {
+             const channels = Array.isArray(result) ? result : result.channels;
+             const oldMap = new Map();
+@@ -3246,12 +3605,12 @@ async function backgroundAutoUpdate() {
+             });
+ 
+             savedPlaylists[i].channels = channels;
+-            if (result.epg_url && (!savedPlaylists[i].epg || savedPlaylists[i].epg === 'Not Configured')) {
++            if (!isStalker && result.epg_url && (!savedPlaylists[i].epg || savedPlaylists[i].epg === 'Not Configured')) {
+                 savedPlaylists[i].epg = result.epg_url;
+             }
+             hasUpdates = true;
+             
+-            if (p.epg && p.epg !== 'Not Configured') epgSourcesToUpdate.add(p.epg);
++            if (!isStalker && p.epg && p.epg !== 'Not Configured') epgSourcesToUpdate.add(p.epg);
+         }
+     }
+     
+@@ -3267,30 +3626,7 @@ async function backgroundAutoUpdate() {
+             await autoMapChannels(false, true); // SKIP SAVE
+             console.log('[BACKGROUND] EPG data updated.');
+             
+-            const epgIdsToFetch = new Set();
+-            savedPlaylists.forEach(p => {
+-                if (p.channels) {
+-                    p.channels.forEach(ch => {
+-                        const mappedId = channelMappings[ch.title];
+-                        if (mappedId) epgIdsToFetch.add(mappedId);
+-                        else {
+-                            if (ch.tvg_id) epgIdsToFetch.add(ch.tvg_id);
+-                            if (ch.tvg_name) epgIdsToFetch.add(ch.tvg_name);
+-                        }
+-                    });
+-                }
+-            });
+-            const epgData = await window.iptvAPI.getEpg(Array.from(epgIdsToFetch), null, null);
+-            savedPlaylists.forEach(p => {
+-                if (p.channels) {
+-                    p.channels.forEach(ch => {
+-                        const mappedId = channelMappings[ch.title];
+-                        if (mappedId && epgData[mappedId]) ch.epg_programmes = epgData[mappedId];
+-                        else if (ch.tvg_id && epgData[ch.tvg_id]) ch.epg_programmes = epgData[ch.tvg_id];
+-                        else if (ch.tvg_name && epgData[ch.tvg_name]) ch.epg_programmes = epgData[ch.tvg_name];
+-                    });
+-                }
+-            });
++            // EPG preloading skipped to load only on view.
+             updateState(); // FINAL SAVE
+         } else {
+             updateState(); // FINAL SAVE

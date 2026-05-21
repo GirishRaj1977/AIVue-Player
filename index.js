@@ -1588,163 +1588,316 @@ ipcMain.handle('load-channels', (event) => {
 });
 
 // Stalker Portal Helper & Handles
-async function stalkerRequest(baseUrl, mac, action, extraParams = {}) {
-    const url = baseUrl.trim().includes('/c/') ? baseUrl.trim().replace('/c/', '/portal.php') : 
-                (baseUrl.trim().includes('/c') ? baseUrl.trim().replace('/c', '/portal.php') : 
-                (baseUrl.trim().endsWith('.php') ? baseUrl.trim() : (baseUrl.trim().endsWith('/') ? baseUrl.trim() + 'portal.php' : baseUrl.trim() + '/portal.php')));
+function getStalkerUrl(baseUrl) {
+    return baseUrl.trim().includes('/c/') ? baseUrl.trim().replace('/c/', '/portal.php') : 
+           (baseUrl.trim().includes('/c') ? baseUrl.trim().replace('/c', '/portal.php') : 
+           (baseUrl.trim().endsWith('.php') ? baseUrl.trim() : (baseUrl.trim().endsWith('/') ? baseUrl.trim() + 'portal.php' : baseUrl.trim() + '/portal.php')));
+}
 
-    const handshakeUrl = `${url}?type=stb&action=handshake&key=&js=true`;
-    console.log('[STALKER] Handshake request:', handshakeUrl);
+async function runInChunks(items, chunkSize, asyncFn) {
+    for (let i = 0; i < items.length; i += chunkSize) {
+        const chunk = items.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(asyncFn));
+    }
+}
+
+const stalkerTokens = new Map();
+const stalkerAuthPromises = new Map();
+
+async function authenticateStalker(baseUrl, mac) {
+    const url = getStalkerUrl(baseUrl);
+    const cacheKey = `${url}|${mac}`;
+    
+    if (stalkerTokens.has(cacheKey)) {
+        const cached = stalkerTokens.get(cacheKey);
+        if (Date.now() - cached.timestamp < 3600000) {
+            return cached;
+        }
+    }
+
+    if (stalkerAuthPromises.has(cacheKey)) {
+        return await stalkerAuthPromises.get(cacheKey);
+    }
+
+    const authPromise = (async () => {
+        const handshakeUrl = `${url}?type=stb&action=handshake&key=&js=true`;
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stb frameBuffer/0.1.0 Safari/533.3',
+            'X-User-Agent': 'model=MAG250; link=ethernet'
+        };
+
+        let phpSessionId = '';
+        let token = '';
+        
+        try {
+            const response = await fetch(handshakeUrl, { headers });
+            const setCookie = response.headers.get('set-cookie');
+            if (setCookie) {
+                const match = setCookie.match(/PHPSESSID=([^;]+)/);
+                if (match) phpSessionId = match[1];
+            }
+            const handshakeData = await response.json();
+            token = handshakeData.js?.token || '';
+        } catch (e) {
+            console.error('[STALKER ERR] Handshake failed:', e.message);
+        }
+        
+        const cookieHeader = `mac=${mac}` + (phpSessionId ? `; PHPSESSID=${phpSessionId}` : '');
+        const authHeaders = {
+            ...headers,
+            'Cookie': cookieHeader
+        };
+        
+        const profileUrl = `${url}?type=stb&action=get_profile&mac=${encodeURIComponent(mac)}&hd=1&auth_second_step=1`;
+        try {
+            const response = await fetch(profileUrl, { headers: authHeaders });
+            const profileData = await response.json();
+            if (profileData.js?.token) {
+                token = profileData.js.token;
+            }
+        } catch (e) {
+            console.error('[STALKER ERR] Profile auth failed:', e.message);
+        }
+        
+        const session = { phpSessionId, token, timestamp: Date.now() };
+        stalkerTokens.set(cacheKey, session);
+        stalkerAuthPromises.delete(cacheKey);
+        return session;
+    })();
+
+    stalkerAuthPromises.set(cacheKey, authPromise);
+    return await authPromise;
+}
+
+async function stalkerRequest(baseUrl, mac, action, extraParams = {}) {
+    const url = getStalkerUrl(baseUrl);
+    const session = await authenticateStalker(baseUrl, mac);
     
     const headers = {
         'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stb frameBuffer/0.1.0 Safari/533.3',
         'X-User-Agent': 'model=MAG250; link=ethernet'
     };
-
-    let phpSessionId = '';
-    let token = '';
     
-    try {
-        const response = await fetch(handshakeUrl, { headers });
-        const setCookie = response.headers.get('set-cookie');
-        if (setCookie) {
-            const match = setCookie.match(/PHPSESSID=([^;]+)/);
-            if (match) phpSessionId = match[1];
-        }
-        const handshakeData = await response.json();
-        token = handshakeData.js?.token || '';
-    } catch (e) {
-        console.error('[STALKER ERR] Handshake failed:', e.message);
-    }
-    
-    const cookieHeader = phpSessionId ? `PHPSESSID=${phpSessionId}` : '';
-    const authHeaders = {
-        ...headers,
-        ...(cookieHeader ? { 'Cookie': cookieHeader } : {})
-    };
-    
-    const profileUrl = `${url}?type=stb&action=get_profile&mac=${encodeURIComponent(mac)}&hd=1&auth_second_step=1`;
-    console.log('[STALKER] Profile/Auth request:', profileUrl);
-    
-    try {
-        const response = await fetch(profileUrl, { headers: authHeaders });
-        const profileData = await response.json();
-        if (profileData.js?.token) {
-            token = profileData.js.token;
-        }
-    } catch (e) {
-        console.error('[STALKER ERR] Profile auth failed:', e.message);
-    }
-    
+    const cookieHeader = `mac=${mac}` + (session.phpSessionId ? `; PHPSESSID=${session.phpSessionId}` : '');
     const reqHeaders = {
         ...headers,
-        ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        'Cookie': cookieHeader,
+        ...(session.token ? { 'Authorization': `Bearer ${session.token}` } : {})
     };
     
-    let queryParams = `type=${extraParams.type || 'itv'}&action=${action}`;
+    let queryParams = `type=${extraParams.type || 'itv'}&action=${action}&mac=${encodeURIComponent(mac)}`;
     for (const [k, v] of Object.entries(extraParams)) {
         if (k !== 'type') queryParams += `&${k}=${encodeURIComponent(v)}`;
     }
     
     const requestUrl = `${url}?${queryParams}`;
-    console.log('[STALKER] API request:', requestUrl);
-    
-    const response = await fetch(requestUrl, { headers: reqHeaders });
-    return await response.json();
+    try {
+        const response = await fetch(requestUrl, { headers: reqHeaders });
+        const text = await response.text();
+        if (!text || !text.trim()) return {};
+        return JSON.parse(text);
+    } catch (err) {
+        console.error(`[STALKER ERR] Failed to parse JSON for ${action}:`, err.message);
+        return {}; // Return an empty object to prevent breaking the Promise.all chain
+    }
 }
+
+async function fetchAllStalkerPages(baseUrl, mac, action, extraParams) {
+    const firstPageRes = await stalkerRequest(baseUrl, mac, action, { ...extraParams, p: 1 });
+    let data = firstPageRes.js?.data || (Array.isArray(firstPageRes.js) ? firstPageRes.js : []);
+    let allItems = [...data];
+    
+    let totalItems = firstPageRes.js?.total_items ? parseInt(firstPageRes.js.total_items, 10) : 0;
+    let itemsPerPage = data.length;
+    
+    if (totalItems > 0 && itemsPerPage > 0) {
+        let totalPages = Math.ceil(totalItems / itemsPerPage);
+        if (totalPages > 1) {
+            console.log(`[STALKER] Fetching ${totalPages - 1} additional pages for ${action} (${totalItems} total items)...`);
+            const chunkSize = 5; // Concurrency limit to prevent overwhelming the portal
+            for (let i = 2; i <= totalPages; i += chunkSize) {
+                const chunkPromises = [];
+                for (let p = i; p < i + chunkSize && p <= totalPages; p++) {
+                    chunkPromises.push(stalkerRequest(baseUrl, mac, action, { ...extraParams, p }));
+                }
+                const results = await Promise.all(chunkPromises);
+                for (const res of results) {
+                    let chunkData = res.js?.data || (Array.isArray(res.js) ? res.js : []);
+                    allItems.push(...chunkData);
+                }
+            }
+        }
+    }
+    
+    const uniqueItems = [];
+    const seenIds = new Set();
+    for (const item of allItems) {
+        const id = item.id || item.ch_id || item.cmd;
+        if (id && !seenIds.has(id)) {
+            seenIds.add(id);
+            uniqueItems.push(item);
+        } else if (!id) {
+            uniqueItems.push(item);
+        }
+    }
+    
+    return uniqueItems;
+}
+
+ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd }) => {
+    try {
+        console.log('[STALKER IPC] Resolving link for:', { url, mac, type, cmd });
+        const res = await stalkerRequest(url, mac, 'create_link', { type, cmd });
+        let finalUrl = res.js?.cmd || res.js?.url || '';
+        
+        if (!finalUrl) {
+            console.error('[STALKER IPC] Could not find stream URL in response', res);
+            return null;
+        }
+
+        // Strip the ffmpeg wrapper if Stalker serves it natively
+        if (finalUrl.toLowerCase().startsWith('ffmpeg ')) {
+            finalUrl = finalUrl.substring(7).trim();
+        }
+        
+        // Re-construct into absolute URLs if the portal provides an incomplete route
+        if (finalUrl && !finalUrl.startsWith('http')) {
+            try {
+                const parsed = new URL(url);
+                finalUrl = `${parsed.protocol}//${parsed.host}${finalUrl.startsWith('/') ? '' : '/'}${finalUrl}`;
+            } catch (err) {}
+        } else if (finalUrl) {
+            try {
+                const parsedFinal = new URL(finalUrl);
+                if (parsedFinal.hostname === 'localhost' || parsedFinal.hostname === '127.0.0.1') {
+                    const parsedPortal = new URL(url);
+                    parsedFinal.hostname = parsedPortal.hostname;
+                    finalUrl = parsedFinal.toString();
+                }
+            } catch (err) {}
+        }
+        
+        return finalUrl;
+    } catch (e) {
+        console.error('[STALKER IPC] Resolving link failed:', e);
+        return null;
+    }
+});
 
 ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
     try {
         console.log('[STALKER IPC] Starting Stalker parsing for url:', url, 'mac:', mac);
         
-        let categories = {};
+        let allParsed = [];
+
+        // 1. Fetch ITV Categories (Genres)
+        let itvCategories = [];
         try {
-            const catRes = await stalkerRequest(url, mac, 'get_categories', { type: 'itv' });
-            const catList = catRes.js || [];
-            catList.forEach(c => {
-                categories[c.id] = c.name;
-            });
+            const catRes = await stalkerRequest(url, mac, 'get_genres', { type: 'itv' });
+            const catData = catRes.js?.data || (Array.isArray(catRes.js) ? catRes.js : []);
+            itvCategories = catData.map(c => ({ id: c.id, name: c.title || c.name || 'Live TV' }));
         } catch (e) {
             console.error('[STALKER] Failed to load ITV categories:', e);
         }
 
-        let channels = [];
-        try {
-            const chRes = await stalkerRequest(url, mac, 'get_all_channels', { type: 'itv' });
-            const chList = chRes.js || [];
-            channels = chList.map(c => {
-                let streamUrl = '';
-                const match = c.cmd ? c.cmd.match(/(https?:\/\/[^\s]+)/) : null;
-                if (match) {
-                    streamUrl = match[1];
-                } else {
-                    streamUrl = c.cmd || '';
-                }
-                
-                return {
-                    tvg_id: c.tvg_id || '',
-                    tvg_name: c.name || '',
-                    title: c.name || 'Unknown Channel',
-                    logo: c.logo ? (c.logo.startsWith('http') ? c.logo : `${url.substring(0, url.lastIndexOf('/'))}/${c.logo}`) : '',
-                    group: categories[c.category_id] || 'Live TV',
-                    url: streamUrl,
-                    type: 'live'
-                };
-            });
-        } catch (e) {
-            console.error('[STALKER] Failed to load ITV channels:', e);
+        await runInChunks(itvCategories, 4, async (cat) => {
+            try {
+                const chList = await fetchAllStalkerPages(url, mac, 'get_ordered_list', { type: 'itv', genre: cat.id });
+                chList.forEach(c => {
+                    allParsed.push({
+                        tvg_id: c.tvg_id || '',
+                        tvg_name: c.name || '',
+                        title: c.name || 'Unknown Channel',
+                        logo: c.logo ? (c.logo.startsWith('http') ? c.logo : `${url.substring(0, url.lastIndexOf('/'))}/${c.logo}`) : '',
+                        group: cat.name,
+                        url: `stalker-cmd:itv|${c.cmd || ''}`,
+                        type: 'live'
+                    });
+                });
+            } catch (e) {
+                console.error(`[STALKER] Failed to load channels for genre ${cat.id}:`, e);
+            }
+        });
+        
+        // Fallback for ITV
+        if (itvCategories.length === 0) {
+            try {
+                const chList = await fetchAllStalkerPages(url, mac, 'get_all_channels', { type: 'itv' });
+                chList.forEach(c => {
+                    allParsed.push({
+                        tvg_id: c.tvg_id || '',
+                        tvg_name: c.name || '',
+                        title: c.name || 'Unknown Channel',
+                        logo: c.logo ? (c.logo.startsWith('http') ? c.logo : `${url.substring(0, url.lastIndexOf('/'))}/${c.logo}`) : '',
+                        group: 'Live TV',
+                        url: `stalker-cmd:itv|${c.cmd || ''}`,
+                        type: 'live'
+                    });
+                });
+            } catch (e) {
+                console.error('[STALKER] Fallback get_all_channels failed:', e);
+            }
         }
 
-        let movies = [];
+        // 2. Fetch VOD Categories
+        let vodCategories = [];
         try {
-            const movieRes = await stalkerRequest(url, mac, 'get_ordered_list', { type: 'vod', category: 'all' });
-            const movieList = movieRes.js?.data || [];
-            movies = movieList.map(m => {
-                let streamUrl = '';
-                const match = m.cmd ? m.cmd.match(/(https?:\/\/[^\s]+)/) : null;
-                if (match) {
-                    streamUrl = match[1];
-                } else {
-                    streamUrl = m.cmd || '';
-                }
-                
-                return {
-                    tvg_id: m.id || '',
-                    tvg_name: m.name || '',
-                    title: m.name || 'Unknown Movie',
-                    logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
-                    group: 'Movies',
-                    url: streamUrl,
-                    type: 'movie'
-                };
-            });
+            const catRes = await stalkerRequest(url, mac, 'get_categories', { type: 'vod' });
+            const catData = catRes.js?.data || (Array.isArray(catRes.js) ? catRes.js : []);
+            vodCategories = catData.map(c => ({ id: c.id, name: c.title || c.name || c.category_name || 'VOD' }));
         } catch (e) {
-            console.error('[STALKER] Failed to load Movies:', e);
+            console.error('[STALKER] Failed to load VOD categories:', e);
         }
 
-        let series = [];
-        try {
-            const seriesRes = await stalkerRequest(url, mac, 'get_ordered_list', { type: 'series', category: 'all' });
-            const seriesList = seriesRes.js?.data || [];
-            series = seriesList.map(s => {
-                return {
-                    tvg_id: s.id || '',
-                    tvg_name: s.name || '',
-                    title: s.name || 'Unknown Series',
-                    logo: s.logo ? (s.logo.startsWith('http') ? s.logo : `${url.substring(0, url.lastIndexOf('/'))}/${s.logo}`) : '',
-                    group: 'Series',
-                    url: `stalker-series:${s.id}`,
-                    type: 'vod'
-                };
-            });
-        } catch (e) {
-            console.error('[STALKER] Failed to load Series:', e);
+        await runInChunks(vodCategories, 4, async (cat) => {
+            try {
+                const itemList = await fetchAllStalkerPages(url, mac, 'get_ordered_list', { type: 'vod', category: cat.id });
+                itemList.forEach(m => {
+                    const isSeries = m.is_series == 1 || m.is_series == "1" || m.is_series == true;
+                    if (isSeries) {
+                        allParsed.push({
+                            tvg_id: m.id || '',
+                            tvg_name: m.name || '',
+                            title: m.name || 'Unknown Series',
+                            logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
+                            group: cat.name,
+                            url: `stalker-series:${m.id}`,
+                            type: 'vod'
+                        });
+                    } else {
+                        allParsed.push({
+                            tvg_id: m.id || '',
+                            tvg_name: m.name || '',
+                            title: m.name || 'Unknown Movie',
+                            logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
+                            group: cat.name,
+                            url: `stalker-cmd:vod|${m.cmd || ''}`,
+                            type: 'movie'
+                        });
+                    }
+                });
+            } catch (e) {
+                console.error(`[STALKER] Failed to load items for VOD category ${cat.id}:`, e);
+            }
+        });
+        
+        // Remove duplicates
+        const uniqueParsed = [];
+        const seenSet = new Set();
+        for (const item of allParsed) {
+            const key = `${item.type}-${item.url || item.title}`;
+            if (!seenSet.has(key)) {
+                seenSet.add(key);
+                uniqueParsed.push(item);
+            }
+        }
+        
+        if (uniqueParsed.length === 0) {
+            return { error: "Authentication failed or no channels found for the provided MAC address." };
         }
 
-        const allParsed = [...channels, ...movies, ...series];
-        console.log(`[STALKER IPC] Successfully imported ${channels.length} channels, ${movies.length} movies, ${series.length} series.`);
-        return { channels: allParsed };
+        console.log(`[STALKER IPC] Successfully imported ${uniqueParsed.length} items.`);
+        return { channels: uniqueParsed };
     } catch (e) {
         console.error('[STALKER IPC ERR] Failed to parse stalker portal:', e);
         return { error: e.message };
@@ -1754,22 +1907,14 @@ ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
 ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => {
     try {
         console.log('[STALKER IPC] Fetching episodes for series:', seriesId);
-        const res = await stalkerRequest(url, mac, 'get_ordered_list', { type: 'series', movie_id: seriesId });
-        const episodes = res.js?.data || [];
+        const episodes = await fetchAllStalkerPages(url, mac, 'get_ordered_list', { type: 'series', movie_id: seriesId });
         return episodes.map(e => {
-            let streamUrl = '';
-            const match = e.cmd ? e.cmd.match(/(https?:\/\/[^\s]+)/) : null;
-            if (match) {
-                streamUrl = match[1];
-            } else {
-                streamUrl = e.cmd || '';
-            }
             return {
                 id: e.id,
                 name: e.name || `Episode ${e.series_number || ''}`,
                 season: e.season_number || 1,
                 episodeNum: e.series_number || 1,
-                url: streamUrl
+                url: `stalker-cmd:vod|${e.cmd || ''}`
             };
         });
     } catch (e) {

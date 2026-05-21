@@ -39,5 +39,6 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     syncRemoteSearch: (text) => ipcRenderer.send('sync-remote-search', text),
     focusRemoteSearch: () => ipcRenderer.send('focus-remote-search'),
     parseStalker: (params) => ipcRenderer.invoke('parse-stalker', params),
-    getStalkerEpisodes: (params) => ipcRenderer.invoke('get-stalker-episodes', params)
+    getStalkerEpisodes: (params) => ipcRenderer.invoke('get-stalker-episodes', params),
+    resolveStalkerLink: (params) => ipcRenderer.invoke('resolve-stalker-link', params)
 });
