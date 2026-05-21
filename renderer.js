@@ -1127,8 +1127,13 @@ function updateState(skipSave = false) {
     savedPlaylists.sort((a, b) => sortAlphaNum(a.name, b.name));
 
     const filterSelect = document.getElementById('playlist-filter');
-    const currentFilter = filterSelect ? filterSelect.value : 'all';
+    let currentFilter = 'all';
     if (filterSelect) {
+        currentFilter = filterSelect.value;
+        if (currentFilter === 'all' && !window.initialFilterLoaded) {
+            currentFilter = localStorage.getItem('iptv_playlist_filter') || 'all';
+            window.initialFilterLoaded = true;
+        }
         filterSelect.innerHTML = '<option value="all">All Merged</option><option value="favs">Favourites</option>';
     }
 
@@ -1182,6 +1187,9 @@ function updateState(skipSave = false) {
 
     if (filterSelect && Array.from(filterSelect.options).some(o => o.value === currentFilter)) {
         filterSelect.value = currentFilter;
+    } else if (filterSelect) {
+        filterSelect.value = 'all';
+        localStorage.setItem('iptv_playlist_filter', 'all');
     }
 
     let groupFilter = document.getElementById('group-filter');
@@ -1819,7 +1827,11 @@ function renderPlaylists() {
     });
 }
 
-window.expandedGroups = new Set();
+try {
+    window.expandedGroups = new Set(JSON.parse(localStorage.getItem('iptv_expanded_groups') || '[]'));
+} catch (e) {
+    window.expandedGroups = new Set();
+}
 
 function renderChannels() {
     console.log('[UI] Rendering channel list.');
@@ -1828,6 +1840,8 @@ function renderChannels() {
 
     const channelSearch = document.getElementById('channel-search');
     const searchVal = channelSearch ? channelSearch.value.toLowerCase() : '';
+
+    const previousScroll = channelList.scrollTop;
 
     let html = '';
     
@@ -1859,7 +1873,8 @@ function renderChannels() {
             const isExpanded = searchVal ? true : window.expandedGroups.has(groupName);
             const expandIcon = isExpanded ? '▼' : '▶';
             
-            html += `<div class="group-item" data-group="${safeGroupName.replace(/"/g, '&quot;')}" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; padding: 10px; background: #252525; border-bottom: 1px solid #1e1e1e; cursor: pointer; outline: none; font-weight: bold; color: #bb86fc;">
+            const attrGroupName = String(groupName).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            html += `<div class="group-item" data-group="${attrGroupName}" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; padding: 10px; background: #252525; border-bottom: 1px solid #1e1e1e; cursor: pointer; outline: none; font-weight: bold; color: #bb86fc;">
                 <span>${safeGroupName} <span style="color:#888;font-size:0.8em;font-weight:normal;">(${channelsInGroup.length})</span></span>
                 <span class="group-expand-icon" style="color:#888;font-size:0.8em;">${expandIcon}</span>
             </div>`;
@@ -1897,12 +1912,21 @@ function renderChannels() {
             this.src = 'assets/logo.ico';
         };
     });
+    
+    if (!window.initialScrollLoaded) {
+        const savedScroll = parseInt(localStorage.getItem('iptv_sidebar_scroll'), 10);
+        if (!isNaN(savedScroll)) channelList.scrollTop = savedScroll;
+        window.initialScrollLoaded = true;
+    } else {
+        channelList.scrollTop = previousScroll;
+    }
 }
 
 const filterElement = document.getElementById('playlist-filter');
 if (filterElement) {
     console.log('[INIT] Attaching change listener to playlist filter.');
     filterElement.addEventListener('change', () => {
+        localStorage.setItem('iptv_playlist_filter', filterElement.value);
         renderChannels();
         if (document.getElementById('epg-view') && document.getElementById('epg-view').style.display === 'flex') {
             renderFullEpg();
@@ -1913,6 +1937,20 @@ if (filterElement) {
 // Use Event Delegation to handle clicks for all channels efficiently
 channelList.addEventListener('click', (e) => {
     console.log('[EVENT] Click detected on channel list.');
+    
+    const groupItem = e.target.closest('.group-item');
+    if (groupItem) {
+        const groupName = groupItem.getAttribute('data-group');
+        if (window.expandedGroups.has(groupName)) {
+            window.expandedGroups.delete(groupName);
+        } else {
+            window.expandedGroups.add(groupName);
+        }
+        localStorage.setItem('iptv_expanded_groups', JSON.stringify(Array.from(window.expandedGroups)));
+        renderChannels();
+        return;
+    }
+
     const favBtn = e.target.closest('.fav-btn');
     if (favBtn) {
         const index = favBtn.getAttribute('data-fav-index');
@@ -1942,6 +1980,16 @@ channelList.addEventListener('click', (e) => {
         const channel = allChannels[index];
         if (channel) embedStream(channel);
     }
+});
+
+let sidebarScrollTimeout;
+channelList.addEventListener('scroll', () => {
+    clearTimeout(sidebarScrollTimeout);
+    sidebarScrollTimeout = setTimeout(() => {
+        if (window.initialScrollLoaded) {
+            localStorage.setItem('iptv_sidebar_scroll', channelList.scrollTop);
+        }
+    }, 150);
 });
 
 let currentImportMode = 'file';
