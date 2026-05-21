@@ -1931,12 +1931,20 @@ ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, is
             } else {
                 params.genre = categoryId;
             }
+        } else if (categoryType === 'series' || isSeries) {
+            params.type = 'series';
+            params.category = categoryId;
         } else {
             params.type = 'vod';
             params.category = categoryId;
         }
 
-        const itemList = await fetchAllStalkerPages(url, mac, action, params);
+        let itemList = await fetchAllStalkerPages(url, mac, action, params);
+        
+        if ((categoryType === 'series' || isSeries) && itemList.length === 0) {
+            params.type = 'vod';
+            itemList = await fetchAllStalkerPages(url, mac, action, params);
+        }
         
         if (categoryType === 'itv') {
             return itemList.map(c => ({
@@ -1950,22 +1958,27 @@ ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, is
             }));
         } else {
             return itemList.filter(m => {
+                if (params.type === 'series') return true;
                 const isItemSeries = m.is_series == 1 || m.is_series == "1" || m.is_series == true;
                 return isSeries ? isItemSeries : !isItemSeries;
             }).map(m => {
-                if (isSeries) {
+                if (isSeries || params.type === 'series') {
                     return {
-                        id: m.id || '',
+                        id: m.id || m.series_id || '',
                         name: m.name || 'Unknown Series',
                         logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
-                        url: `stalker-series:${m.id}`
+                        url: `stalker-series:${m.id || m.series_id}`,
+                        type: 'series',
+                        group: categoryName || 'Series'
                     };
                 } else {
                     return {
                         id: m.id || '',
                         name: m.name || 'Unknown Movie',
                         logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
-                        url: `stalker-cmd:vod|${m.cmd || ''}`
+                        url: `stalker-cmd:vod|${m.cmd || ''}`,
+                        type: 'movie',
+                        group: categoryName || 'Movies'
                     };
                 }
             });

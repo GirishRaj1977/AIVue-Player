@@ -1258,16 +1258,20 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                         newCh.favourite = old.favourite;
                         if (old.isNew) newCh.isNew = true;
                     } else {
-                        newCh.disabled = true;
-                        newCh.isNew = true;
-                        newCount++;
+                        const isVod = newCh.type === 'movie' || newCh.type === 'series' || newCh.type === 'movie_category' || newCh.type === 'vod_category' || newCh.type === 'series_category';
+                        newCh.disabled = isVod ? false : true;
+                        if (!isVod) {
+                            newCh.isNew = true;
+                            newCount++;
+                        }
                     }
                 });
             if (newCount > 0) showToast(`Update complete: Found ${newCount} new channels.`);
             } else {
                 channels.forEach(newCh => {
-                    newCh.disabled = true;
-                    newCh.isNew = true;
+                    const isVod = newCh.type === 'movie' || newCh.type === 'series' || newCh.type === 'movie_category' || newCh.type === 'vod_category' || newCh.type === 'series_category';
+                    newCh.disabled = isVod ? false : true;
+                    if (!isVod) newCh.isNew = true;
                 });
             }
 
@@ -1313,15 +1317,31 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         document.body.appendChild(modal);
     }
     
+    const isStalker = playlist.epg && playlist.epg.startsWith('stalker:');
+    
     const groupsMap = {};
+    const stalkerParents = {};
+
     originalChannels.forEach((c, idx) => {
-        const g = c.group || 'Ungrouped';
-        if (!groupsMap[g]) groupsMap[g] = [];
-        groupsMap[g].push({ channel: c, originalIndex: idx });
+        const isVod = c.type === 'movie' || c.type === 'series' || c.type === 'movie_category' || c.type === 'vod_category' || c.type === 'series_category';
+        if (isVod) {
+            return; // Skip adding to UI entirely
+        }
+
+        if (isStalker && c.type && c.type.endsWith('_category')) {
+            const parent = c.group || 'Categories';
+            if (!stalkerParents[parent]) stalkerParents[parent] = [];
+            stalkerParents[parent].push(c.title);
+            
+            if (!groupsMap[c.title]) groupsMap[c.title] = { channels: [], category: c, categoryIndex: idx };
+            else { groupsMap[c.title].category = c; groupsMap[c.title].categoryIndex = idx; }
+        } else {
+            const g = c.group || 'Ungrouped';
+            if (!groupsMap[g]) groupsMap[g] = { channels: [] };
+            groupsMap[g].channels.push({ channel: c, originalIndex: idx });
+        }
     });
     
-    const sortedGroups = Array.from(Object.keys(groupsMap)).sort(sortAlphaNum);
-
     const tempDisabled = new Set();
     const tempSelected = new Set();
     
@@ -1329,10 +1349,70 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         if (c.disabled !== false) tempDisabled.add(idx);
     });
 
-    let currentGroupFilter = sortedGroups.length > 0 ? sortedGroups[0] : null;
+    let currentGroupFilter = null;
+    let sortedGroups = [];
+
+    if (isStalker) {
+        if (Object.keys(stalkerParents).length > 0) {
+            const firstParent = Object.keys(stalkerParents).sort(sortAlphaNum)[0];
+            if (stalkerParents[firstParent].length > 0) {
+                currentGroupFilter = stalkerParents[firstParent].sort(sortAlphaNum)[0];
+            }
+        }
+    } else {
+        sortedGroups = Array.from(Object.keys(groupsMap)).sort(sortAlphaNum);
+        currentGroupFilter = sortedGroups.length > 0 ? sortedGroups[0] : null;
+    }
 
     const newCount = originalChannels.filter(c => c.isNew).length;
     const newTitleStr = newCount > 0 ? ` <span style="color: #FFD700; font-size: 0.85em; font-weight: normal;">(${newCount} New Channels Found)</span>` : '';
+
+    let groupsHtml = '';
+    if (isStalker) {
+        Object.keys(stalkerParents).sort(sortAlphaNum).forEach(parent => {
+            groupsHtml += `<div style="padding: 10px; background: #1a1a1a; font-weight: bold; color: #bb86fc; font-size: 0.9em; text-transform: uppercase; border-bottom: 1px solid #333; border-top: 1px solid #333;">${parent.replace(/</g, '&lt;')}</div>`;
+            
+            stalkerParents[parent].sort(sortAlphaNum).forEach(g => {
+                const total = groupsMap[g].channels.length;
+                const enabled = groupsMap[g].channels.filter(item => !tempDisabled.has(item.originalIndex)).length;
+                const hasNew = groupsMap[g].channels.some(item => item.channel.isNew);
+                const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
+                
+                groupsHtml += `
+                <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 20px; cursor: pointer; border-left: 4px solid transparent; color: #e0e0e0; transition: 0.2s; font-family: 'Inter', sans-serif; font-size: 0.9em;">
+                    ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: #666; font-size: 0.85em; float: right;">${enabled} (${total})</span>
+                </div>`;
+            });
+        });
+        
+        const looseGroups = Object.keys(groupsMap).filter(g => !Object.values(stalkerParents).flat().includes(g));
+        if (looseGroups.length > 0) {
+            groupsHtml += `<div style="padding: 10px; background: #1a1a1a; font-weight: bold; color: #bb86fc; font-size: 0.9em; text-transform: uppercase; border-bottom: 1px solid #333; border-top: 1px solid #333;">Other Channels</div>`;
+            looseGroups.sort(sortAlphaNum).forEach(g => {
+                const total = groupsMap[g].channels.length;
+                const enabled = groupsMap[g].channels.filter(item => !tempDisabled.has(item.originalIndex)).length;
+                const hasNew = groupsMap[g].channels.some(item => item.channel.isNew);
+                const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
+                
+                groupsHtml += `
+                <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 20px; cursor: pointer; border-left: 4px solid transparent; color: #e0e0e0; transition: 0.2s; font-family: 'Inter', sans-serif; font-size: 0.9em;">
+                    ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: #666; font-size: 0.85em; float: right;">${enabled} (${total})</span>
+                </div>`;
+            });
+        }
+    } else {
+        sortedGroups.forEach(g => {
+            const total = groupsMap[g].channels.length;
+            const enabled = groupsMap[g].channels.filter(item => !tempDisabled.has(item.originalIndex)).length;
+            const hasNew = groupsMap[g].channels.some(item => item.channel.isNew);
+            const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
+            
+            groupsHtml += `
+            <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 20px; cursor: pointer; border-left: 4px solid transparent; color: #e0e0e0; transition: 0.2s; font-family: 'Inter', sans-serif; font-size: 0.9em;">
+                ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: #666; font-size: 0.85em; float: right;">${enabled} (${total})</span>
+            </div>`;
+        });
+    }
 
     modal.innerHTML = `
         <div style="background: #1e1e1e; border: 1px solid #333; border-radius: 8px; width: 90%; max-width: 1000px; height: 85%; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
@@ -1350,17 +1430,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                         Groups
                     </div>
                     <div id="modal-groups-list" style="flex-grow: 1; overflow-y: auto; padding: 10px 0;">
-                        ${sortedGroups.map(g => {
-                            const total = groupsMap[g].length;
-                            const enabled = groupsMap[g].filter(item => !tempDisabled.has(item.originalIndex)).length;
-                            const hasNew = groupsMap[g].some(item => item.channel.isNew);
-                            const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
-                            return `
-                            <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 20px; cursor: pointer; border-left: 4px solid transparent; color: #e0e0e0; transition: 0.2s; font-family: 'Inter', sans-serif; font-size: 0.9em;">
-                                ${g.replace(/</g, '&lt;').replace(/>/g, '&gt;')}${newLabel} <span class="group-count-span" style="color: #666; font-size: 0.85em; float: right;">${enabled} (${total})</span>
-                            </div>
-                            `;
-                        }).join('')}
+                        ${groupsHtml}
                     </div>
                 </div>
 
@@ -1390,7 +1460,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
     const renderChannelsList = () => {
         const searchVal = (document.getElementById('modal-channel-search') ? document.getElementById('modal-channel-search').value : '').toLowerCase();
 
-        let channelsToRender = currentGroupFilter ? groupsMap[currentGroupFilter] : [];
+        let channelsToRender = (currentGroupFilter && groupsMap[currentGroupFilter]) ? groupsMap[currentGroupFilter].channels : [];
 
         if (searchVal) {
             channelsToRender = channelsToRender.filter(item => {
@@ -1426,7 +1496,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
             
             const newLabel = isNew ? ' <span style="color: #FFD700;">(New)</span>' : '';
-            const titleColor = isNew ? '#FFD700' : (isDisabled ? '#cf6679' : '#43CB44');
+            const titleColor = isDisabled ? (isNew ? '#FFD700' : '#cf6679') : '#43CB44';
 
             return `
                 <label style="display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #333; cursor: pointer; background: ${isSelected ? '#2a2a2a' : 'transparent'};">
@@ -1476,8 +1546,9 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         
         document.querySelectorAll('.modal-group-item').forEach(el => {
             const g = el.getAttribute('data-group');
-            const total = groupsMap[g].length;
-            const enabled = groupsMap[g].filter(item => !tempDisabled.has(item.originalIndex)).length;
+            if (!groupsMap[g]) return;
+            const total = groupsMap[g].channels.length;
+            const enabled = groupsMap[g].channels.filter(item => !tempDisabled.has(item.originalIndex)).length;
             const countSpan = el.querySelector('.group-count-span');
             if (countSpan) countSpan.textContent = `${enabled} (${total})`;
 
@@ -1496,8 +1567,45 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
     };
 
     document.querySelectorAll('.modal-group-item').forEach(el => {
-        el.addEventListener('click', (e) => {
-            currentGroupFilter = el.getAttribute('data-group');
+        el.addEventListener('click', async (e) => {
+            const g = el.getAttribute('data-group');
+            currentGroupFilter = g;
+            
+            if (isStalker && groupsMap[g] && groupsMap[g].category && groupsMap[g].channels.length === 0) {
+                const listDiv = document.getElementById('modal-channels-list');
+                listDiv.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">Fetching channels...</div>';
+                
+                try {
+                    const cat = groupsMap[g].category;
+                    const mac = playlist.epg.substring(8);
+                    let categoryType = 'movie';
+                    if (cat.type === 'itv_category') categoryType = 'itv';
+                    else if (cat.type === 'series_category' || cat.type === 'vod_category') categoryType = 'series';
+                    
+                    const fetched = await window.iptvAPI.loadStalkerCategory({
+                        url: playlist.source,
+                        mac: mac,
+                        categoryId: cat.tvg_id,
+                        categoryType: categoryType,
+                        categoryName: cat.title,
+                        isSeries: categoryType === 'series'
+                    });
+                    
+                    fetched.forEach(newCh => {
+                        newCh.disabled = true;
+                        newCh.isNew = true;
+                        
+                        const newIdx = originalChannels.length;
+                        originalChannels.push(newCh);
+                        tempDisabled.add(newIdx);
+                        groupsMap[g].channels.push({ channel: newCh, originalIndex: newIdx });
+                    });
+                    
+                } catch (err) {
+                    showToast("Failed to fetch channels for category.");
+                }
+            }
+            
             renderChannelsList();
         });
     });
@@ -1809,9 +1917,12 @@ function renderPlaylists() {
                             newCh.favourite = old.favourite;
                             if (old.isNew) newCh.isNew = true;
                         } else {
-                            newCh.disabled = true;
-                            newCh.isNew = true;
-                            newCount++;
+                            const isVod = newCh.type === 'movie' || newCh.type === 'series' || newCh.type === 'movie_category' || newCh.type === 'vod_category' || newCh.type === 'series_category';
+                            newCh.disabled = isVod ? false : true;
+                            if (!isVod) {
+                                newCh.isNew = true;
+                                newCount++;
+                            }
                         }
                     });
                     
@@ -3548,6 +3659,7 @@ async function renderMovies() {
                 return;
             }
             
+            items.sort((a, b) => sortAlphaNum(a.name, b.name));
             items.forEach(movie => {
                 const card = document.createElement('div');
                 card.className = 'catalog-card';
@@ -3713,6 +3825,7 @@ function renderVod() {
                     return;
                 }
                 
+                items.sort((a, b) => sortAlphaNum(a.name, b.name));
                 items.forEach(s => {
                     const card = document.createElement('div');
                     card.className = 'catalog-card';
@@ -3746,7 +3859,7 @@ function renderVod() {
     savedPlaylists.forEach(p => {
         if (p.channels && !p.disabled) {
             p.channels.forEach(c => {
-                if ((c.type === 'vod' || c.type === 'vod_category') && !c.disabled) {
+                if ((c.type === 'vod' || c.type === 'series' || c.type === 'vod_category' || c.type === 'series_category') && !c.disabled) {
                     c.playlistId = p.id;
                     series.push(c);
                 }
@@ -4018,8 +4131,11 @@ async function backgroundAutoUpdate() {
                     newCh.favourite = old.favourite;
                     if (old.isNew) newCh.isNew = true;
                 } else {
-                    newCh.disabled = true;
-                    newCh.isNew = true;
+                    const isVod = newCh.type === 'movie' || newCh.type === 'series' || newCh.type === 'movie_category' || newCh.type === 'vod_category' || newCh.type === 'series_category';
+                    newCh.disabled = isVod ? false : true;
+                    if (!isVod) {
+                        newCh.isNew = true;
+                    }
                 }
             });
 
