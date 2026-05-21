@@ -37,5 +37,7 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     sendRemoteOverrideResponse: (allow) => ipcRenderer.send('remote-override-response', allow),
     onRemoteSearch: (callback) => ipcRenderer.on('remote-search', (_event, text) => callback(text)),
     syncRemoteSearch: (text) => ipcRenderer.send('sync-remote-search', text),
-    focusRemoteSearch: () => ipcRenderer.send('focus-remote-search')
+    focusRemoteSearch: () => ipcRenderer.send('focus-remote-search'),
+    parseStalker: (params) => ipcRenderer.invoke('parse-stalker', params),
+    getStalkerEpisodes: (params) => ipcRenderer.invoke('get-stalker-episodes', params)
 });

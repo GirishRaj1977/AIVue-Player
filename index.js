@@ -76,6 +76,14 @@ try {
         CREATE INDEX IF NOT EXISTS idx_channels_title ON channels(title);
         CREATE INDEX IF NOT EXISTS idx_epg_channel ON epg(channel_id);
     `);
+    
+    // Safety check for existing channels table (in case it didn't have type column previously)
+    try {
+        db.exec("ALTER TABLE channels ADD COLUMN type TEXT DEFAULT 'live'");
+    } catch (e) {
+        // column type already exists
+    }
+    
     console.log("[DB] SQLite Database initialized at", dbPath);
 } catch (err) {
     console.warn("[DB] better-sqlite3 not installed yet. Run 'npm install better-sqlite3'.");
@@ -1421,8 +1429,8 @@ function saveChannelsToDb(playlists) {
     `);
 
     const insertChannel = db.prepare(`
-        INSERT INTO channels (playlist_id, tvg_id, tvg_name, title, logo, group_name, stream_url, is_favourite, is_disabled)
-        VALUES (@playlist_id, @tvg_id, @tvg_name, @title, @logo, @group_name, @stream_url, @is_favourite, @is_disabled)
+        INSERT INTO channels (playlist_id, tvg_id, tvg_name, title, logo, group_name, stream_url, is_favourite, is_disabled, type)
+        VALUES (@playlist_id, @tvg_id, @tvg_name, @title, @logo, @group_name, @stream_url, @is_favourite, @is_disabled, @type)
     `);
 
     const clearChannels = db.prepare(`DELETE FROM channels WHERE playlist_id = ?`);
@@ -1459,7 +1467,8 @@ function saveChannelsToDb(playlists) {
                         group_name: c.group || '',
                         stream_url: c.url || '',
                         is_favourite: c.favourite ? 1 : 0,
-                        is_disabled: c.disabled ? 1 : 0
+                        is_disabled: c.disabled ? 1 : 0,
+                        type: c.type || 'live'
                     });
                 }
             }
@@ -1551,7 +1560,8 @@ function loadChannelsFromDb() {
                 group: c.group_name,
                 url: c.stream_url,
                 favourite: c.is_favourite === 1,
-                disabled: c.is_disabled === 1
+                disabled: c.is_disabled === 1,
+                type: c.type || 'live'
             }));
             
             result.push({
@@ -1575,6 +1585,197 @@ ipcMain.handle('load-channels', (event) => {
     const result = loadChannelsFromDb();
     console.log('[IPC HANDLE] load-channels END');
     return result;
+});
+
+// Stalker Portal Helper & Handles
+async function stalkerRequest(baseUrl, mac, action, extraParams = {}) {
+    const url = baseUrl.trim().includes('/c/') ? baseUrl.trim().replace('/c/', '/portal.php') : 
+                (baseUrl.trim().includes('/c') ? baseUrl.trim().replace('/c', '/portal.php') : 
+                (baseUrl.trim().endsWith('.php') ? baseUrl.trim() : (baseUrl.trim().endsWith('/') ? baseUrl.trim() + 'portal.php' : baseUrl.trim() + '/portal.php')));
+
+    const handshakeUrl = `${url}?type=stb&action=handshake&key=&js=true`;
+    console.log('[STALKER] Handshake request:', handshakeUrl);
+    
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stb frameBuffer/0.1.0 Safari/533.3',
+        'X-User-Agent': 'model=MAG250; link=ethernet'
+    };
+
+    let phpSessionId = '';
+    let token = '';
+    
+    try {
+        const response = await fetch(handshakeUrl, { headers });
+        const setCookie = response.headers.get('set-cookie');
+        if (setCookie) {
+            const match = setCookie.match(/PHPSESSID=([^;]+)/);
+            if (match) phpSessionId = match[1];
+        }
+        const handshakeData = await response.json();
+        token = handshakeData.js?.token || '';
+    } catch (e) {
+        console.error('[STALKER ERR] Handshake failed:', e.message);
+    }
+    
+    const cookieHeader = phpSessionId ? `PHPSESSID=${phpSessionId}` : '';
+    const authHeaders = {
+        ...headers,
+        ...(cookieHeader ? { 'Cookie': cookieHeader } : {})
+    };
+    
+    const profileUrl = `${url}?type=stb&action=get_profile&mac=${encodeURIComponent(mac)}&hd=1&auth_second_step=1`;
+    console.log('[STALKER] Profile/Auth request:', profileUrl);
+    
+    try {
+        const response = await fetch(profileUrl, { headers: authHeaders });
+        const profileData = await response.json();
+        if (profileData.js?.token) {
+            token = profileData.js.token;
+        }
+    } catch (e) {
+        console.error('[STALKER ERR] Profile auth failed:', e.message);
+    }
+    
+    const reqHeaders = {
+        ...headers,
+        ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+    
+    let queryParams = `type=${extraParams.type || 'itv'}&action=${action}`;
+    for (const [k, v] of Object.entries(extraParams)) {
+        if (k !== 'type') queryParams += `&${k}=${encodeURIComponent(v)}`;
+    }
+    
+    const requestUrl = `${url}?${queryParams}`;
+    console.log('[STALKER] API request:', requestUrl);
+    
+    const response = await fetch(requestUrl, { headers: reqHeaders });
+    return await response.json();
+}
+
+ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
+    try {
+        console.log('[STALKER IPC] Starting Stalker parsing for url:', url, 'mac:', mac);
+        
+        let categories = {};
+        try {
+            const catRes = await stalkerRequest(url, mac, 'get_categories', { type: 'itv' });
+            const catList = catRes.js || [];
+            catList.forEach(c => {
+                categories[c.id] = c.name;
+            });
+        } catch (e) {
+            console.error('[STALKER] Failed to load ITV categories:', e);
+        }
+
+        let channels = [];
+        try {
+            const chRes = await stalkerRequest(url, mac, 'get_all_channels', { type: 'itv' });
+            const chList = chRes.js || [];
+            channels = chList.map(c => {
+                let streamUrl = '';
+                const match = c.cmd ? c.cmd.match(/(https?:\/\/[^\s]+)/) : null;
+                if (match) {
+                    streamUrl = match[1];
+                } else {
+                    streamUrl = c.cmd || '';
+                }
+                
+                return {
+                    tvg_id: c.tvg_id || '',
+                    tvg_name: c.name || '',
+                    title: c.name || 'Unknown Channel',
+                    logo: c.logo ? (c.logo.startsWith('http') ? c.logo : `${url.substring(0, url.lastIndexOf('/'))}/${c.logo}`) : '',
+                    group: categories[c.category_id] || 'Live TV',
+                    url: streamUrl,
+                    type: 'live'
+                };
+            });
+        } catch (e) {
+            console.error('[STALKER] Failed to load ITV channels:', e);
+        }
+
+        let movies = [];
+        try {
+            const movieRes = await stalkerRequest(url, mac, 'get_ordered_list', { type: 'vod', category: 'all' });
+            const movieList = movieRes.js?.data || [];
+            movies = movieList.map(m => {
+                let streamUrl = '';
+                const match = m.cmd ? m.cmd.match(/(https?:\/\/[^\s]+)/) : null;
+                if (match) {
+                    streamUrl = match[1];
+                } else {
+                    streamUrl = m.cmd || '';
+                }
+                
+                return {
+                    tvg_id: m.id || '',
+                    tvg_name: m.name || '',
+                    title: m.name || 'Unknown Movie',
+                    logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
+                    group: 'Movies',
+                    url: streamUrl,
+                    type: 'movie'
+                };
+            });
+        } catch (e) {
+            console.error('[STALKER] Failed to load Movies:', e);
+        }
+
+        let series = [];
+        try {
+            const seriesRes = await stalkerRequest(url, mac, 'get_ordered_list', { type: 'series', category: 'all' });
+            const seriesList = seriesRes.js?.data || [];
+            series = seriesList.map(s => {
+                return {
+                    tvg_id: s.id || '',
+                    tvg_name: s.name || '',
+                    title: s.name || 'Unknown Series',
+                    logo: s.logo ? (s.logo.startsWith('http') ? s.logo : `${url.substring(0, url.lastIndexOf('/'))}/${s.logo}`) : '',
+                    group: 'Series',
+                    url: `stalker-series:${s.id}`,
+                    type: 'vod'
+                };
+            });
+        } catch (e) {
+            console.error('[STALKER] Failed to load Series:', e);
+        }
+
+        const allParsed = [...channels, ...movies, ...series];
+        console.log(`[STALKER IPC] Successfully imported ${channels.length} channels, ${movies.length} movies, ${series.length} series.`);
+        return { channels: allParsed };
+    } catch (e) {
+        console.error('[STALKER IPC ERR] Failed to parse stalker portal:', e);
+        return { error: e.message };
+    }
+});
+
+ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => {
+    try {
+        console.log('[STALKER IPC] Fetching episodes for series:', seriesId);
+        const res = await stalkerRequest(url, mac, 'get_ordered_list', { type: 'series', movie_id: seriesId });
+        const episodes = res.js?.data || [];
+        return episodes.map(e => {
+            let streamUrl = '';
+            const match = e.cmd ? e.cmd.match(/(https?:\/\/[^\s]+)/) : null;
+            if (match) {
+                streamUrl = match[1];
+            } else {
+                streamUrl = e.cmd || '';
+            }
+            return {
+                id: e.id,
+                name: e.name || `Episode ${e.series_number || ''}`,
+                season: e.season_number || 1,
+                episodeNum: e.series_number || 1,
+                url: streamUrl
+            };
+        });
+    } catch (e) {
+        console.error('[STALKER IPC ERR] Failed to fetch episodes:', e);
+        return [];
+    }
 });
 
 // Cache deletion
