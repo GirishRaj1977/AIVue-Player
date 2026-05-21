@@ -35,7 +35,7 @@ aeroStyles.textContent = `
     }
 
     /* Standard List Items */
-    .channel-item, .mapping-ch-item, .mapping-epg-item, .epg-program-cell, .epg-play-channel { 
+    .channel-item, .group-item, .mapping-ch-item, .mapping-epg-item, .epg-program-cell, .epg-play-channel { 
         font-weight: normal; 
     }
 
@@ -50,7 +50,7 @@ aeroStyles.textContent = `
         outline-offset: 2px;
     }
 
-    .channel-item:focus, .mapping-ch-item:focus, .playlist-btn:focus, .nav-btn:focus, button:focus, input:focus, select:focus {
+    .channel-item:focus, .group-item:focus, .mapping-ch-item:focus, .playlist-btn:focus, .nav-btn:focus, button:focus, input:focus, select:focus {
         background-color: rgba(187, 134, 252, 0.3) !important;
         outline: 2px solid #bb86fc !important;
         outline-offset: -2px;
@@ -1120,41 +1120,6 @@ async function applySingleMapping(channelTitle, epgId) {
     }
 }
 
-// Populates the group filter dropdown dynamically based on the current playlist
-function updateGroupFilterOptions() {
-    console.log('[UI] Updating group filter options.');
-    const groupFilter = document.getElementById('group-filter');
-    const filterSelect = document.getElementById('playlist-filter');
-    
-    if (groupFilter) {
-        const currentGroup = groupFilter.value || 'all';
-        groupFilter.innerHTML = '<option value="all">All Groups</option>';
-        
-        let visibleGroups = new Set();
-        const currentPlaylistFilter = filterSelect ? filterSelect.value : 'all';
-        
-        allChannels.forEach(c => {
-            if (currentPlaylistFilter === 'favs' && !c.favourite) return;
-            if (currentPlaylistFilter !== 'all' && currentPlaylistFilter !== 'favs' && String(c.playlistId) !== String(currentPlaylistFilter)) return;
-            const groupName = c.group || 'Uncategorized';
-            visibleGroups.add(groupName);
-        });
-        
-        Array.from(visibleGroups).sort(sortAlphaNum).forEach(g => {
-            const opt = document.createElement('option');
-            opt.value = g;
-            opt.textContent = g;
-            groupFilter.appendChild(opt);
-        });
-        
-        if (Array.from(groupFilter.options).some(o => o.value === currentGroup)) {
-            groupFilter.value = currentGroup;
-        } else {
-            groupFilter.value = 'all';
-        }
-    }
-}
-
 function updateState(skipSave = false) {
     console.log('[STATE] Updating global state and re-rendering.');
     allChannels = [];
@@ -1220,28 +1185,10 @@ function updateState(skipSave = false) {
     }
 
     let groupFilter = document.getElementById('group-filter');
-    if (!groupFilter && filterSelect) {
-        groupFilter = document.createElement('select');
-        groupFilter.id = 'group-filter';
-        groupFilter.style.marginTop = '10px';
-        groupFilter.style.width = '100%';
-        groupFilter.style.padding = '8px';
-        groupFilter.style.borderRadius = '4px';
-        groupFilter.style.background = '#1e1e1e';
-        groupFilter.style.color = '#fff';
-        groupFilter.style.border = '1px solid #333';
-        groupFilter.style.boxSizing = 'border-box';
-        filterSelect.parentNode.insertBefore(groupFilter, filterSelect.nextSibling);
-        groupFilter.addEventListener('change', () => {
-            renderChannels();
-            if (document.getElementById('epg-view') && document.getElementById('epg-view').style.display === 'flex') {
-                renderFullEpg();
-            }
-        });
-    }
+    if (groupFilter) groupFilter.remove();
 
     let channelSearch = document.getElementById('channel-search');
-    if (!channelSearch && groupFilter) {
+    if (!channelSearch && filterSelect) {
         channelSearch = document.createElement('input');
         channelSearch.id = 'channel-search';
         channelSearch.type = 'text';
@@ -1254,12 +1201,10 @@ function updateState(skipSave = false) {
         channelSearch.style.color = '#fff';
         channelSearch.style.border = '1px solid #333';
         channelSearch.style.boxSizing = 'border-box';
-        groupFilter.parentNode.insertBefore(channelSearch, groupFilter.nextSibling);
+        filterSelect.parentNode.insertBefore(channelSearch, filterSelect.nextSibling);
         channelSearch.addEventListener('input', () => renderChannels());
     }
 
-    updateGroupFilterOptions();
-    
     renderChannels();
     renderPlaylists();
     if (!skipSave) {
@@ -1294,45 +1239,18 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                 finalEpgSource = result.epg_url;
             }
 
-            if (editIndex >= 0) {
-                savedPlaylists[editIndex].source = source;
-                savedPlaylists[editIndex].name = customName;
-                savedPlaylists[editIndex].channels = channels;
-                savedPlaylists[editIndex].epg = finalEpgSource;
-            } else {
-                savedPlaylists.push({
-                    id: Date.now() + Math.random(),
-                    source: source,
-                    name: customName,
-                    channels: channels,
-                    epg: finalEpgSource,
-                    disabled: false
-                });
-            }
-            updateState(true); // SKIP SAVE
+            const tempPlaylist = {
+                id: editIndex >= 0 ? savedPlaylists[editIndex].id : (Date.now() + Math.random()),
+                source: source,
+                name: customName,
+                channels: channels,
+                epg: finalEpgSource,
+                disabled: false,
+                editIndex: editIndex
+            };
             
-            if (isStalker) {
-                // Skip XMLTV EPG updates as Stalker is self-contained.
-                updateState(); // Re-render and save
-            } else {
-                // Auto-fetch EPG data in background to cache in SQLite
-                let allEpgSources = savedEpgs.slice();
-                if (finalEpgSource && finalEpgSource !== 'Not Configured' && !allEpgSources.includes(finalEpgSource)) {
-                    allEpgSources.push(finalEpgSource);
-                }
-                if (allEpgSources.length > 0) {
-                    console.log('[API] Calling updateEpg after adding playlist.');
-                    const combinedEpgs = allEpgSources.join(',');
-                    await window.iptvAPI.updateEpg(combinedEpgs, null, true);
-                    epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
-                    await autoMapChannels(false, true); // SKIP SAVE
-                    
-                    updateState(); // Re-render and save
-                } else {
-                    updateState(); // Re-render AND SAVE
-                }
-            }
-            return true;
+            openManageChannelsModal(-1, tempPlaylist);
+            return 'pending';
         }
     } catch (err) {
         showToast(`UI Error (${source}):\n${err.message}`);
@@ -1340,10 +1258,20 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
     }
 }
 
-function openManageChannelsModal(playlistIndex) {
-    console.log('[UI] Opening manage channels modal for playlist index:', playlistIndex);
-    const playlist = savedPlaylists[playlistIndex];
-    if (!playlist || !playlist.channels) return;
+function openManageChannelsModal(playlistIndex, pendingData = null) {
+    console.log('[UI] Opening manage channels modal for playlist index:', playlistIndex, pendingData ? 'is new import' : '');
+    const isNew = pendingData !== null;
+    let playlist;
+    let originalChannels = [];
+    if (isNew) {
+        playlist = pendingData;
+        originalChannels = playlist.channels;
+    } else {
+        playlist = savedPlaylists[playlistIndex];
+        originalChannels = playlist.channels;
+    }
+
+    if (!playlist || !originalChannels) return;
 
     let modal = document.getElementById('manage-channels-modal');
     if (!modal) {
@@ -1353,99 +1281,125 @@ function openManageChannelsModal(playlistIndex) {
         document.body.appendChild(modal);
     }
     
-    const groups = new Set();
-    playlist.channels.forEach(c => groups.add(c.group || 'Uncategorized'));
-    const sortedGroups = Array.from(groups).sort(sortAlphaNum);
+    const groupsMap = {};
+    originalChannels.forEach((c, idx) => {
+        const g = c.group || 'Ungrouped';
+        if (!groupsMap[g]) groupsMap[g] = [];
+        groupsMap[g].push({ channel: c, originalIndex: idx });
+    });
+    
+    const sortedGroups = Array.from(Object.keys(groupsMap)).sort(sortAlphaNum);
 
     const tempDisabled = new Set();
     const tempSelected = new Set();
-    playlist.channels.forEach((c, idx) => {
-        if (c.disabled) tempDisabled.add(idx);
-    });
+    
+    if (!isNew) {
+        originalChannels.forEach((c, idx) => {
+            if (c.disabled) tempDisabled.add(idx);
+        });
+    } else {
+        originalChannels.forEach((c, idx) => {
+            tempDisabled.add(idx);
+        });
+    }
 
-    let currentGroupFilter = 'all';
-    let sortedChannels = [];
-
-    let groupOptions = '<option value="all">All Groups</option>';
-    sortedGroups.forEach(g => {
-        groupOptions += `<option value="${g.replace(/"/g, '&quot;')}" ${currentGroupFilter === g ? 'selected' : ''}>${g.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</option>`;
-    });
+    let currentGroupFilter = sortedGroups.length > 0 ? sortedGroups[0] : null;
 
     modal.innerHTML = `
-        <div style="background: #1e1e1e; border: 1px solid #333; border-radius: 8px; width: 80%; max-width: 800px; height: 80%; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <div style="background: #1e1e1e; border: 1px solid #333; border-radius: 8px; width: 90%; max-width: 1000px; height: 85%; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
             <div style="padding: 15px 20px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: #252525;">
                 <h2 style="margin: 0; color: #bb86fc; font-size: 1.2em;">Manage Channels: ${playlist.name}</h2>
                 <div style="display: flex; gap: 10px;">
-                    <input type="text" id="modal-channel-search" placeholder="Search channels..." value="" style="background: #121212; color: #fff; border: 1px solid #444; padding: 6px 12px; border-radius: 4px; outline: none; width: 200px;">
-                    <select id="modal-group-filter" style="background: #121212; color: #fff; border: 1px solid #444; padding: 6px 12px; border-radius: 4px; outline: none; width: 200px;">
-                        ${groupOptions}
-                    </select>
+                    <input type="text" id="modal-channel-search" placeholder="Search channels..." value="" style="background: #121212; color: #fff; border: 1px solid #444; padding: 6px 12px; border-radius: 4px; outline: none; width: 250px;">
                 </div>
             </div>
-            <div style="padding: 10px 20px; background: #1a1a1a; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 15px;">
-                <label style="display: flex; align-items: center; cursor: pointer; color: #bb86fc; font-weight: bold; margin-right: 10px;">
-                    <input type="checkbox" id="modal-select-all" style="margin-right: 10px; width: 18px; height: 18px;">
-                    Select All
-                </label>
-                <button id="modal-enable-btn" class="playlist-btn" style="background: #43CB44; color: black; font-weight: bold; padding: 4px 12px; border-radius: 4px;">Enable</button>
-                <button id="modal-disable-btn" class="playlist-btn" style="background: #cf6679; color: black; font-weight: bold; padding: 4px 12px; border-radius: 4px;">Disable</button>
-                <span id="modal-channels-count" style="color: #888; font-size: 0.9em; flex-grow: 1; text-align: right;">Showing 0 channels</span>
-            </div>
-            <div id="modal-channels-list" style="flex-grow: 1; overflow-y: auto; padding: 10px 20px;">
+            
+            <div style="display: flex; flex-grow: 1; overflow: hidden;">
+                <!-- Left Column: Groups -->
+                <div style="width: 250px; background: #121212; border-right: 1px solid #333; display: flex; flex-direction: column;">
+                    <div style="padding: 10px; background: #1a1a1a; border-bottom: 1px solid #333; font-weight: bold; color: #888; font-size: 0.9em; text-transform: uppercase;">
+                        Groups
+                    </div>
+                    <div id="modal-groups-list" style="flex-grow: 1; overflow-y: auto; padding: 10px 0;">
+                        ${sortedGroups.map(g => `
+                            <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 20px; cursor: pointer; border-left: 4px solid transparent; color: #e0e0e0; transition: 0.2s; font-family: 'Inter', sans-serif; font-size: 0.9em;">
+                                ${g.replace(/</g, '&lt;').replace(/>/g, '&gt;')} <span style="color: #666; font-size: 0.85em; float: right;">(${groupsMap[g].length})</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Right Column: Channels -->
+                <div style="flex-grow: 1; display: flex; flex-direction: column; background: #1a1a1a; min-width: 0;">
+                    <div style="padding: 10px 20px; background: #252525; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 15px;">
+                        <label style="display: flex; align-items: center; cursor: pointer; color: #bb86fc; font-weight: bold; margin-right: 10px;">
+                            <input type="checkbox" id="modal-select-all" style="margin-right: 10px; width: 18px; height: 18px;">
+                            Select All
+                        </label>
+                        <button id="modal-enable-btn" class="playlist-btn" style="background: #43CB44; color: black; font-weight: bold; padding: 4px 12px; border-radius: 4px;">Enable</button>
+                        <button id="modal-disable-btn" class="playlist-btn" style="background: #cf6679; color: black; font-weight: bold; padding: 4px 12px; border-radius: 4px;">Disable</button>
+                        <span id="modal-channels-count" style="color: #888; font-size: 0.9em; flex-grow: 1; text-align: right;">Showing 0 channels</span>
+                    </div>
+                    <div id="modal-channels-list" style="flex-grow: 1; overflow-y: auto; padding: 10px 20px;">
+                    </div>
+                </div>
             </div>
             <div style="padding: 15px 20px; border-top: 1px solid #333; display: flex; justify-content: flex-end; gap: 10px; background: #252525;">
                 <button id="modal-cancel-btn" class="playlist-btn" style="background: #333;">Cancel</button>
-                <button id="modal-save-btn" class="playlist-btn" style="background: #bb86fc; color: #000; font-weight: bold;">Save Changes</button>
+                <button id="modal-save-btn" class="playlist-btn" style="background: #bb86fc; color: #000; font-weight: bold;">${isNew ? 'Import Selected' : 'Save Changes'}</button>
             </div>
         </div>
     `;
 
+    let currentFilteredChannels = [];
     const renderChannelsList = () => {
         const searchVal = (document.getElementById('modal-channel-search') ? document.getElementById('modal-channel-search').value : '').toLowerCase();
 
+        let channelsToRender = currentGroupFilter ? groupsMap[currentGroupFilter] : [];
+
+        if (searchVal) {
+            channelsToRender = channelsToRender.filter(item => {
+                const title = String(item.channel.title || 'Unknown Channel').toLowerCase();
+                return title.includes(searchVal);
+            });
+        }
+
+        const sorter = (a, b) => sortAlphaNum(a.channel.title, b.channel.title);
+        
         const enabledList = [];
         const disabledList = [];
 
-        playlist.channels.forEach((c, idx) => {
-            const cGroup = c.group || 'Uncategorized';
-            const title = String(c.title || 'Unknown Channel');
-            if (currentGroupFilter !== 'all' && cGroup !== currentGroupFilter) return;
-            if (searchVal && !title.toLowerCase().includes(searchVal)) return;
-
-            const item = { channel: c, originalIndex: idx };
-            if (tempDisabled.has(idx)) {
+        channelsToRender.forEach(item => {
+            if (tempDisabled.has(item.originalIndex)) {
                 disabledList.push(item);
             } else {
                 enabledList.push(item);
             }
         });
 
-        const sorter = (a, b) => sortAlphaNum(a.channel.title, b.channel.title);
         enabledList.sort(sorter);
         disabledList.sort(sorter);
 
-        sortedChannels = [...enabledList, ...disabledList];
-        let visibleCount = sortedChannels.length;
+        currentFilteredChannels = [...enabledList, ...disabledList];
+        let visibleCount = currentFilteredChannels.length;
 
-        let channelsHtml = sortedChannels.map(item => {
+        let channelsHtml = currentFilteredChannels.map(item => {
             const { channel, originalIndex } = item;
             const isDisabled = tempDisabled.has(originalIndex);
             const isSelected = tempSelected.has(originalIndex);
             const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-            const cGroup = channel.group || 'Uncategorized';
 
             return `
                 <label style="display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #333; cursor: pointer; background: ${isSelected ? '#2a2a2a' : 'transparent'};">
                     <input type="checkbox" class="channel-select-cb" data-idx="${originalIndex}" ${isSelected ? 'checked' : ''} style="margin-right: 15px; width: 18px; height: 18px;">
-                    <span style="flex-grow: 1; color: ${isDisabled ? '#cf6679' : '#43CB44'}; font-weight: bold; font-size: 0.8em; font-family: 'Inter', sans-serif;">${safeTitle}</span>
-                    <span style="color: #666; font-size: 0.85em; width: 150px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cGroup}</span>
+                    <span style="flex-grow: 1; color: ${isDisabled ? '#cf6679' : '#43CB44'}; font-weight: bold; font-size: 0.85em; font-family: 'Inter', sans-serif;">${safeTitle}</span>
                 </label>
             `;
         }).join('');
 
         let allVisibleSelectedCalc = visibleCount > 0;
         if (allVisibleSelectedCalc) {
-            sortedChannels.forEach(item => {
+            currentFilteredChannels.forEach(item => {
                 if (!tempSelected.has(item.originalIndex)) {
                     allVisibleSelectedCalc = false;
                 }
@@ -1480,18 +1434,34 @@ function openManageChannelsModal(playlistIndex) {
                 document.getElementById('modal-select-all').checked = allVisibleSelectedCheck;
             });
         });
+        
+        document.querySelectorAll('.modal-group-item').forEach(el => {
+            if (el.getAttribute('data-group') === currentGroupFilter) {
+                el.style.borderLeftColor = '#bb86fc';
+                el.style.background = '#2a2a2a';
+                el.style.color = '#bb86fc';
+                el.style.fontWeight = 'bold';
+            } else {
+                el.style.borderLeftColor = 'transparent';
+                el.style.background = 'transparent';
+                el.style.color = '#e0e0e0';
+                el.style.fontWeight = 'normal';
+            }
+        });
     };
 
-    document.getElementById('modal-group-filter').addEventListener('change', (e) => {
-        currentGroupFilter = e.target.value;
-        renderChannelsList();
+    document.querySelectorAll('.modal-group-item').forEach(el => {
+        el.addEventListener('click', (e) => {
+            currentGroupFilter = el.getAttribute('data-group');
+            renderChannelsList();
+        });
     });
 
     document.getElementById('modal-channel-search').addEventListener('input', renderChannelsList);
 
     document.getElementById('modal-select-all').addEventListener('change', (e) => {
         const checkAll = e.target.checked;
-        sortedChannels.forEach(item => {
+        currentFilteredChannels.forEach(item => {
             if (checkAll) tempSelected.add(item.originalIndex);
             else tempSelected.delete(item.originalIndex);
         });
@@ -1513,15 +1483,91 @@ function openManageChannelsModal(playlistIndex) {
     document.getElementById('modal-cancel-btn').addEventListener('click', () => {
         modal.style.display = 'none';
         modal.innerHTML = '';
+        if (isNew) {
+            if (document.getElementById('import-submit-btn')) {
+                document.getElementById('import-submit-btn').textContent = 'Import';
+                document.getElementById('import-submit-btn').disabled = false;
+            }
+            if (document.getElementById('import-stalker-submit-btn')) {
+                document.getElementById('import-stalker-submit-btn').textContent = 'Import';
+                document.getElementById('import-stalker-submit-btn').disabled = false;
+            }
+        }
     });
 
-    document.getElementById('modal-save-btn').addEventListener('click', () => {
-        playlist.channels.forEach((c, idx) => {
-            c.disabled = tempDisabled.has(idx);
-        });
+    document.getElementById('modal-save-btn').addEventListener('click', async () => {
         modal.style.display = 'none';
         modal.innerHTML = '';
-        updateState();
+        
+        const enabledChannels = originalChannels.filter((c, idx) => !tempDisabled.has(idx));
+        playlist.channels = enabledChannels;
+
+        if (isNew) {
+            if (playlist.editIndex >= 0) {
+                savedPlaylists[playlist.editIndex] = playlist;
+            } else {
+                savedPlaylists.push(playlist);
+            }
+            
+            updateState(true);
+            
+            const isStalker = playlist.epg && playlist.epg.startsWith('stalker:');
+            if (isStalker) {
+                updateState(); 
+            } else {
+                let allEpgSources = savedEpgs.slice();
+                if (playlist.epg && playlist.epg !== 'Not Configured' && !allEpgSources.includes(playlist.epg)) {
+                    allEpgSources.push(playlist.epg);
+                }
+                
+                if (!window.activeEpgParsing) window.activeEpgParsing = new Set();
+                if (playlist.epg && playlist.epg !== 'Not Configured') {
+                    window.activeEpgParsing.add(playlist.epg);
+                }
+                updateState(true);
+                
+                if (allEpgSources.length > 0) {
+                    console.log('[API] Calling updateEpg after adding playlist.');
+                    const combinedEpgs = allEpgSources.join(',');
+                    await window.iptvAPI.updateEpg(combinedEpgs, null, true);
+                    epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
+                    await autoMapChannels(false, true);
+                    updateState(); 
+                } else {
+                    updateState(); 
+                }
+                
+                if (playlist.epg && playlist.epg !== 'Not Configured') {
+                    window.activeEpgParsing.delete(playlist.epg);
+                }
+                updateState(); 
+            }
+            
+            editingPlaylistIndex = -1;
+            const importCancelBtn = document.getElementById('import-cancel-btn');
+            const importStalkerCancelBtn = document.getElementById('import-stalker-cancel-btn');
+            if (importCancelBtn) importCancelBtn.style.display = 'none';
+            if (importNameInput) importNameInput.value = '';
+            if (importFilePath) importFilePath.value = '';
+            if (importUrlPath) importUrlPath.value = '';
+            if (importEpgInput) importEpgInput.value = '';
+            if (importStalkerCancelBtn) importStalkerCancelBtn.style.display = 'none';
+            if (importStalkerName) importStalkerName.value = '';
+            if (importStalkerUrl) importStalkerUrl.value = '';
+            if (importStalkerMac) importStalkerMac.value = '';
+            
+            if (document.getElementById('import-submit-btn')) {
+                document.getElementById('import-submit-btn').textContent = 'Import';
+                document.getElementById('import-submit-btn').disabled = false;
+            }
+            if (document.getElementById('import-stalker-submit-btn')) {
+                document.getElementById('import-stalker-submit-btn').textContent = 'Import';
+                document.getElementById('import-stalker-submit-btn').disabled = false;
+            }
+
+        } else {
+            updateState();
+        }
     });
 
     renderChannelsList();
@@ -1555,6 +1601,8 @@ function renderPlaylists() {
         }
         if (totalPrograms > 0) {
             epgInfo = ` <span style="color: #43CB44; font-size: 0.9em;">(${mappedChannels} channels mapped, ${totalPrograms} programs)</span>`;
+        } else if (window.activeEpgParsing && window.activeEpgParsing.has(playlist.epg)) {
+            epgInfo = ` <span style="color: #bb86fc; font-size: 0.9em;">(Parsing EPG...)</span>`;
         } else if (playlist.epg && playlist.epg !== 'Not Configured') {
             const isEpgLoaded = epgChannelsData && epgChannelsData.some(e => e.source === playlist.epg);
             if (isEpgLoaded) {
@@ -1710,6 +1758,11 @@ function renderPlaylists() {
                     if (!isStalker && result.epg_url && (!targetPlaylist.epg || targetPlaylist.epg === 'Not Configured')) {
                         targetPlaylist.epg = result.epg_url;
                     }
+                    
+                    if (!window.activeEpgParsing) window.activeEpgParsing = new Set();
+                    if (!isStalker && targetPlaylist.epg && targetPlaylist.epg !== 'Not Configured') {
+                        window.activeEpgParsing.add(targetPlaylist.epg);
+                    }
                     updateState(true); // SKIP SAVE
                     
                     // Trigger EPG update and auto-map
@@ -1718,6 +1771,10 @@ function renderPlaylists() {
                         await window.iptvAPI.updateEpg(combinedEpgs, null, true);
                         epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
                         await autoMapChannels(false, true); // SKIP SAVE
+                    }
+                    
+                    if (!isStalker && targetPlaylist.epg && targetPlaylist.epg !== 'Not Configured') {
+                        window.activeEpgParsing.delete(targetPlaylist.epg);
                     }
                     updateState(); // FINAL SAVE
                 } else {
@@ -1762,46 +1819,73 @@ function renderPlaylists() {
     });
 }
 
+window.expandedGroups = new Set();
+
 function renderChannels() {
     console.log('[UI] Rendering channel list.');
     const filterSelect = document.getElementById('playlist-filter');
     const filterVal = filterSelect ? filterSelect.value : 'all';
-
-    const groupFilter = document.getElementById('group-filter');
-    const groupVal = groupFilter ? groupFilter.value : 'all';
 
     const channelSearch = document.getElementById('channel-search');
     const searchVal = channelSearch ? channelSearch.value.toLowerCase() : '';
 
     let html = '';
     
+    const groupedChannels = {};
+
     allChannels.forEach((channel, index) => {
         if (filterVal === 'favs' && !channel.favourite) return;
         if (filterVal !== 'all' && filterVal !== 'favs' && String(channel.playlistId) !== String(filterVal)) return;
         
-        const channelGroup = channel.group || 'Uncategorized';
-        if (groupVal !== 'all' && channelGroup !== groupVal) return;
-
         const rawTitle = channel.title || 'Unknown Channel';
         if (searchVal && !rawTitle.toLowerCase().includes(searchVal)) return;
-        const safeTitle = rawTitle.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.ico';
         
-        const logoHtml = `<img src="${imgSrc}" style="width: 40px; height: 40px; min-width: 40px; object-fit: contain; margin-right: 10px; border-radius: 4px; background: #ffffff;">`;
-        
-        const favClass = channel.favourite ? 'fav-btn active' : 'fav-btn';
-        const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
-
-        const activeClass = (index === currentPlayingChannelIndex) ? ' active' : '';
-        html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}" style="display: flex; align-items: center; width: 100%; box-sizing: border-box; padding: 5px 10px; border-bottom: 1px solid #1e1e1e; cursor: pointer; outline: none;">
-            ${logoHtml}
-            <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; color: #e0e0e0; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif;">${safeTitle}</span>
-            ${favBtnHtml}
-        </div>`;
+        const channelGroup = channel.group || 'Uncategorized';
+        if (!groupedChannels[channelGroup]) {
+            groupedChannels[channelGroup] = [];
+        }
+        groupedChannels[channelGroup].push({ channel, index });
     });
 
-    if (!html) {
+    const sortedGroups = Object.keys(groupedChannels).sort(sortAlphaNum);
+
+    if (sortedGroups.length === 0) {
         html = `<div style="padding: 20px; color: #888; text-align: center;">No channels found.</div>`;
+    } else {
+        sortedGroups.forEach(groupName => {
+            const channelsInGroup = groupedChannels[groupName];
+            const safeGroupName = groupName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            
+            const isExpanded = searchVal ? true : window.expandedGroups.has(groupName);
+            const expandIcon = isExpanded ? '▼' : '▶';
+            
+            html += `<div class="group-item" data-group="${safeGroupName.replace(/"/g, '&quot;')}" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; padding: 10px; background: #252525; border-bottom: 1px solid #1e1e1e; cursor: pointer; outline: none; font-weight: bold; color: #bb86fc;">
+                <span>${safeGroupName} <span style="color:#888;font-size:0.8em;font-weight:normal;">(${channelsInGroup.length})</span></span>
+                <span class="group-expand-icon" style="color:#888;font-size:0.8em;">${expandIcon}</span>
+            </div>`;
+            
+            if (isExpanded) {
+                html += `<div class="group-channels-container" style="background: #1a1a1a;">`;
+                channelsInGroup.forEach(({channel, index}) => {
+                    const rawTitle = channel.title || 'Unknown Channel';
+                    const safeTitle = rawTitle.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.ico';
+                    
+                    const logoHtml = `<img src="${imgSrc}" style="width: 40px; height: 40px; min-width: 40px; object-fit: contain; margin-right: 10px; border-radius: 4px; background: #ffffff;">`;
+                    
+                    const favClass = channel.favourite ? 'fav-btn active' : 'fav-btn';
+                    const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
+
+                    const activeClass = (index === currentPlayingChannelIndex) ? ' active' : '';
+                    html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}" style="display: flex; align-items: center; width: 100%; box-sizing: border-box; padding: 5px 10px 5px 20px; border-bottom: 1px solid #1e1e1e; cursor: pointer; outline: none;">
+                        ${logoHtml}
+                        <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; color: #e0e0e0; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif;">${safeTitle}</span>
+                        ${favBtnHtml}
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+        });
     }
 
     channelList.innerHTML = html;
@@ -1819,7 +1903,6 @@ const filterElement = document.getElementById('playlist-filter');
 if (filterElement) {
     console.log('[INIT] Attaching change listener to playlist filter.');
     filterElement.addEventListener('change', () => {
-        updateGroupFilterOptions();
         renderChannels();
         if (document.getElementById('epg-view') && document.getElementById('epg-view').style.display === 'flex') {
             renderFullEpg();
@@ -2015,17 +2098,19 @@ if (importStalkerSubmitBtn) {
 
         const success = await addPlaylist(source, name, epgSource, editingPlaylistIndex);
         
-        if (importStalkerSubmitBtn) {
-            importStalkerSubmitBtn.textContent = originalText;
-            importStalkerSubmitBtn.disabled = false;
-        }
+        if (success !== 'pending') {
+            if (importStalkerSubmitBtn) {
+                importStalkerSubmitBtn.textContent = originalText;
+                importStalkerSubmitBtn.disabled = false;
+            }
 
-        if (success) {
-            editingPlaylistIndex = -1;
-            if (importStalkerCancelBtn) importStalkerCancelBtn.style.display = 'none';
-            if (importStalkerName) importStalkerName.value = '';
-            if (importStalkerUrl) importStalkerUrl.value = '';
-            if (importStalkerMac) importStalkerMac.value = '';
+            if (success) {
+                editingPlaylistIndex = -1;
+                if (importStalkerCancelBtn) importStalkerCancelBtn.style.display = 'none';
+                if (importStalkerName) importStalkerName.value = '';
+                if (importStalkerUrl) importStalkerUrl.value = '';
+                if (importStalkerMac) importStalkerMac.value = '';
+            }
         }
     });
 }
@@ -2803,9 +2888,6 @@ function getVisibleChannels() {
     const filterSelect = document.getElementById('playlist-filter');
     const filterVal = filterSelect ? filterSelect.value : 'all';
 
-    const groupFilter = document.getElementById('group-filter');
-    const groupVal = groupFilter ? groupFilter.value : 'all';
-
     const channelSearch = document.getElementById('channel-search');
     const searchVal = channelSearch ? channelSearch.value.toLowerCase() : '';
 
@@ -2813,9 +2895,6 @@ function getVisibleChannels() {
         if (filterVal === 'favs' && !channel.favourite) return false;
         if (filterVal !== 'all' && filterVal !== 'favs' && String(channel.playlistId) !== String(filterVal)) return false;
         
-        const channelGroup = channel.group || 'Uncategorized';
-        if (groupVal !== 'all' && channelGroup !== groupVal) return false;
-
         const rawTitle = channel.title || 'Unknown Channel';
         if (searchVal && !rawTitle.toLowerCase().includes(searchVal)) return false;
 
@@ -2989,9 +3068,7 @@ function handleOkPress() {
         current.click();
     } else if (current && ['BUTTON', 'A', 'INPUT'].includes(current.tagName)) {
         current.click();
-    } else if (current && (current.classList.contains('channel-item') || current.classList.contains('mapping-ch-item') || current.classList.contains('mapping-epg-item') || current.classList.contains('epg-play-channel'))) {
-        current.click();
-    } else if (current && (current.classList.contains('channel-item') || current.classList.contains('mapping-ch-item') || current.classList.contains('mapping-epg-item') || current.classList.contains('epg-play-channel') || current.classList.contains('live-epg-item'))) {
+    } else if (current && (current.classList.contains('channel-item') || current.classList.contains('group-item') || current.classList.contains('mapping-ch-item') || current.classList.contains('mapping-epg-item') || current.classList.contains('epg-play-channel') || current.classList.contains('live-epg-item'))) {
         const reminderBtn = current.querySelector('.reminder-btn-sidebar');
         if (current.classList.contains('live-epg-item')) {
             if (reminderBtn) reminderBtn.click();
@@ -3856,6 +3933,8 @@ async function backgroundAutoUpdate() {
     
     if (hasUpdates) {
         if (epgSourcesToUpdate.size > 0) {
+            if (!window.activeEpgParsing) window.activeEpgParsing = new Set();
+            epgSourcesToUpdate.forEach(epg => window.activeEpgParsing.add(epg));
             updateState(true); // Skip save if EPG will be updated next
             
             const combinedEpgs = Array.from(epgSourcesToUpdate).join(',');
@@ -3864,6 +3943,7 @@ async function backgroundAutoUpdate() {
             await autoMapChannels(false, true); // SKIP SAVE
             console.log('[BACKGROUND] EPG data updated.');
             
+            epgSourcesToUpdate.forEach(epg => window.activeEpgParsing.delete(epg));
             // EPG preloading skipped to load only on view.
             updateState(); // FINAL SAVE
         } else {
