@@ -77,6 +77,12 @@ aeroStyles.textContent = `
         outline: 2px solid #bb86fc !important;
     }
 
+    /* Fix dropdown option colors */
+    select option {
+        background-color: #1e1e1e !important;
+        color: #e0e0e0 !important;
+    }
+
     /* Modern sleek style for side menu buttons */
     .nav-btn {
         font-weight: 500; /* Menu text: Inter Medium */
@@ -3302,18 +3308,108 @@ document.getElementById('btn-movies').addEventListener('click', function() { if 
 document.getElementById('btn-vod').addEventListener('click', function() { if (!this.disabled) switchTab('vod', this); });
 document.getElementById('btn-recording').addEventListener('click', function() { showToast('Coming in Next Version'); });
 
-function renderMovies() {
+let currentMovieCategory = null;
+
+async function renderMovies() {
     console.log('[CATALOG] Rendering Movies Catalog');
     const grid = document.getElementById('movies-grid');
     const empty = document.getElementById('movies-empty');
     if (!grid) return;
     grid.innerHTML = '';
     
+    let headerContainer = document.getElementById('movies-header-container');
+    if (!headerContainer) {
+        headerContainer = document.createElement('div');
+        headerContainer.id = 'movies-header-container';
+        headerContainer.style.display = 'flex';
+        headerContainer.style.alignItems = 'center';
+        headerContainer.style.gap = '15px';
+        headerContainer.style.marginBottom = '20px';
+        
+        const backBtn = document.createElement('button');
+        backBtn.className = 'playlist-btn';
+        backBtn.innerHTML = '&larr; Back to Categories';
+        backBtn.style.display = 'none';
+        backBtn.id = 'movies-back-btn';
+        backBtn.onclick = () => {
+            currentMovieCategory = null;
+            renderMovies();
+        };
+        
+        const titleLabel = document.createElement('h3');
+        titleLabel.id = 'movies-category-title';
+        titleLabel.style.margin = '0';
+        titleLabel.style.color = '#bb86fc';
+        
+        headerContainer.appendChild(backBtn);
+        headerContainer.appendChild(titleLabel);
+        
+        grid.parentNode.insertBefore(headerContainer, grid);
+    }
+    
+    const backBtn = document.getElementById('movies-back-btn');
+    const titleLabel = document.getElementById('movies-category-title');
+    
+    if (currentMovieCategory) {
+        backBtn.style.display = 'block';
+        titleLabel.textContent = currentMovieCategory.title;
+        
+        grid.innerHTML = '<div style="color: #888; text-align: center; padding: 50px; grid-column: 1 / -1;">Loading movies...</div>';
+        
+        const playlist = savedPlaylists.find(p => p.id === currentMovieCategory.playlistId);
+        if (playlist) {
+            const items = await window.iptvAPI.loadStalkerCategory({
+                url: playlist.source,
+                mac: playlist.epg.substring(8),
+                categoryId: currentMovieCategory.tvg_id,
+                isSeries: false
+            });
+            
+            grid.innerHTML = '';
+            if (items.length === 0) {
+                grid.innerHTML = '<div style="color: #888; text-align: center; padding: 50px; grid-column: 1 / -1;">No movies found in this category.</div>';
+                return;
+            }
+            
+            items.forEach(movie => {
+                const card = document.createElement('div');
+                card.className = 'catalog-card';
+                const logoUrl = movie.logo || 'assets/logo.ico';
+                card.innerHTML = `
+                    <div class="catalog-poster-wrapper">
+                        <img class="catalog-poster" src="${logoUrl}" alt="${movie.name}" onerror="this.onerror=null; this.src='assets/logo.ico';">
+                    </div>
+                    <div class="catalog-info">
+                        <h4 class="catalog-title" title="${movie.name}">${movie.name}</h4>
+                        <div class="catalog-meta">
+                            <span class="catalog-badge">Movie</span>
+                        </div>
+                    </div>
+                `;
+                card.addEventListener('click', () => {
+                    switchTab('live-tv', document.getElementById('btn-live-tv'));
+                    embedStream({
+                        title: movie.name,
+                        url: movie.url,
+                        logo: movie.logo,
+                        playlistId: playlist.id,
+                        type: 'movie'
+                    });
+                });
+                grid.appendChild(card);
+            });
+        }
+        return;
+    }
+    
+    backBtn.style.display = 'none';
+    titleLabel.textContent = 'Movie Categories';
+
     let movies = [];
     savedPlaylists.forEach(p => {
         if (p.channels && !p.disabled) {
             p.channels.forEach(c => {
-                if (c.type === 'movie' && !c.disabled) {
+                if ((c.type === 'movie' || c.type === 'movie_category') && !c.disabled) {
                     c.playlistId = p.id;
                     movies.push(c);
                 }
@@ -3333,21 +3429,27 @@ function renderMovies() {
         const card = document.createElement('div');
         card.className = 'catalog-card';
         const logoUrl = movie.logo || 'assets/logo.ico';
+        const isCategory = movie.type === 'movie_category';
         card.innerHTML = `
-            <div class="catalog-poster-wrapper">
-                <img class="catalog-poster" src="${logoUrl}" alt="${movie.title}" onerror="this.onerror=null; this.src='assets/logo.ico';">
+            <div class="catalog-poster-wrapper" style="${isCategory ? 'padding-top: 100%;' : ''}">
+                ${isCategory ? `<div style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size: 3em; color: #bb86fc; background: #1a1a1a;">📁</div>` : `<img class="catalog-poster" src="${logoUrl}" alt="${movie.title}" onerror="this.onerror=null; this.src='assets/logo.ico';">`}
             </div>
             <div class="catalog-info">
                 <h4 class="catalog-title" title="${movie.title}">${movie.title}</h4>
                 <div class="catalog-meta">
-                    <span class="catalog-badge">Movie</span>
+                    <span class="catalog-badge">${isCategory ? 'Folder' : 'Movie'}</span>
                 </div>
             </div>
         `;
         card.addEventListener('click', () => {
-            console.log('[CATALOG] Playing Movie:', movie.title);
-            switchTab('live-tv', document.getElementById('btn-live-tv'));
-            embedStream(movie);
+            if (isCategory) {
+                currentMovieCategory = movie;
+                renderMovies();
+            } else {
+                console.log('[CATALOG] Playing Movie:', movie.title);
+                switchTab('live-tv', document.getElementById('btn-live-tv'));
+                embedStream(movie);
+            }
         });
         grid.appendChild(card);
     });
@@ -3372,6 +3474,8 @@ function renderMovies() {
     }
 }
 
+let currentVodCategory = null;
+
 function renderVod() {
     console.log('[CATALOG] Rendering VOD/Series Catalog');
     const grid = document.getElementById('vod-grid');
@@ -3379,11 +3483,93 @@ function renderVod() {
     if (!grid) return;
     grid.innerHTML = '';
     
+    let headerContainer = document.getElementById('vod-header-container');
+    if (!headerContainer) {
+        headerContainer = document.createElement('div');
+        headerContainer.id = 'vod-header-container';
+        headerContainer.style.display = 'flex';
+        headerContainer.style.alignItems = 'center';
+        headerContainer.style.gap = '15px';
+        headerContainer.style.marginBottom = '20px';
+        
+        const backBtn = document.createElement('button');
+        backBtn.className = 'playlist-btn';
+        backBtn.innerHTML = '&larr; Back to Categories';
+        backBtn.style.display = 'none';
+        backBtn.id = 'vod-back-btn';
+        backBtn.onclick = () => {
+            currentVodCategory = null;
+            renderVod();
+        };
+        
+        const titleLabel = document.createElement('h3');
+        titleLabel.id = 'vod-category-title';
+        titleLabel.style.margin = '0';
+        titleLabel.style.color = '#bb86fc';
+        
+        headerContainer.appendChild(backBtn);
+        headerContainer.appendChild(titleLabel);
+        
+        grid.parentNode.insertBefore(headerContainer, grid);
+    }
+    
+    const backBtn = document.getElementById('vod-back-btn');
+    const titleLabel = document.getElementById('vod-category-title');
+    
+    if (currentVodCategory) {
+        backBtn.style.display = 'block';
+        titleLabel.textContent = currentVodCategory.title;
+        
+        grid.innerHTML = '<div style="color: #888; text-align: center; padding: 50px; grid-column: 1 / -1;">Loading series...</div>';
+        
+        const playlist = savedPlaylists.find(p => p.id === currentVodCategory.playlistId);
+        if (playlist) {
+            window.iptvAPI.loadStalkerCategory({
+                url: playlist.source,
+                mac: playlist.epg.substring(8),
+                categoryId: currentVodCategory.tvg_id,
+                isSeries: true
+            }).then(items => {
+                grid.innerHTML = '';
+                if (items.length === 0) {
+                    grid.innerHTML = '<div style="color: #888; text-align: center; padding: 50px; grid-column: 1 / -1;">No series found in this category.</div>';
+                    return;
+                }
+                
+                items.forEach(s => {
+                    const card = document.createElement('div');
+                    card.className = 'catalog-card';
+                    const logoUrl = s.logo || 'assets/logo.ico';
+                    card.innerHTML = `
+                        <div class="catalog-poster-wrapper">
+                            <img class="catalog-poster" src="${logoUrl}" alt="${s.name}" onerror="this.onerror=null; this.src='assets/logo.ico';">
+                        </div>
+                        <div class="catalog-info">
+                            <h4 class="catalog-title" title="${s.name}">${s.name}</h4>
+                            <div class="catalog-meta">
+                                <span class="catalog-badge">Series</span>
+                            </div>
+                        </div>
+                    `;
+                    card.addEventListener('click', () => {
+                        console.log('[CATALOG] Opening Series Episodes:', s.name);
+                        openEpisodesModal(playlist.id, s.id, s.name);
+                    });
+                    grid.appendChild(card);
+                });
+            });
+        }
+        return;
+    }
+    
+    backBtn.style.display = 'none';
+    titleLabel.textContent = 'Series Categories';
+
     let series = [];
     savedPlaylists.forEach(p => {
         if (p.channels && !p.disabled) {
             p.channels.forEach(c => {
-                if (c.type === 'vod' && !c.disabled) {
+                if ((c.type === 'vod' || c.type === 'vod_category') && !c.disabled) {
                     c.playlistId = p.id;
                     series.push(c);
                 }
@@ -3403,20 +3589,26 @@ function renderVod() {
         const card = document.createElement('div');
         card.className = 'catalog-card';
         const logoUrl = s.logo || 'assets/logo.ico';
+        const isCategory = s.type === 'vod_category';
         card.innerHTML = `
-            <div class="catalog-poster-wrapper">
-                <img class="catalog-poster" src="${logoUrl}" alt="${s.title}" onerror="this.onerror=null; this.src='assets/logo.ico';">
+            <div class="catalog-poster-wrapper" style="${isCategory ? 'padding-top: 100%;' : ''}">
+                ${isCategory ? `<div style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size: 3em; color: #bb86fc; background: #1a1a1a;">📁</div>` : `<img class="catalog-poster" src="${logoUrl}" alt="${s.title}" onerror="this.onerror=null; this.src='assets/logo.ico';">`}
             </div>
             <div class="catalog-info">
                 <h4 class="catalog-title" title="${s.title}">${s.title}</h4>
                 <div class="catalog-meta">
-                    <span class="catalog-badge">Series</span>
+                    <span class="catalog-badge">${isCategory ? 'Folder' : 'Series'}</span>
                 </div>
             </div>
         `;
         card.addEventListener('click', () => {
-            console.log('[CATALOG] Opening Series Episodes:', s.title);
-            openEpisodesModal(s.playlistId, s.tvg_id, s.title);
+            if (isCategory) {
+                currentVodCategory = s;
+                renderVod();
+            } else {
+                console.log('[CATALOG] Opening Series Episodes:', s.title);
+                openEpisodesModal(s.playlistId, s.tvg_id, s.title);
+            }
         });
         grid.appendChild(card);
     });
