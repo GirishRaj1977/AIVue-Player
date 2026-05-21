@@ -235,6 +235,15 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .loader-spinner {
+            border: 3px solid rgba(187, 134, 252, 0.2);
+            border-top-color: #bb86fc;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
     </style>
 </head>
 <body>
@@ -413,19 +422,31 @@
                 </button>
             </div>
             
-            <!-- Modal Body (Two column layout: Seasons list left, Episodes grid right) -->
-            <div style="display: flex; flex-grow: 1; overflow: hidden;">
-                <!-- Seasons Sidebar -->
-                <div id="seasons-sidebar" style="width: 200px; border-right: 1px solid rgba(255,255,255,0.08); padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background: rgba(20,20,20,0.3);">
-                    <!-- Season tabs will be inserted here -->
-                </div>
-                <!-- Episodes Content -->
-                <div style="flex-grow: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px;">
-                    <div id="episodes-loading" style="display: none; text-align: center; color: #bb86fc; font-weight: bold; padding: 30px;">
-                        Loading Episodes...
+            <!-- Modal Body (Two column layout: Seasons Sidebar Frame left, Episodes Main View Frame right) -->
+            <div style="display: flex; flex-grow: 1; overflow: hidden; padding: 20px; gap: 20px; background: rgba(10, 10, 10, 0.2);">
+                <!-- Seasons Sidebar Frame -->
+                <div id="seasons-sidebar-frame" style="width: 220px; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; background: rgba(20,20,20,0.65); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: flex; flex-direction: column; overflow: hidden;">
+                    <div style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.2);">
+                        <span style="font-weight: bold; color: #bb86fc; font-family: 'Outfit', 'Inter', sans-serif; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px;">Seasons</span>
                     </div>
-                    <div id="episodes-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;">
-                        <!-- Episodes cards will be inserted here -->
+                    <div id="seasons-sidebar" style="flex-grow: 1; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Season tabs will be inserted here -->
+                    </div>
+                </div>
+                <!-- Episodes Main View Frame -->
+                <div id="episodes-main-frame" style="flex-grow: 1; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; background: rgba(20,20,20,0.65); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: flex; flex-direction: column; overflow: hidden;">
+                    <div style="padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.2); display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: bold; color: #bb86fc; font-family: 'Outfit', 'Inter', sans-serif; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px;">Episodes</span>
+                        <span id="episodes-count-badge" style="background: rgba(187, 134, 252, 0.15); color: #bb86fc; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold;">0 Episodes</span>
+                    </div>
+                    <div style="flex-grow: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column;">
+                        <div id="episodes-loading" style="display: none; text-align: center; color: #bb86fc; font-weight: bold; padding: 40px; font-family: 'Outfit', 'Inter', sans-serif;">
+                            <div class="loader-spinner" style="margin: 0 auto 15px auto; width: 30px; height: 30px;"></div>
+                            Loading Episodes...
+                        </div>
+                        <div id="episodes-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;">
+                            <!-- Episodes cards will be inserted here -->
+                        </div>
                     </div>
                 </div>
             </div>

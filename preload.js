@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     onPreviousChannel: (callback) => ipcRenderer.on('mpv-previous-channel', callback),
     onNextChannel: (callback) => ipcRenderer.on('mpv-next-channel', callback),
     saveChannels: (channels) => ipcRenderer.invoke('save-channels', channels),
+    deletePlaylist: (playlistId) => ipcRenderer.invoke('delete-playlist', playlistId),
+    clearAllPlaylists: () => ipcRenderer.invoke('clear-all-playlists'),
     loadChannels: () => ipcRenderer.invoke('load-channels'),
     openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
     clearCache: (url) => ipcRenderer.invoke('clear-cache', url),

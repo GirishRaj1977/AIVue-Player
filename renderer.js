@@ -361,6 +361,68 @@ function showToast(message) {
     }, 3000);
 }
 
+function showConfirmToast(message, onConfirm) {
+    console.log(`[UI] showConfirmToast: "${message}"`);
+    let toast = document.getElementById('toast-notification');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast-notification';
+        document.body.appendChild(toast);
+    }
+    if (toast.hideTimeout) clearTimeout(toast.hideTimeout);
+    
+    // Style for modern premium interactive look
+    toast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1e1e1e; color: #fff; border: 1px solid #bb86fc; padding: 16px 24px; border-radius: 16px; z-index: 10000; font-family: "Inter", sans-serif; box-shadow: 0 10px 25px rgba(0,0,0,0.6); transition: opacity 0.3s, transform 0.3s; opacity: 0; transform: translateX(-50%) translateY(20px); display: flex; flex-direction: column; gap: 12px; align-items: center; pointer-events: auto; min-width: 320px; text-align: center;';
+    
+    toast.innerHTML = `
+        <div style="font-weight: bold; font-size: 0.95em; color: #e0e0e0; line-height: 1.4;">${message}</div>
+        <div style="display: flex; gap: 12px; width: 100%; justify-content: center; margin-top: 4px;">
+            <button id="toast-confirm-btn" style="background: #cf6679; color: #000; border: none; padding: 8px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background 0.2s, transform 0.1s; font-family: 'Inter', sans-serif; font-size: 0.85em; flex: 1;">Delete</button>
+            <button id="toast-cancel-btn" style="background: #2a2a2a; color: #fff; border: 1px solid #444; padding: 8px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background 0.2s, transform 0.1s; font-family: 'Inter', sans-serif; font-size: 0.85em; flex: 1;">Cancel</button>
+        </div>
+    `;
+    
+    requestAnimationFrame(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateX(-50%) translateY(0)';
+    });
+    
+    const hideToast = () => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(-50%) translateY(20px)';
+        toast.style.pointerEvents = 'none';
+        setTimeout(() => {
+            toast.innerHTML = '';
+            // Restore default passive styling just in case
+            toast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #bb86fc; color: #000; padding: 12px 24px; border-radius: 30px; z-index: 10000; font-weight: bold; font-family: "Inter", sans-serif; box-shadow: 0 5px 15px rgba(0,0,0,0.5); transition: opacity 0.3s; opacity: 0; pointer-events: none; white-space: pre-wrap; text-align: center;';
+        }, 300);
+    };
+    
+    const confirmBtn = document.getElementById('toast-confirm-btn');
+    const cancelBtn = document.getElementById('toast-cancel-btn');
+    
+    confirmBtn.addEventListener('mouseover', () => confirmBtn.style.background = '#e57386');
+    confirmBtn.addEventListener('mouseout', () => confirmBtn.style.background = '#cf6679');
+    confirmBtn.addEventListener('mousedown', () => confirmBtn.style.transform = 'scale(0.95)');
+    confirmBtn.addEventListener('mouseup', () => confirmBtn.style.transform = 'scale(1)');
+    
+    cancelBtn.addEventListener('mouseover', () => cancelBtn.style.background = '#383838');
+    cancelBtn.addEventListener('mouseout', () => cancelBtn.style.background = '#2a2a2a');
+    cancelBtn.addEventListener('mousedown', () => cancelBtn.style.transform = 'scale(0.95)');
+    cancelBtn.addEventListener('mouseup', () => cancelBtn.style.transform = 'scale(1)');
+    
+    confirmBtn.addEventListener('click', () => {
+        hideToast();
+        onConfirm();
+    });
+    
+    cancelBtn.addEventListener('click', () => {
+        hideToast();
+    });
+    
+    toast.hideTimeout = setTimeout(hideToast, 8000);
+}
+
 // Variables for the 2-column Mapping UI
 let mappingSelectedPlaylist = 'all';
 let mappingSelectedChannel = null;
@@ -916,54 +978,58 @@ async function renderSettings() {
     });
 
     document.querySelectorAll('.remove-epg-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
+        btn.addEventListener('click', (e) => {
             const idx = parseInt(e.target.getAttribute('data-idx'));
             console.log('[SETTINGS] Remove EPG button clicked for index:', idx);
             const epgSource = savedEpgs[idx];
+            if (!epgSource) return;
             
-            // 1. Unmap all channels mapped to this EPG source
-            const epgIdsToRemove = new Set();
-            if (epgChannelsData) {
-                epgChannelsData.forEach(epg => {
-                    if (epg.source === epgSource) {
-                        epgIdsToRemove.add(epg.id);
+            showConfirmToast(`Are you sure you want to remove the EPG source "${epgSource}"?`, async () => {
+                // 1. Unmap all channels mapped to this EPG source
+                const epgIdsToRemove = new Set();
+                if (epgChannelsData) {
+                    epgChannelsData.forEach(epg => {
+                        if (epg.source === epgSource) {
+                            epgIdsToRemove.add(epg.id);
+                        }
+                    });
+                }
+
+                const titlesToUnmap = [];
+                Object.entries(channelMappings).forEach(([chTitle, epgId]) => {
+                    if (epgIdsToRemove.has(epgId)) {
+                        titlesToUnmap.push(chTitle);
                     }
                 });
-            }
 
-            const titlesToUnmap = [];
-            Object.entries(channelMappings).forEach(([chTitle, epgId]) => {
-                if (epgIdsToRemove.has(epgId)) {
-                    titlesToUnmap.push(chTitle);
+                if (titlesToUnmap.length > 0) {
+                    console.log(`[MAPPING] Unmapping ${titlesToUnmap.length} channels associated with removed EPG.`);
+                    for (const title of titlesToUnmap) {
+                        delete channelMappings[title];
+                        await window.iptvAPI.saveMapping(title, null);
+                    }
+                    updateState(true); // Update the channels without forcing a DB save of the playlist
                 }
+
+                // Check if this EPG is still actively used by an imported playlist
+                const isUsedByPlaylist = savedPlaylists.some(p => p.epg === epgSource);
+                
+                // Only wipe the physical cache files if it's completely unused
+                if (epgSource && !isUsedByPlaylist) {
+                    await window.iptvAPI.clearCache(epgSource);
+                    console.log('[API] Cache cleared for unused EPG:', epgSource);
+                }
+                
+                savedEpgs.splice(idx, 1);
+                await window.iptvAPI.removeExternalEpg(epgSource);
+                
+                if (epgChannelsData) {
+                    epgChannelsData = epgChannelsData.filter(epg => epg.source !== epgSource);
+                }
+
+                renderSettings();
+                showToast(`EPG source removed.`);
             });
-
-            if (titlesToUnmap.length > 0) {
-                console.log(`[MAPPING] Unmapping ${titlesToUnmap.length} channels associated with removed EPG.`);
-                for (const title of titlesToUnmap) {
-                    delete channelMappings[title];
-                    await window.iptvAPI.saveMapping(title, null);
-                }
-                updateState(true); // Update the channels without forcing a DB save of the playlist
-            }
-
-            // Check if this EPG is still actively used by an imported playlist
-            const isUsedByPlaylist = savedPlaylists.some(p => p.epg === epgSource);
-            
-            // Only wipe the physical cache files if it's completely unused
-            if (epgSource && !isUsedByPlaylist) {
-                await window.iptvAPI.clearCache(epgSource);
-                console.log('[API] Cache cleared for unused EPG:', epgSource);
-            }
-            
-            savedEpgs.splice(idx, 1);
-            await window.iptvAPI.removeExternalEpg(epgSource);
-            
-            if (epgChannelsData) {
-                epgChannelsData = epgChannelsData.filter(epg => epg.source !== epgSource);
-            }
-
-            renderSettings();
         });
     });
 
@@ -972,12 +1038,17 @@ async function renderSettings() {
             const idx = parseInt(e.currentTarget.getAttribute('data-idx'));
             console.log('[SETTINGS] Remove reminder button clicked for index:', idx);
             const reminderToRemove = futureReminders[idx];
-            const realIdx = savedReminders.findIndex(r => r.channelTitle === reminderToRemove.channelTitle && r.progTitle === reminderToRemove.progTitle && r.startTime === reminderToRemove.startTime);
-            if (realIdx > -1) {
-                savedReminders.splice(realIdx, 1);
-                saveReminders();
-                renderSettings();
-            }
+            if (!reminderToRemove) return;
+            
+            showConfirmToast(`Are you sure you want to remove the reminder for "${reminderToRemove.progTitle}"?`, () => {
+                const realIdx = savedReminders.findIndex(r => r.channelTitle === reminderToRemove.channelTitle && r.progTitle === reminderToRemove.progTitle && r.startTime === reminderToRemove.startTime);
+                if (realIdx > -1) {
+                    savedReminders.splice(realIdx, 1);
+                    saveReminders();
+                    renderSettings();
+                    showToast(`Reminder removed.`);
+                }
+            });
         });
     });
 
@@ -1965,9 +2036,14 @@ function renderPlaylists() {
             const idx = e.target.getAttribute('data-index');
             console.log('[EVENT] Delete playlist button clicked for index:', idx);
             const playlist = savedPlaylists[idx];
-            if (playlist && playlist.source) window.iptvAPI.clearCache(playlist.source);
-            savedPlaylists.splice(idx, 1);
-            updateState();
+            if (!playlist) return;
+            showConfirmToast(`Are you sure you want to delete the playlist "${playlist.name}"?`, async () => {
+                if (playlist.source) window.iptvAPI.clearCache(playlist.source);
+                await window.iptvAPI.deletePlaylist(playlist.id);
+                savedPlaylists.splice(idx, 1);
+                updateState(true); // skip slow full-save since it's already deleted in the database
+                showToast(`Playlist "${playlist.name}" deleted.`);
+            });
         });
     });
 
@@ -2361,19 +2437,20 @@ if (importStalkerCancelBtn) {
 }
 
 if (clearBtn) {
-    clearBtn.addEventListener('click', async (e) => {
+    clearBtn.addEventListener('click', (e) => {
         e.preventDefault();
         console.log('[EVENT] Clear all playlists button clicked.');
-        showConfirmToast('Clear All Playlists', 'Are you sure you want to delete all playlists?', async () => {
+        showConfirmToast("Are you sure you want to delete all playlists and cached data?", async () => {
             savedPlaylists.forEach(p => {
                 if (p.source) window.iptvAPI.clearCache(p.source);
             });
+            await window.iptvAPI.clearAllPlaylists();
             savedPlaylists = [];
             savedEpgs = [];
             channelMappings = {};
-            if (window.iptvAPI.clearAllMappings) await window.iptvAPI.clearAllMappings();
-            updateState();
+            updateState(true); // skip slow full-save since database is already cleared
             switchTab('playlist', document.getElementById('btn-playlist'));
+            showToast("All playlists and cached data deleted.");
         });
     });
 }
@@ -2381,13 +2458,21 @@ if (clearBtn) {
 // Listen for live hardware stats from MPV (Resolution display removed)
 window.iptvAPI.onMpvPropChange((name, value) => {
     console.log('[API RECV] onMpvPropChange', { name, value });
-    // Can be used for other MPV properties in the future
-    if (name === 'playback-time' && window.pendingEpgUpdate) {
-        const encoded = encodeURIComponent(JSON.stringify(window.pendingEpgUpdate));
-        // Broadcast to all scripts instead of modernz specifically, bypassing script naming issues
-        window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`);
-        setTimeout(() => window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`), 500); // Failsafe delivery
-        window.pendingEpgUpdate = null; // Only send once per playback
+    
+    if (name === 'playback-time') {
+        window.hasStartedPlayback = true;
+        if (window.playbackTimeout) {
+            clearTimeout(window.playbackTimeout);
+            window.playbackTimeout = null;
+        }
+        
+        if (window.pendingEpgUpdate) {
+            const encoded = encodeURIComponent(JSON.stringify(window.pendingEpgUpdate));
+            // Broadcast to all scripts instead of modernz specifically, bypassing script naming issues
+            window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`);
+            setTimeout(() => window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`), 500); // Failsafe delivery
+            window.pendingEpgUpdate = null; // Only send once per playback
+        }
     }
 });
 
@@ -2917,6 +3002,12 @@ async function embedStream(channel) {
     console.log('[STREAM] Embedding stream for channel:', channel.title);
     streamActive = true;
     
+    if (window.playbackTimeout) {
+        clearTimeout(window.playbackTimeout);
+        window.playbackTimeout = null;
+    }
+    window.hasStartedPlayback = false;
+    
     currentPlayingChannelIndex = allChannels.findIndex(c => c.url === channel.url && c.title === channel.title);
 
     document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
@@ -2949,6 +3040,20 @@ async function embedStream(channel) {
             if (resolved) finalStreamUrl = resolved;
             else {
                 showToast("Failed to authenticate stream link.");
+                const playerOverlay = document.getElementById('player-overlay');
+                if (playerOverlay) {
+                    playerOverlay.innerHTML = `
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
+                            <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
+                            <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Channel currently not available</span>
+                        </div>
+                    `;
+                }
+                streamActive = false;
+                currentPlayingChannelIndex = -1;
+                document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+                const fsBtn = document.getElementById('fullscreen-btn');
+                if (fsBtn) fsBtn.style.display = 'none';
                 return;
             }
         }
@@ -3049,10 +3154,41 @@ async function embedStream(channel) {
             height: Math.round(rect.height)
         }
     });
+
+    // Start a 12-second loading timeout. If no playback-time is received, fail gracefully.
+    window.playbackTimeout = setTimeout(() => {
+        if (!window.hasStartedPlayback && streamActive) {
+            console.warn('[STREAM] Playback timeout. Stream failed to load.');
+            streamActive = false;
+            currentPlayingChannelIndex = -1;
+            document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+            
+            // Stop MPV rendering
+            window.iptvAPI.sendMpvCommand('stop');
+            
+            const playerOverlay = document.getElementById('player-overlay');
+            if (playerOverlay) {
+                playerOverlay.innerHTML = `
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
+                        <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
+                        <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Channel currently not available</span>
+                    </div>
+                `;
+            }
+            const fsBtn = document.getElementById('fullscreen-btn');
+            if (fsBtn) fsBtn.style.display = 'none';
+        }
+    }, 12000);
 }
 
 window.iptvAPI.onMpvExit((code) => {
     console.log('[API RECV] onMpvExit with code:', code);
+    
+    if (window.playbackTimeout) {
+        clearTimeout(window.playbackTimeout);
+        window.playbackTimeout = null;
+    }
+    
     if (streamActive) {
         streamActive = false;
         currentPlayingChannelIndex = -1;
@@ -3063,7 +3199,7 @@ window.iptvAPI.onMpvExit((code) => {
             playerOverlay.innerHTML = `
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
                     <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
-                    <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Channel not available at the moment</span>
+                    <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Channel currently not available</span>
                 </div>
             `;
         }
@@ -3661,7 +3797,13 @@ async function renderMovies() {
                 return;
             }
             
-            items.sort((a, b) => sortAlphaNum(a.name, b.name));
+            items.sort((a, b) => {
+                const isCatA = a.type === 'movie_category' || a.type === 'vod_category' || a.type === 'series_category';
+                const isCatB = b.type === 'movie_category' || b.type === 'vod_category' || b.type === 'series_category';
+                if (isCatA && !isCatB) return -1;
+                if (!isCatA && isCatB) return 1;
+                return sortAlphaNum(a.name, b.name);
+            });
             items.forEach(movie => {
                 const card = document.createElement('div');
                 card.className = 'catalog-card';
@@ -3714,7 +3856,13 @@ async function renderMovies() {
     }
     if (empty) empty.style.display = 'none';
 
-    movies.sort((a, b) => sortAlphaNum(a.title, b.title));
+    movies.sort((a, b) => {
+        const isCatA = a.type === 'movie_category' || a.type === 'vod_category' || a.type === 'series_category';
+        const isCatB = b.type === 'movie_category' || b.type === 'vod_category' || b.type === 'series_category';
+        if (isCatA && !isCatB) return -1;
+        if (!isCatA && isCatB) return 1;
+        return sortAlphaNum(a.title, b.title);
+    });
 
     movies.forEach(movie => {
         const card = document.createElement('div');
@@ -3827,7 +3975,13 @@ function renderVod() {
                     return;
                 }
                 
-                items.sort((a, b) => sortAlphaNum(a.name, b.name));
+                items.sort((a, b) => {
+                    const isCatA = a.type === 'movie_category' || a.type === 'vod_category' || a.type === 'series_category';
+                    const isCatB = b.type === 'movie_category' || b.type === 'vod_category' || b.type === 'series_category';
+                    if (isCatA && !isCatB) return -1;
+                    if (!isCatA && isCatB) return 1;
+                    return sortAlphaNum(a.name, b.name);
+                });
                 items.forEach(s => {
                     const card = document.createElement('div');
                     card.className = 'catalog-card';
@@ -3845,7 +3999,7 @@ function renderVod() {
                     `;
                     card.addEventListener('click', () => {
                         console.log('[CATALOG] Opening Series Episodes:', s.name);
-                        openEpisodesModal(playlist.id, s.id, s.name);
+                        openEpisodesModal(playlist.id, s.id, s.name, s.logo);
                     });
                     grid.appendChild(card);
                 });
@@ -3875,13 +4029,19 @@ function renderVod() {
     }
     if (empty) empty.style.display = 'none';
 
-    series.sort((a, b) => sortAlphaNum(a.title, b.title));
+    series.sort((a, b) => {
+        const isCatA = a.type === 'movie_category' || a.type === 'vod_category' || a.type === 'series_category';
+        const isCatB = b.type === 'movie_category' || b.type === 'vod_category' || b.type === 'series_category';
+        if (isCatA && !isCatB) return -1;
+        if (!isCatA && isCatB) return 1;
+        return sortAlphaNum(a.title, b.title);
+    });
 
     series.forEach(s => {
         const card = document.createElement('div');
         card.className = 'catalog-card';
         const logoUrl = s.logo || 'assets/logo.ico';
-        const isCategory = s.type === 'vod_category';
+        const isCategory = s.type === 'vod_category' || s.type === 'series_category';
         card.innerHTML = `
             <div class="catalog-poster-wrapper" style="${isCategory ? 'padding-top: 100%;' : ''}">
                 ${isCategory ? `<div style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size: 3em; color: #bb86fc; background: #1a1a1a;">📁</div>` : `<img class="catalog-poster" src="${logoUrl}" alt="${s.title}" onerror="this.onerror=null; this.src='assets/logo.ico';">`}
@@ -3899,7 +4059,7 @@ function renderVod() {
                 renderVod();
             } else {
                 console.log('[CATALOG] Opening Series Episodes:', s.title);
-                openEpisodesModal(s.playlistId, s.tvg_id, s.title);
+                openEpisodesModal(s.playlistId, s.tvg_id, s.title, s.logo);
             }
         });
         grid.appendChild(card);
@@ -3925,7 +4085,7 @@ function renderVod() {
     }
 }
 
-async function openEpisodesModal(playlistId, seriesId, seriesTitle) {
+async function openEpisodesModal(playlistId, seriesId, seriesTitle, seriesPosterUrl = null) {
     console.log('[UI] Opening episodes modal for:', seriesTitle, 'playlist:', playlistId, 'seriesId:', seriesId);
     
     const modal = document.getElementById('episodes-modal');
@@ -3933,6 +4093,7 @@ async function openEpisodesModal(playlistId, seriesId, seriesTitle) {
     const seasonsSidebar = document.getElementById('seasons-sidebar');
     const episodesGrid = document.getElementById('episodes-grid');
     const loader = document.getElementById('episodes-loading');
+    const countBadge = document.getElementById('episodes-count-badge');
     
     if (!modal) return;
     
@@ -3940,6 +4101,7 @@ async function openEpisodesModal(playlistId, seriesId, seriesTitle) {
     if (seasonsSidebar) seasonsSidebar.innerHTML = '';
     if (episodesGrid) episodesGrid.innerHTML = '';
     if (loader) loader.style.display = 'block';
+    if (countBadge) countBadge.textContent = '0 Episodes';
     
     modal.style.display = 'flex';
     
@@ -3959,6 +4121,7 @@ async function openEpisodesModal(playlistId, seriesId, seriesTitle) {
         
         if (!episodes || episodes.length === 0) {
             if (episodesGrid) episodesGrid.innerHTML = '<div style="color: #888; padding: 20px;">No episodes found for this series.</div>';
+            if (countBadge) countBadge.textContent = '0 Episodes';
             return;
         }
         
@@ -3982,6 +4145,10 @@ async function openEpisodesModal(playlistId, seriesId, seriesTitle) {
             episodesGrid.innerHTML = '';
             
             const seasonEpisodes = seasons[seasonNum] || [];
+            if (countBadge) {
+                countBadge.textContent = `${seasonEpisodes.length} Episode${seasonEpisodes.length === 1 ? '' : 's'}`;
+            }
+            
             seasonEpisodes.forEach(ep => {
                 const epCard = document.createElement('button');
                 epCard.className = 'episode-card';
@@ -3998,7 +4165,7 @@ async function openEpisodesModal(playlistId, seriesId, seriesTitle) {
                     modal.style.display = 'none';
                     switchTab('live-tv', document.getElementById('btn-live-tv'));
                     
-                    const seriesPoster = playlist.channels.find(c => c.tvg_id === seriesId)?.logo || 'assets/logo.ico';
+                    const seriesPoster = seriesPosterUrl || playlist.channels.find(c => c.tvg_id === seriesId)?.logo || 'assets/logo.ico';
                     embedStream({
                         title: `${seriesTitle} - S${seasonNum}E${ep.episodeNum} - ${ep.name || 'Episode'}`,
                         url: ep.url,
@@ -4035,6 +4202,7 @@ async function openEpisodesModal(playlistId, seriesId, seriesTitle) {
         console.error('[UI ERR] Failed to open episodes modal:', err);
         if (loader) loader.style.display = 'none';
         if (episodesGrid) episodesGrid.innerHTML = `<div style="color: #cf6679; padding: 20px;">Error: ${err.message}</div>`;
+        if (countBadge) countBadge.textContent = 'Error';
     }
 }
 
