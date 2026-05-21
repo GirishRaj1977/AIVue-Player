@@ -2364,15 +2364,17 @@ if (clearBtn) {
     clearBtn.addEventListener('click', async (e) => {
         e.preventDefault();
         console.log('[EVENT] Clear all playlists button clicked.');
-        savedPlaylists.forEach(p => {
-            if (p.source) window.iptvAPI.clearCache(p.source);
+        showConfirmToast('Clear All Playlists', 'Are you sure you want to delete all playlists?', async () => {
+            savedPlaylists.forEach(p => {
+                if (p.source) window.iptvAPI.clearCache(p.source);
+            });
+            savedPlaylists = [];
+            savedEpgs = [];
+            channelMappings = {};
+            if (window.iptvAPI.clearAllMappings) await window.iptvAPI.clearAllMappings();
+            updateState();
+            switchTab('playlist', document.getElementById('btn-playlist'));
         });
-        savedPlaylists = [];
-        savedEpgs = [];
-        channelMappings = {};
-        if (window.iptvAPI.clearAllMappings) await window.iptvAPI.clearAllMappings();
-        updateState();
-        switchTab('playlist', document.getElementById('btn-playlist'));
     });
 }
 
