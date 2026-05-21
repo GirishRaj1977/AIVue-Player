@@ -41,3 +41,6 @@ tmp/
 
 # Environment
 .env
+
+episodes_fetching_snippet.txt
+stalker_temp.py
