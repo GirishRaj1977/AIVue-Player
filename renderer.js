@@ -1440,7 +1440,8 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                 channels: channels,
                 epg: finalEpgSource,
                 disabled: false,
-                editIndex: editIndex
+                editIndex: editIndex,
+                exp_date: result.exp_date || null
             };
             
             openManageChannelsModal(-1, tempPlaylist);
@@ -1941,6 +1942,20 @@ function renderPlaylists() {
             });
         }
 
+        let expInfo = '';
+        if (playlist.exp_date) {
+            let expStr = playlist.exp_date;
+            if (/^\d{10}$/.test(expStr)) {
+                expStr = new Date(parseInt(expStr) * 1000).toLocaleDateString();
+            } else if (/^\d{13}$/.test(expStr)) {
+                expStr = new Date(parseInt(expStr)).toLocaleDateString();
+            } else {
+                const parsedDate = new Date(expStr);
+                if (!isNaN(parsedDate)) expStr = parsedDate.toLocaleDateString();
+            }
+            expInfo = `<span><strong>Expires:</strong> <span style="color: #FFD700;">${expStr}</span></span>`;
+        }
+
         card.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <h3 style="margin: 0; color: ${playlist.disabled ? '#888' : '#bb86fc'};">${playlist.name} ${playlist.disabled ? '(Disabled)' : ''}</h3>
@@ -1966,6 +1981,7 @@ function renderPlaylists() {
                     <span><strong>Enabled:</strong> <span style="color: #43CB44;">${enabledChannels}</span></span>
                     <span><strong>Disabled:</strong> <span style="color: #cf6679;">${disabledChannels}</span></span>
                     <span><strong>Groups:</strong> ${groups.size}</span>
+                    ${expInfo}
                 </div>
                 <div>
                     <span><strong>EPG:</strong> <span title="${playlist.epg || 'Not Configured'}">${getEpgName(playlist.epg)}</span>${epgInfo}</span>
@@ -2102,7 +2118,8 @@ function renderPlaylists() {
                         channels: channels,
                         epg: finalEpgSource,
                         disabled: targetPlaylist.disabled,
-                        editIndex: idx
+                        editIndex: idx,
+                        exp_date: result.exp_date || targetPlaylist.exp_date || null
                     };
                     
                     openManageChannelsModal(-1, tempPlaylist);
@@ -3703,7 +3720,8 @@ window.iptvAPI.onShowRemoteOverrideToast((deviceId) => {
 
 // Use ResizeObserver to track exact pixel coordinates perfectly
 const resizeObserver = new ResizeObserver(() => {
-    if (streamActive) {
+    const isLiveViewActive = document.getElementById('btn-live-tv') && document.getElementById('btn-live-tv').classList.contains('active');
+    if (streamActive && isLiveViewActive && playerContainer) {
         console.log('[EVENT] ResizeObserver triggered, updating MPV bounds.');
         const rect = playerContainer.getBoundingClientRect();
         window.iptvAPI.updateMpvBounds({
@@ -3712,6 +3730,8 @@ const resizeObserver = new ResizeObserver(() => {
             width: Math.round(rect.width),
             height: Math.round(rect.height)
         });
+    } else {
+        window.iptvAPI.updateMpvBounds({ x: 0, y: 0, width: 0, height: 0 });
     }
 });
 resizeObserver.observe(playerContainer);
@@ -3818,18 +3838,16 @@ function switchTab(tabId, clickedBtn) {
     if (isVod) renderVod();
 
     // Explicitly hide or restore the video player bounds instantly when switching views
-    if (streamActive) {
-        if (isLive) {
-            const rect = playerContainer.getBoundingClientRect();
-            window.iptvAPI.updateMpvBounds({
-                x: Math.round(rect.x),
-                y: Math.round(rect.y),
-                width: Math.round(rect.width),
-                height: Math.round(rect.height)
-            });
-        } else {
-            window.iptvAPI.updateMpvBounds({ x: 0, y: 0, width: 0, height: 0 });
-        }
+    if (isLive && streamActive && playerContainer) {
+        const rect = playerContainer.getBoundingClientRect();
+        window.iptvAPI.updateMpvBounds({
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height)
+        });
+    } else {
+        window.iptvAPI.updateMpvBounds({ x: 0, y: 0, width: 0, height: 0 });
     }
 
     setTimeout(() => {
@@ -3855,89 +3873,55 @@ let loadedMovieLanes = {};
 let loadedVodLanes = {};
 
 function injectPremiumStyles() {
-    if (document.getElementById('premium-catalog-styles')) return;
+    if (document.getElementById('premium-catalog-styles')) {
+        document.getElementById('premium-catalog-styles').remove();
+    }
     const style = document.createElement('style');
     style.id = 'premium-catalog-styles';
     style.innerHTML = `
-        .category-lane-row {
-            margin-bottom: 30px;
-            position: relative;
-            opacity: 0;
-            transition: opacity 0.5s ease;
-        }
-        .category-lane-row.visible {
-            opacity: 1;
-        }
-        .category-lane-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-            padding: 0 5px;
-        }
-        .category-lane-title {
-            margin: 0;
-            font-size: 1.3em;
-            color: #bb86fc;
-            font-family: 'Outfit', 'Inter', sans-serif;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-        }
-        .category-lane-track-container {
-            position: relative;
-            display: flex;
-            align-items: center;
-        }
-        .category-lane-track {
-            display: flex;
-            gap: 15px;
-            overflow-x: auto;
-            scroll-behavior: smooth;
-            padding: 10px 5px;
-            scrollbar-width: none;
-            width: 100%;
-        }
-        .category-lane-track::-webkit-scrollbar {
-            display: none;
-        }
-        .category-lane-arrow {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 40px;
-            height: 40px;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(4px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: white;
-            border-radius: 50%;
+        .catalog-folder-card {
+            background: rgba(30, 30, 30, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
             cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            gap: 15px;
+            aspect-ratio: 1;
+        }
+        .catalog-folder-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(187, 134, 252, 0.5);
+            background: rgba(40, 40, 40, 0.8);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+        .catalog-folder-icon {
+            font-size: 3.5em;
+            color: #bb86fc;
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 5;
-            opacity: 0;
-            transition: opacity 0.2s ease, background 0.2s ease, transform 0.2s ease;
         }
-        .category-lane-track-container:hover .category-lane-arrow {
-            opacity: 1;
+        .catalog-folder-title {
+            font-weight: 600;
+            font-size: 1.1em;
+            color: #fff;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
-        .category-lane-arrow:hover {
-            background: #bb86fc;
-            color: black;
-            transform: translateY(-50%) scale(1.15);
-            box-shadow: 0 0 10px rgba(187,134,252,0.5);
-        }
-        .category-lane-arrow.left {
-            left: 10px;
-        }
-        .category-lane-arrow.right {
-            right: 10px;
+        .catalog-folder-count {
+            font-size: 0.85em;
+            color: #888;
         }
         
         .catalog-card {
-            flex: 0 0 160px;
-            width: 160px;
             background: rgba(30, 30, 30, 0.6);
             border: 1px solid rgba(255, 255, 255, 0.05);
             border-radius: 10px;
@@ -4022,27 +4006,18 @@ function injectPremiumStyles() {
         #premium-details-modal > div::-webkit-scrollbar {
             display: none;
         }
+
+        #movies-view, #vod-view {
+            background: #121212 !important;
+            border: 1px solid #333 !important;
+            border-radius: 8px !important;
+        }
+        #movies-view::-webkit-scrollbar, #vod-view::-webkit-scrollbar { width: 14px; height: 14px; }
+        #movies-view::-webkit-scrollbar-track, #vod-view::-webkit-scrollbar-track { background: #121212; border-left: 1px solid #333; border-top: 1px solid #333; }
+        #movies-view::-webkit-scrollbar-thumb, #vod-view::-webkit-scrollbar-thumb { background: #444; border-radius: 7px; border: 3px solid #121212; }
+        #movies-view::-webkit-scrollbar-corner, #vod-view::-webkit-scrollbar-corner { background: #121212; }
     `;
     document.head.appendChild(style);
-}
-
-function initLaneObserver() {
-    if (laneObserver) return;
-    laneObserver = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                const laneRow = entry.target;
-                const loadFn = laneRow.dataset.loadFn;
-                laneRow.classList.add('visible');
-                if (loadFn && typeof window[loadFn] === 'function') {
-                    window[loadFn](laneRow);
-                }
-                laneObserver.unobserve(laneRow);
-            }
-        });
-    }, {
-        rootMargin: '100px 0px 300px 0px'
-    });
 }
 
 function initTmdbObserver() {
@@ -4077,9 +4052,17 @@ function initTmdbObserver() {
                     requestQueue.push(async () => {
                         if (card.dataset.tmdbLoaded === 'true') return;
                         
-                        console.log(`[TMDB] Live viewport scraping: "${title}" (${type})`);
                         const tmdbType = type === 'series' ? 'tv' : 'movie';
-                        const res = await window.iptvAPI.fetchTmdbByTitle({ title, type: tmdbType });
+                        const tmdbId = card.dataset.tmdbId;
+                        let res;
+                        
+                        if (tmdbId) {
+                            console.log(`[TMDB] Live viewport scraping by ID: "${tmdbId}" for "${title}" (${type})`);
+                            res = await window.iptvAPI.fetchTmdbById({ tmdbId, type: tmdbType });
+                        } else {
+                            console.log(`[TMDB] Live viewport scraping by Title: "${title}" (${type})`);
+                            res = await window.iptvAPI.fetchTmdbByTitle({ title, type: tmdbType });
+                        }
                         
                         if (res && !res.error) {
                             card.dataset.tmdbLoaded = 'true';
@@ -4115,230 +4098,6 @@ function initTmdbObserver() {
     }, {
         rootMargin: '0px 200px 0px 200px'
     });
-}
-
-function createLaneRowElement({ title, playlistId, categoryId, isStalker, loadFnName }) {
-    const laneRow = document.createElement('div');
-    laneRow.className = 'category-lane-row';
-    laneRow.dataset.playlistId = playlistId;
-    laneRow.dataset.categoryId = categoryId;
-    laneRow.dataset.isStalker = isStalker ? 'true' : 'false';
-    laneRow.dataset.loadFn = loadFnName;
-    
-    const header = document.createElement('div');
-    header.className = 'category-lane-header';
-    
-    const h3 = document.createElement('h3');
-    h3.className = 'category-lane-title';
-    h3.textContent = title;
-    header.appendChild(h3);
-    
-    const trackContainer = document.createElement('div');
-    trackContainer.className = 'category-lane-track-container';
-    
-    const leftArrow = document.createElement('button');
-    leftArrow.className = 'category-lane-arrow left';
-    leftArrow.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`;
-    
-    const track = document.createElement('div');
-    track.className = 'category-lane-track';
-    
-    const rightArrow = document.createElement('button');
-    rightArrow.className = 'category-lane-arrow right';
-    rightArrow.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
-    
-    leftArrow.addEventListener('click', () => {
-        track.scrollBy({ left: -track.clientWidth * 0.75, behavior: 'smooth' });
-    });
-    rightArrow.addEventListener('click', () => {
-        track.scrollBy({ left: track.clientWidth * 0.75, behavior: 'smooth' });
-    });
-    
-    trackContainer.appendChild(leftArrow);
-    trackContainer.appendChild(track);
-    trackContainer.appendChild(rightArrow);
-    
-    laneRow.appendChild(header);
-    laneRow.appendChild(trackContainer);
-    
-    return laneRow;
-}
-
-async function loadMoviesForLane(laneRow) {
-    const track = laneRow.querySelector('.category-lane-track');
-    const playlistId = laneRow.dataset.playlistId;
-    const categoryId = laneRow.dataset.categoryId;
-    const isStalker = laneRow.dataset.isStalker === 'true';
-    
-    track.innerHTML = '<div style="color: #bb86fc; padding: 20px 40px; font-weight: bold; font-family: \'Outfit\', sans-serif;">Loading movies...</div>';
-    
-    try {
-        let items = [];
-        if (isStalker) {
-            const playlist = savedPlaylists.find(p => p.id.toString() === playlistId.toString());
-            if (playlist) {
-                items = await window.iptvAPI.loadStalkerCategory({
-                    url: playlist.source,
-                    mac: playlist.epg.substring(8),
-                    categoryId: categoryId,
-                    isSeries: false
-                });
-            }
-        } else {
-            const laneId = `${playlistId}-${categoryId}`;
-            if (loadedMovieLanes[laneId]) {
-                items = loadedMovieLanes[laneId].allItems;
-            }
-        }
-        
-        if (items.length === 0) {
-            laneRow.style.display = 'none';
-            return;
-        }
-        
-        items.sort((a, b) => sortAlphaNum(a.name || a.title, b.name || b.title));
-        
-        const laneId = `${playlistId}-${categoryId}`;
-        loadedMovieLanes[laneId] = {
-            allItems: items,
-            renderedCount: 0,
-            isStalker: isStalker
-        };
-        
-        track.innerHTML = '';
-        renderNextLanePage(laneRow, 'movie');
-        
-        track.addEventListener('scroll', () => {
-            if (track.scrollWidth - track.scrollLeft - track.clientWidth < 200) {
-                renderNextLanePage(laneRow, 'movie');
-            }
-        });
-        
-    } catch (e) {
-        console.error('[LANE LOAD ERROR] Movies load failed:', e);
-        track.innerHTML = '<div style="color: #cf6679; padding: 20px 40px;">Failed to load items.</div>';
-    }
-}
-
-async function loadVodForLane(laneRow) {
-    const track = laneRow.querySelector('.category-lane-track');
-    const playlistId = laneRow.dataset.playlistId;
-    const categoryId = laneRow.dataset.categoryId;
-    const isStalker = laneRow.dataset.isStalker === 'true';
-    
-    track.innerHTML = '<div style="color: #bb86fc; padding: 20px 40px; font-weight: bold; font-family: \'Outfit\', sans-serif;">Loading series...</div>';
-    
-    try {
-        let items = [];
-        if (isStalker) {
-            const playlist = savedPlaylists.find(p => p.id.toString() === playlistId.toString());
-            if (playlist) {
-                items = await window.iptvAPI.loadStalkerCategory({
-                    url: playlist.source,
-                    mac: playlist.epg.substring(8),
-                    categoryId: categoryId,
-                    isSeries: true
-                });
-            }
-        } else {
-            const laneId = `${playlistId}-${categoryId}`;
-            if (loadedVodLanes[laneId]) {
-                items = loadedVodLanes[laneId].allItems;
-            }
-        }
-        
-        if (items.length === 0) {
-            laneRow.style.display = 'none';
-            return;
-        }
-        
-        items.sort((a, b) => sortAlphaNum(a.name || a.title, b.name || b.title));
-        
-        const laneId = `${playlistId}-${categoryId}`;
-        loadedVodLanes[laneId] = {
-            allItems: items,
-            renderedCount: 0,
-            isStalker: isStalker
-        };
-        
-        track.innerHTML = '';
-        renderNextLanePage(laneRow, 'series');
-        
-        track.addEventListener('scroll', () => {
-            if (track.scrollWidth - track.scrollLeft - track.clientWidth < 200) {
-                renderNextLanePage(laneRow, 'series');
-            }
-        });
-        
-    } catch (e) {
-        console.error('[LANE LOAD ERROR] Series load failed:', e);
-        track.innerHTML = '<div style="color: #cf6679; padding: 20px 40px;">Failed to load items.</div>';
-    }
-}
-
-function renderNextLanePage(laneRow, contentType) {
-    const playlistId = laneRow.dataset.playlistId;
-    const categoryId = laneRow.dataset.categoryId;
-    const laneId = `${playlistId}-${categoryId}`;
-    const laneData = contentType === 'series' ? loadedVodLanes[laneId] : loadedMovieLanes[laneId];
-    
-    if (!laneData) return;
-    
-    const track = laneRow.querySelector('.category-lane-track');
-    const startIdx = laneData.renderedCount;
-    const pageSize = 20;
-    const endIdx = Math.min(startIdx + pageSize, laneData.allItems.length);
-    
-    if (startIdx >= laneData.allItems.length) return;
-    
-    for (let i = startIdx; i < endIdx; i++) {
-        const item = laneData.allItems[i];
-        const card = document.createElement('div');
-        card.className = 'catalog-card';
-        
-        const title = item.name || item.title;
-        const logoUrl = item.logo || 'assets/logo.ico';
-        
-        card.dataset.title = title;
-        card.dataset.type = contentType;
-        
-        card.innerHTML = `
-            <div class="catalog-poster-wrapper">
-                <img class="catalog-poster" src="${logoUrl}" alt="${title}" onerror="this.onerror=null; this.src='assets/logo.ico';">
-            </div>
-            <div class="catalog-info">
-                <h4 class="catalog-title" title="${title}">${title}</h4>
-                <div class="catalog-meta">
-                    <span class="catalog-badge">${contentType === 'series' ? 'Series' : 'Movie'}</span>
-                </div>
-            </div>
-        `;
-        
-        card.addEventListener('click', () => {
-            const streamInfo = {
-                title: title,
-                url: item.url,
-                logo: logoUrl,
-                playlistId: playlistId,
-                type: contentType,
-                tvg_id: item.id || item.tvg_id
-            };
-            
-            if (card.dataset.tmdbLoaded === 'true' && card.dataset.tmdbData) {
-                streamInfo.tmdbData = JSON.parse(card.dataset.tmdbData);
-            }
-            
-            openMovieDetailsModal(streamInfo);
-        });
-        
-        track.appendChild(card);
-        
-        if (tmdbObserver) {
-            tmdbObserver.observe(card);
-        }
-    }
-    
-    laneData.renderedCount = endIdx;
 }
 
 async function openMovieDetailsModal(streamInfo) {
@@ -4378,7 +4137,13 @@ async function openMovieDetailsModal(streamInfo) {
     if (streamInfo.tmdbData) {
         tmdbData = streamInfo.tmdbData;
     } else {
-        const res = await window.iptvAPI.fetchTmdbByTitle({ title: streamInfo.title, type: streamInfo.type === 'series' ? 'tv' : 'movie' });
+        const type = streamInfo.type === 'series' ? 'tv' : 'movie';
+        let res;
+        if (streamInfo.tmdbId) {
+            res = await window.iptvAPI.fetchTmdbById({ tmdbId: streamInfo.tmdbId, type });
+        } else {
+            res = await window.iptvAPI.fetchTmdbByTitle({ title: streamInfo.title, type });
+        }
         if (res && !res.error) {
             tmdbData = res;
         }
@@ -4555,16 +4320,11 @@ async function renderMovies() {
     console.log('[CATALOG] Rendering Movies Catalog');
     injectPremiumStyles();
     initTmdbObserver();
-    initLaneObserver();
     
     const grid = document.getElementById('movies-grid');
     const empty = document.getElementById('movies-empty');
     if (!grid) return;
     grid.innerHTML = '';
-    grid.style.display = 'flex';
-    grid.style.flexDirection = 'column';
-    grid.style.gap = '20px';
-    grid.style.width = '100%';
     
     const headerContainer = document.getElementById('movies-header-container');
     if (headerContainer) headerContainer.remove();
@@ -4598,67 +4358,202 @@ async function renderMovies() {
     }
     if (empty) empty.style.display = 'none';
     
-    stalkerCategories.forEach(cat => {
-        const laneRow = createLaneRowElement({
-            title: cat.title || cat.name,
-            playlistId: cat.playlistId,
-            categoryId: cat.tvg_id,
-            isStalker: true,
-            loadFnName: 'loadMoviesForLane'
-        });
-        grid.appendChild(laneRow);
-        if (laneObserver) laneObserver.observe(laneRow);
-    });
-    
-    Object.keys(m3uGroups).forEach(groupName => {
-        const playlistId = m3uGroups[groupName][0].playlistId;
-        const laneId = `${playlistId}-${groupName}`;
-        loadedMovieLanes[laneId] = {
-            allItems: m3uGroups[groupName],
-            renderedCount: 0,
-            isStalker: false
+    if (!currentMovieCategory) {
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(180px, 1fr))';
+        grid.style.gap = '20px';
+        grid.style.padding = '20px';
+
+        const renderFolder = (title, count, onClick) => {
+            const card = document.createElement('div');
+            card.className = 'catalog-folder-card';
+            card.innerHTML = `
+                <div class="catalog-folder-icon">
+                    <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                </div>
+                <div class="catalog-folder-title" title="${title.replace(/"/g, '&quot;')}">${title}</div>
+                ${count !== null ? `<div class="catalog-folder-count">${count} Items</div>` : ''}
+            `;
+            card.addEventListener('click', onClick);
+            grid.appendChild(card);
         };
         
-        const laneRow = createLaneRowElement({
-            title: groupName,
-            playlistId: playlistId,
-            categoryId: groupName,
-            isStalker: false,
-            loadFnName: 'loadMoviesForLane'
+        stalkerCategories.forEach(cat => {
+            renderFolder(cat.title || cat.name, null, () => {
+                currentMovieCategory = {
+                    type: 'stalker',
+                    playlistId: cat.playlistId,
+                    categoryId: cat.tvg_id,
+                    title: cat.title || cat.name
+                };
+                renderMovies();
+            });
         });
-        grid.appendChild(laneRow);
-        if (laneObserver) laneObserver.observe(laneRow);
-    });
-    
-    const searchInput = document.getElementById('movies-search');
-    if (searchInput) {
-        searchInput.replaceWith(searchInput.cloneNode(true));
-        const newSearchInput = document.getElementById('movies-search');
-        newSearchInput.value = '';
-        newSearchInput.addEventListener('keyup', (e) => {
-            const query = e.target.value.toLowerCase().trim();
-            const laneRows = grid.querySelectorAll('.category-lane-row');
-            
-            laneRows.forEach(lane => {
-                const cards = lane.querySelectorAll('.catalog-card');
-                let visibleCount = 0;
+        
+        Object.keys(m3uGroups).sort(sortAlphaNum).forEach(groupName => {
+            renderFolder(groupName, m3uGroups[groupName].length, () => {
+                currentMovieCategory = {
+                    type: 'm3u',
+                    playlistId: m3uGroups[groupName][0].playlistId,
+                    categoryId: groupName,
+                    title: groupName,
+                    items: m3uGroups[groupName]
+                };
+                renderMovies();
+            });
+        });
+
+        const searchInput = document.getElementById('movies-search');
+        if (searchInput) {
+            searchInput.replaceWith(searchInput.cloneNode(true));
+            const newSearchInput = document.getElementById('movies-search');
+            newSearchInput.value = '';
+            newSearchInput.addEventListener('keyup', (e) => {
+                const query = e.target.value.toLowerCase().trim();
+                const cards = grid.querySelectorAll('.catalog-folder-card');
                 cards.forEach(card => {
-                    const title = card.dataset.title.toLowerCase();
+                    const title = card.querySelector('.catalog-folder-title').textContent.toLowerCase();
                     if (title.includes(query)) {
                         card.style.display = 'flex';
-                        visibleCount++;
                     } else {
                         card.style.display = 'none';
                     }
                 });
-                
-                if (query !== '' && visibleCount === 0) {
-                    lane.style.display = 'none';
-                } else {
-                    lane.style.display = 'block';
-                }
             });
+        }
+    } else {
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(160px, 1fr))';
+        grid.style.gap = '20px';
+        grid.style.padding = '20px';
+
+        const backBtnContainer = document.createElement('div');
+        backBtnContainer.style.gridColumn = '1 / -1';
+        backBtnContainer.style.display = 'flex';
+        backBtnContainer.style.alignItems = 'center';
+        backBtnContainer.style.gap = '15px';
+        backBtnContainer.style.marginBottom = '10px';
+        backBtnContainer.innerHTML = `
+            <button class="playlist-btn" style="background: #2a2a2a; color: white; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Back
+            </button>
+            <h3 style="margin: 0; color: #bb86fc; font-family: 'Outfit', 'Inter', sans-serif;">${currentMovieCategory.title}</h3>
+        `;
+        const backBtn = backBtnContainer.querySelector('button');
+        backBtn.addEventListener('mouseover', () => backBtn.style.background = '#3a3a3a');
+        backBtn.addEventListener('mouseout', () => backBtn.style.background = '#2a2a2a');
+        backBtn.addEventListener('click', () => {
+            currentMovieCategory = null;
+            renderMovies();
         });
+        grid.appendChild(backBtnContainer);
+
+        const renderItems = (items) => {
+            items.sort((a, b) => sortAlphaNum(a.name || a.title, b.name || b.title));
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'catalog-card';
+                
+                const title = item.name || item.title;
+                const logoUrl = item.logo || 'assets/logo.ico';
+                const tmdbId = item.tmdb_id || item.tmdbId || '';
+                
+                card.dataset.title = title;
+                card.dataset.type = 'movie';
+                if (tmdbId) {
+                    card.dataset.tmdbId = tmdbId;
+                }
+                
+                card.innerHTML = `
+                    <div class="catalog-poster-wrapper">
+                        <img class="catalog-poster" src="${logoUrl}" alt="${title}" onerror="this.onerror=null; this.src='assets/logo.ico';">
+                    </div>
+                    <div class="catalog-info">
+                        <h4 class="catalog-title" title="${title.replace(/"/g, '&quot;')}">${title}</h4>
+                        <div class="catalog-meta">
+                            <span class="catalog-badge">Movie</span>
+                        </div>
+                    </div>
+                `;
+                
+                card.addEventListener('click', () => {
+                    const streamInfo = {
+                        title: title,
+                        url: item.url,
+                        logo: logoUrl,
+                        playlistId: currentMovieCategory.playlistId,
+                        type: 'movie',
+                        tvg_id: item.id || item.tvg_id,
+                        tmdbId: tmdbId
+                    };
+                    
+                    if (card.dataset.tmdbLoaded === 'true' && card.dataset.tmdbData) {
+                        streamInfo.tmdbData = JSON.parse(card.dataset.tmdbData);
+                    }
+                    
+                    openMovieDetailsModal(streamInfo);
+                });
+                
+                grid.appendChild(card);
+                if (tmdbObserver) tmdbObserver.observe(card);
+            });
+
+            const searchInput = document.getElementById('movies-search');
+            if (searchInput) {
+                searchInput.replaceWith(searchInput.cloneNode(true));
+                const newSearchInput = document.getElementById('movies-search');
+                newSearchInput.value = '';
+                newSearchInput.addEventListener('keyup', (e) => {
+                    const query = e.target.value.toLowerCase().trim();
+                    const cards = grid.querySelectorAll('.catalog-card');
+                    cards.forEach(card => {
+                        const title = card.dataset.title.toLowerCase();
+                        if (title.includes(query)) {
+                            card.style.display = 'flex';
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    });
+                });
+            }
+        };
+
+        if (currentMovieCategory.type === 'm3u') {
+            renderItems(currentMovieCategory.items);
+        } else if (currentMovieCategory.type === 'stalker') {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.style.gridColumn = '1 / -1';
+            loadingDiv.style.color = '#bb86fc';
+            loadingDiv.style.textAlign = 'center';
+            loadingDiv.style.padding = '40px';
+            loadingDiv.style.fontFamily = "'Outfit', 'Inter', sans-serif";
+            loadingDiv.innerHTML = '<h2>Loading movies...</h2>';
+            grid.appendChild(loadingDiv);
+
+            try {
+                const playlist = savedPlaylists.find(p => p.id.toString() === currentMovieCategory.playlistId.toString());
+                window.iptvAPI.loadStalkerCategory({
+                    url: playlist.source,
+                    mac: playlist.epg.substring(8),
+                    categoryId: currentMovieCategory.categoryId,
+                    isSeries: false,
+                    categoryType: 'movie',
+                    categoryName: currentMovieCategory.title
+                }).then(items => {
+                    loadingDiv.remove();
+                    if (!items || items.length === 0) {
+                        grid.innerHTML += '<div style="grid-column: 1 / -1; color: #888; text-align: center; padding: 40px;">No movies found in this folder.</div>';
+                    } else {
+                        renderItems(items);
+                    }
+                }).catch(e => {
+                    loadingDiv.innerHTML = '<h2 style="color: #cf6679;">Failed to load movies.</h2>';
+                });
+            } catch (e) {
+                loadingDiv.innerHTML = '<h2 style="color: #cf6679;">Failed to load movies.</h2>';
+            }
+        }
     }
 }
 
@@ -4668,16 +4563,11 @@ async function renderVod() {
     console.log('[CATALOG] Rendering VOD/Series Catalog');
     injectPremiumStyles();
     initTmdbObserver();
-    initLaneObserver();
     
     const grid = document.getElementById('vod-grid');
     const empty = document.getElementById('vod-empty');
     if (!grid) return;
     grid.innerHTML = '';
-    grid.style.display = 'flex';
-    grid.style.flexDirection = 'column';
-    grid.style.gap = '20px';
-    grid.style.width = '100%';
     
     const headerContainer = document.getElementById('vod-header-container');
     if (headerContainer) headerContainer.remove();
@@ -4711,67 +4601,202 @@ async function renderVod() {
     }
     if (empty) empty.style.display = 'none';
     
-    stalkerCategories.forEach(cat => {
-        const laneRow = createLaneRowElement({
-            title: cat.title || cat.name,
-            playlistId: cat.playlistId,
-            categoryId: cat.tvg_id,
-            isStalker: true,
-            loadFnName: 'loadVodForLane'
-        });
-        grid.appendChild(laneRow);
-        if (laneObserver) laneObserver.observe(laneRow);
-    });
-    
-    Object.keys(m3uGroups).forEach(groupName => {
-        const playlistId = m3uGroups[groupName][0].playlistId;
-        const laneId = `${playlistId}-${groupName}`;
-        loadedVodLanes[laneId] = {
-            allItems: m3uGroups[groupName],
-            renderedCount: 0,
-            isStalker: false
+    if (!currentVodCategory) {
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(180px, 1fr))';
+        grid.style.gap = '20px';
+        grid.style.padding = '20px';
+
+        const renderFolder = (title, count, onClick) => {
+            const card = document.createElement('div');
+            card.className = 'catalog-folder-card';
+            card.innerHTML = `
+                <div class="catalog-folder-icon">
+                    <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                </div>
+                <div class="catalog-folder-title" title="${title.replace(/"/g, '&quot;')}">${title}</div>
+                ${count !== null ? `<div class="catalog-folder-count">${count} Items</div>` : ''}
+            `;
+            card.addEventListener('click', onClick);
+            grid.appendChild(card);
         };
         
-        const laneRow = createLaneRowElement({
-            title: groupName,
-            playlistId: playlistId,
-            categoryId: groupName,
-            isStalker: false,
-            loadFnName: 'loadVodForLane'
+        stalkerCategories.forEach(cat => {
+            renderFolder(cat.title || cat.name, null, () => {
+                currentVodCategory = {
+                    type: 'stalker',
+                    playlistId: cat.playlistId,
+                    categoryId: cat.tvg_id,
+                    title: cat.title || cat.name
+                };
+                renderVod();
+            });
         });
-        grid.appendChild(laneRow);
-        if (laneObserver) laneObserver.observe(laneRow);
-    });
-    
-    const searchInput = document.getElementById('vod-search');
-    if (searchInput) {
-        searchInput.replaceWith(searchInput.cloneNode(true));
-        const newSearchInput = document.getElementById('vod-search');
-        newSearchInput.value = '';
-        newSearchInput.addEventListener('keyup', (e) => {
-            const query = e.target.value.toLowerCase().trim();
-            const laneRows = grid.querySelectorAll('.category-lane-row');
-            
-            laneRows.forEach(lane => {
-                const cards = lane.querySelectorAll('.catalog-card');
-                let visibleCount = 0;
+        
+        Object.keys(m3uGroups).sort(sortAlphaNum).forEach(groupName => {
+            renderFolder(groupName, m3uGroups[groupName].length, () => {
+                currentVodCategory = {
+                    type: 'm3u',
+                    playlistId: m3uGroups[groupName][0].playlistId,
+                    categoryId: groupName,
+                    title: groupName,
+                    items: m3uGroups[groupName]
+                };
+                renderVod();
+            });
+        });
+
+        const searchInput = document.getElementById('vod-search');
+        if (searchInput) {
+            searchInput.replaceWith(searchInput.cloneNode(true));
+            const newSearchInput = document.getElementById('vod-search');
+            newSearchInput.value = '';
+            newSearchInput.addEventListener('keyup', (e) => {
+                const query = e.target.value.toLowerCase().trim();
+                const cards = grid.querySelectorAll('.catalog-folder-card');
                 cards.forEach(card => {
-                    const title = card.dataset.title.toLowerCase();
+                    const title = card.querySelector('.catalog-folder-title').textContent.toLowerCase();
                     if (title.includes(query)) {
                         card.style.display = 'flex';
-                        visibleCount++;
                     } else {
                         card.style.display = 'none';
                     }
                 });
-                
-                if (query !== '' && visibleCount === 0) {
-                    lane.style.display = 'none';
-                } else {
-                    lane.style.display = 'block';
-                }
             });
+        }
+    } else {
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(160px, 1fr))';
+        grid.style.gap = '20px';
+        grid.style.padding = '20px';
+
+        const backBtnContainer = document.createElement('div');
+        backBtnContainer.style.gridColumn = '1 / -1';
+        backBtnContainer.style.display = 'flex';
+        backBtnContainer.style.alignItems = 'center';
+        backBtnContainer.style.gap = '15px';
+        backBtnContainer.style.marginBottom = '10px';
+        backBtnContainer.innerHTML = `
+            <button class="playlist-btn" style="background: #2a2a2a; color: white; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Back
+            </button>
+            <h3 style="margin: 0; color: #bb86fc; font-family: 'Outfit', 'Inter', sans-serif;">${currentVodCategory.title}</h3>
+        `;
+        const backBtn = backBtnContainer.querySelector('button');
+        backBtn.addEventListener('mouseover', () => backBtn.style.background = '#3a3a3a');
+        backBtn.addEventListener('mouseout', () => backBtn.style.background = '#2a2a2a');
+        backBtn.addEventListener('click', () => {
+            currentVodCategory = null;
+            renderVod();
         });
+        grid.appendChild(backBtnContainer);
+
+        const renderItems = (items) => {
+            items.sort((a, b) => sortAlphaNum(a.name || a.title, b.name || b.title));
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'catalog-card';
+                
+                const title = item.name || item.title;
+                const logoUrl = item.logo || 'assets/logo.ico';
+                const tmdbId = item.tmdb_id || item.tmdbId || '';
+                
+                card.dataset.title = title;
+                card.dataset.type = 'series';
+                if (tmdbId) {
+                    card.dataset.tmdbId = tmdbId;
+                }
+                
+                card.innerHTML = `
+                    <div class="catalog-poster-wrapper">
+                        <img class="catalog-poster" src="${logoUrl}" alt="${title}" onerror="this.onerror=null; this.src='assets/logo.ico';">
+                    </div>
+                    <div class="catalog-info">
+                        <h4 class="catalog-title" title="${title.replace(/"/g, '&quot;')}">${title}</h4>
+                        <div class="catalog-meta">
+                            <span class="catalog-badge">Series</span>
+                        </div>
+                    </div>
+                `;
+                
+                card.addEventListener('click', () => {
+                    const streamInfo = {
+                        title: title,
+                        url: item.url,
+                        logo: logoUrl,
+                        playlistId: currentVodCategory.playlistId,
+                        type: 'series',
+                        tvg_id: item.id || item.tvg_id,
+                        tmdbId: tmdbId
+                    };
+                    
+                    if (card.dataset.tmdbLoaded === 'true' && card.dataset.tmdbData) {
+                        streamInfo.tmdbData = JSON.parse(card.dataset.tmdbData);
+                    }
+                    
+                    openMovieDetailsModal(streamInfo);
+                });
+                
+                grid.appendChild(card);
+                if (tmdbObserver) tmdbObserver.observe(card);
+            });
+
+            const searchInput = document.getElementById('vod-search');
+            if (searchInput) {
+                searchInput.replaceWith(searchInput.cloneNode(true));
+                const newSearchInput = document.getElementById('vod-search');
+                newSearchInput.value = '';
+                newSearchInput.addEventListener('keyup', (e) => {
+                    const query = e.target.value.toLowerCase().trim();
+                    const cards = grid.querySelectorAll('.catalog-card');
+                    cards.forEach(card => {
+                        const title = card.dataset.title.toLowerCase();
+                        if (title.includes(query)) {
+                            card.style.display = 'flex';
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    });
+                });
+            }
+        };
+
+        if (currentVodCategory.type === 'm3u') {
+            renderItems(currentVodCategory.items);
+        } else if (currentVodCategory.type === 'stalker') {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.style.gridColumn = '1 / -1';
+            loadingDiv.style.color = '#bb86fc';
+            loadingDiv.style.textAlign = 'center';
+            loadingDiv.style.padding = '40px';
+            loadingDiv.style.fontFamily = "'Outfit', 'Inter', sans-serif";
+            loadingDiv.innerHTML = '<h2>Loading series...</h2>';
+            grid.appendChild(loadingDiv);
+
+            try {
+                const playlist = savedPlaylists.find(p => p.id.toString() === currentVodCategory.playlistId.toString());
+                window.iptvAPI.loadStalkerCategory({
+                    url: playlist.source,
+                    mac: playlist.epg.substring(8),
+                    categoryId: currentVodCategory.categoryId,
+                    isSeries: true,
+                    categoryType: 'series',
+                    categoryName: currentVodCategory.title
+                }).then(items => {
+                    loadingDiv.remove();
+                    if (!items || items.length === 0) {
+                        grid.innerHTML += '<div style="grid-column: 1 / -1; color: #888; text-align: center; padding: 40px;">No series found in this folder.</div>';
+                    } else {
+                        renderItems(items);
+                    }
+                }).catch(e => {
+                    loadingDiv.innerHTML = '<h2 style="color: #cf6679;">Failed to load series.</h2>';
+                });
+            } catch (e) {
+                loadingDiv.innerHTML = '<h2 style="color: #cf6679;">Failed to load series.</h2>';
+            }
+        }
     }
 }
 
@@ -5002,6 +5027,9 @@ async function backgroundAutoUpdate() {
             savedPlaylists[i].channels = channels;
             if (!isStalker && result.epg_url && (!savedPlaylists[i].epg || savedPlaylists[i].epg === 'Not Configured')) {
                 savedPlaylists[i].epg = result.epg_url;
+            }
+            if (result.exp_date) {
+                savedPlaylists[i].exp_date = result.exp_date;
             }
             hasUpdates = true;
             

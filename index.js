@@ -84,6 +84,13 @@ try {
         // column type already exists
     }
     
+    // Safety check for existing playlists table (in case it didn't have exp_date column previously)
+    try {
+        db.exec("ALTER TABLE playlists ADD COLUMN exp_date TEXT");
+    } catch (e) {
+        // column exp_date already exists
+    }
+    
     console.log("[DB] SQLite Database initialized at", dbPath);
 } catch (err) {
     console.warn("[DB] better-sqlite3 not installed yet. Run 'npm install better-sqlite3'.");
@@ -287,6 +294,30 @@ ipcMain.handle('fetch-tmdb-by-title', async (event, { title, type }) => {
         return await fetchDetails(bestMatch.id, tmdbType, headers);
     } catch (err) {
         console.error(`[TMDB API ERR] Search failed for "${title}":`, err.message);
+        return { error: err.message };
+    }
+});
+
+ipcMain.handle('fetch-tmdb-by-id', async (event, { tmdbId, type }) => {
+    if (!tmdbConfig.apiKey && !tmdbConfig.apiToken) {
+        return { error: 'TMDB API not configured' };
+    }
+    
+    if (!tmdbId) return { error: 'Empty TMDB ID' };
+    
+    const isSeries = type === 'series' || type === 'vod';
+    const tmdbType = isSeries ? 'tv' : 'movie';
+    
+    let headers = { 'Accept': 'application/json' };
+    if (tmdbConfig.apiToken) {
+        headers['Authorization'] = `Bearer ${tmdbConfig.apiToken}`;
+    }
+    
+    try {
+        console.log(`[TMDB API] Fetching details directly by ID for ${tmdbType}: "${tmdbId}"`);
+        return await fetchDetails(tmdbId, tmdbType, headers);
+    } catch (err) {
+        console.error(`[TMDB API ERR] Details fetch failed for ID "${tmdbId}":`, err.message);
         return { error: err.message };
     }
 });
@@ -691,7 +722,11 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
 
         // ------------------ Playback Commands ------------------
         app.get('/playpause', (req, res) => { sendMpvCommand(['cycle', 'pause']); res.send('OK'); });
-        app.get('/stop', (req, res) => { sendMpvCommand(['stop']); res.send('OK'); });
+        app.get('/stop', (req, res) => { 
+            console.trace('STOP COMMAND RECEIVED (REMOTE API)');
+            sendMpvCommand(['stop']); 
+            res.send('OK'); 
+        });
         app.get('/mute', (req, res) => { sendMpvCommand(['cycle', 'mute']); res.send('OK'); });
         app.get('/volumeup', (req, res) => { sendMpvCommand(['add', 'volume', 5]); res.send('OK'); });
         app.get('/volumedown', (req, res) => { sendMpvCommand(['add', 'volume', -5]); res.send('OK'); });
@@ -1156,8 +1191,8 @@ function initMpv() {
         `--stream-lavf-o=reconnect=1`,
         `--stream-lavf-o=reconnect_streamed=1`,
         `--idle=yes`,
-        `--log-file=D:\\Play\\mpv-test.log`,
-        `--msg-level=modernz=warn`
+        `--log-file=${path.join(app.getPath('userData'), 'mpv-debug.log')}`,
+        `--msg-level=all=v`
     ];
     console.log('[MPV] Spawning MPV process ONCE with args:', mpvArgs);
     mpvProcess = spawn(mpvPath, mpvArgs, { windowsHide: true });
@@ -1217,6 +1252,9 @@ function connectIPC() {
         ipcClient.write(JSON.stringify({ command: ["observe_property", 5, "video-bitrate"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["observe_property", 6, "playback-time"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["observe_property", 7, "core-idle"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 9, "pause"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 10, "path"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["request_log_messages", "v"] }) + '\n');
     });
     
     let buffer = '';
@@ -1265,6 +1303,13 @@ function connectIPC() {
                         mainWindow.webContents.send('mpv-next-channel');
                     }
                 }
+                
+                if (['file-loaded', 'start-file', 'end-file', 'tracks-changed'].includes(msg.event)) {
+                    console.log(`[MPV LIFECYCLE EVENT] ${msg.event}`, msg);
+                }
+                if (msg.event === 'log-message') {
+                    if (msg.level === 'error' || msg.level === 'warn') console.log(`[MPV LOG] ${msg.text.trim()}`);
+                }
             } catch (e) {}
         }
     });
@@ -1302,16 +1347,67 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
 
     syncPlayerWindow();
 
-    if (ipcClient && !ipcClient.destroyed) {
-        console.log('[MPV IPC SEND]', JSON.stringify({ command: ["loadfile", data.url, "replace"] }));
-        ipcClient.write(JSON.stringify({ command: ["loadfile", data.url, "replace"] }) + '\n');
-    } else {
-        setTimeout(() => {
-            if (ipcClient && !ipcClient.destroyed) {
-                console.log('[MPV IPC SEND]', JSON.stringify({ command: ["loadfile", data.url, "replace"] }));
-                ipcClient.write(JSON.stringify({ command: ["loadfile", data.url, "replace"] }) + '\n');
+    const urlStr = data.url || '';
+    let mac = '';
+    const macMatch = urlStr.match(/[?&]mac=([^&]+)/i);
+    if (macMatch) {
+        mac = decodeURIComponent(macMatch[1]);
+    }
+    
+    let session = null;
+    let portalUrl = '';
+    if (mac) {
+        const lowerMac = mac.toLowerCase();
+        for (const [key, value] of stalkerTokens.entries()) {
+            if (key.toLowerCase().endsWith('|' + lowerMac)) {
+                session = value;
+                const parts = key.split('|');
+                portalUrl = parts[0];
+                break;
             }
-        }, 1500);
+        }
+    }
+
+    const playStream = () => {
+        if (ipcClient && !ipcClient.destroyed) {
+            let ua = '';
+            let headersList = '';
+            
+            if (mac && session) {
+                ua = 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
+                let referer = '';
+                if (portalUrl) {
+                    referer = portalUrl.replace('/server/load.php', '/c/index.html').replace('/portal.php', '/c/index.html');
+                } else {
+                    referer = urlStr.split('/play/')[0] + '/c/index.html';
+                }
+                const cookies = `mac=${mac}; stb_lang=en; timezone=GMT` + (session.phpSessionId ? `; PHPSESSID=${session.phpSessionId}` : '');
+                const fields = [
+                    'X-User-Agent: Model: MAG250; Link: Ethernet',
+                    `Cookie: ${cookies}`,
+                    `Referer: ${referer}`
+                ];
+                if (session.token) {
+                    fields.push(`Authorization: Bearer ${session.token}`);
+                }
+                headersList = fields.join(',');
+                console.log('[MPV HEADER INJECT] Injecting MAG stbapp headers for Stalker stream. MAC:', mac, 'Referer:', referer);
+            } else {
+                console.log('[MPV HEADER INJECT] Clearing custom MAG headers for standard stream.');
+            }
+            
+            ipcClient.write(JSON.stringify({ command: ["set_property", "user-agent", ua] }) + '\n');
+            ipcClient.write(JSON.stringify({ command: ["set_property", "http-header-fields", headersList] }) + '\n');
+            
+            console.log('[MPV IPC SEND]', JSON.stringify({ command: ["loadfile", data.url, "replace"] }));
+            ipcClient.write(JSON.stringify({ command: ["loadfile", data.url, "replace"] }) + '\n');
+        }
+    };
+
+    if (ipcClient && !ipcClient.destroyed) {
+        playStream();
+    } else {
+        setTimeout(playStream, 1500);
     }
 });
 
@@ -1325,6 +1421,9 @@ ipcMain.on('update-mpv-bounds', (event, bounds) => {
 // Send control commands directly to the MPV process
 ipcMain.on('mpv-command', (event, command) => {
     console.log('[IPC RECV] mpv-command', command);
+    if (command === 'stop') {
+        console.trace('STOP COMMAND RECEIVED (MAIN IPC)');
+    }
     if (command === 'cycle fullscreen' && mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.setFullScreen(!mainWindow.isFullScreen());
         return;
@@ -1743,13 +1842,14 @@ function saveChannelsToDb(playlists) {
         return false;
     }
     const insertPlaylist = db.prepare(`
-        INSERT INTO playlists (id, name, source_url, epg_url, is_disabled)
-        VALUES (@id, @name, @source, @epg, @disabled)
+        INSERT INTO playlists (id, name, source_url, epg_url, is_disabled, exp_date)
+        VALUES (@id, @name, @source, @epg, @disabled, @exp_date)
         ON CONFLICT(id) DO UPDATE SET
             name = @name,
             source_url = @source,
             epg_url = @epg,
-            is_disabled = @disabled
+            is_disabled = @disabled,
+            exp_date = @exp_date
     `);
 
     const insertChannel = db.prepare(`
@@ -1775,7 +1875,8 @@ function saveChannelsToDb(playlists) {
                 name: p.name || 'Unnamed',
                 source: p.source || '',
                 epg: p.epg || 'Not Configured',
-                disabled: p.disabled ? 1 : 0
+                disabled: p.disabled ? 1 : 0,
+                exp_date: p.exp_date || null
             });
 
             clearChannels.run(p.id.toString());
@@ -1940,6 +2041,7 @@ function loadChannelsFromDb() {
                 source: p.source_url,
                 epg: p.epg_url,
                 disabled: p.is_disabled === 1,
+                exp_date: p.exp_date,
                 channels: pChannels
             });
         }
@@ -2010,7 +2112,8 @@ async function authenticateStalker(baseUrl, mac) {
             'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
             'X-User-Agent': 'Model: MAG250; Link: Ethernet',
             'Accept': '*/*',
-            'Referer': url.replace('/portal.php', '/c/index.html')
+            'Referer': url.replace('/server/load.php', '/c/index.html').replace('/portal.php', '/c/index.html'),
+            'Cookie': `mac=${mac}; stb_lang=en; timezone=GMT`
         };
 
         let phpSessionId = '';
@@ -2022,6 +2125,16 @@ async function authenticateStalker(baseUrl, mac) {
             if (setCookie) {
                 const match = setCookie.match(/PHPSESSID=([^;]+)/);
                 if (match) phpSessionId = match[1];
+            }
+            if (!phpSessionId && typeof response.headers.getSetCookie === 'function') {
+                const cookiesList = response.headers.getSetCookie();
+                for (const cookie of cookiesList) {
+                    const match = cookie.match(/PHPSESSID=([^;]+)/);
+                    if (match) {
+                        phpSessionId = match[1];
+                        break;
+                    }
+                }
             }
             
             const text = await response.text();
@@ -2042,7 +2155,7 @@ async function authenticateStalker(baseUrl, mac) {
             console.error('[STALKER ERR] Handshake network failed:', e.message);
         }
         
-        const cookieHeader = `mac=${encodeURIComponent(mac)}; stb_lang=en; timezone=GMT` + (phpSessionId ? `; PHPSESSID=${phpSessionId}` : '');
+        const cookieHeader = `mac=${mac}; stb_lang=en; timezone=GMT` + (phpSessionId ? `; PHPSESSID=${phpSessionId}` : '');
         const authHeaders = {
             ...headers,
             'Cookie': cookieHeader
@@ -2051,6 +2164,24 @@ async function authenticateStalker(baseUrl, mac) {
         const profileUrl = `${url}?type=stb&action=get_profile&mac=${encodeURIComponent(mac)}&hd=1&auth_second_step=1`;
         try {
             const response = await fetch(profileUrl, { headers: authHeaders });
+            
+            // Capture PHPSESSID from profile request as well!
+            const setCookie = response.headers.get('set-cookie');
+            if (setCookie) {
+                const match = setCookie.match(/PHPSESSID=([^;]+)/);
+                if (match) phpSessionId = match[1];
+            }
+            if (!phpSessionId && typeof response.headers.getSetCookie === 'function') {
+                const cookiesList = response.headers.getSetCookie();
+                for (const cookie of cookiesList) {
+                    const match = cookie.match(/PHPSESSID=([^;]+)/);
+                    if (match) {
+                        phpSessionId = match[1];
+                        break;
+                    }
+                }
+            }
+
             const profileData = await response.json();
             if (profileData.js?.token) {
                 token = profileData.js.token;
@@ -2081,7 +2212,7 @@ async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = 
         'Referer': url.replace('/server/load.php', '/c/index.html').replace('/portal.php', '/c/index.html')
     };
     
-    const cookieHeader = `mac=${encodeURIComponent(mac)}; stb_lang=en; timezone=GMT` + (session.phpSessionId ? `; PHPSESSID=${session.phpSessionId}` : '');
+    const cookieHeader = `mac=${mac}; stb_lang=en; timezone=GMT` + (session.phpSessionId ? `; PHPSESSID=${session.phpSessionId}` : '');
     const reqHeaders = {
         ...headers,
         'Cookie': cookieHeader,
@@ -2108,6 +2239,29 @@ async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = 
             console.warn(`[STALKER] Session invalid/expired (HTTP ${response.status}). Re-authenticating and retrying ${action}...`);
             stalkerTokens.delete(cacheKey);
             return stalkerRequest(baseUrl, mac, action, extraParams, true);
+        }
+        
+        // Capture PHPSESSID dynamic updates
+        let newPhpSessionId = '';
+        const setCookie = response.headers.get('set-cookie');
+        if (setCookie) {
+            const match = setCookie.match(/PHPSESSID=([^;]+)/);
+            if (match) newPhpSessionId = match[1];
+        }
+        if (!newPhpSessionId && typeof response.headers.getSetCookie === 'function') {
+            const cookiesList = response.headers.getSetCookie();
+            for (const cookie of cookiesList) {
+                const match = cookie.match(/PHPSESSID=([^;]+)/);
+                if (match) {
+                    newPhpSessionId = match[1];
+                    break;
+                }
+            }
+        }
+        if (newPhpSessionId && session.phpSessionId !== newPhpSessionId) {
+            console.log('[STALKER] Dynamic session cookie update:', newPhpSessionId);
+            session.phpSessionId = newPhpSessionId;
+            stalkerTokens.set(cacheKey, { ...session, phpSessionId: newPhpSessionId });
         }
         
         const text = await response.text();
@@ -2317,6 +2471,20 @@ ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
         console.log('[STALKER IPC] Starting Stalker parsing for url:', url, 'mac:', mac);
         
         let allParsed = [];
+        let expireDate = null;
+        
+        // 0. Fetch profile for expiry date
+        try {
+            const profileRes = await stalkerRequest(url, mac, 'get_profile', { type: 'stb' });
+            if (profileRes && profileRes.js) {
+                const expire = profileRes.js.expire_billing || profileRes.js.expire || profileRes.js.end_date;
+                if (expire) {
+                    expireDate = expire;
+                }
+            }
+        } catch(e) {
+            console.error('[STALKER] Failed to load profile:', e);
+        }
 
         // 1. Fetch ITV Categories (Genres)
         let itvCategories = [];
@@ -2423,7 +2591,7 @@ ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
         }
 
         console.log(`[STALKER IPC] Successfully imported ${uniqueParsed.length} items (Categories lazy-loaded).`);
-        return { channels: uniqueParsed };
+        return { channels: uniqueParsed, exp_date: expireDate };
     } catch (e) {
         console.error('[STALKER IPC ERR] Failed to parse stalker portal:', e);
         return { error: e.message };
@@ -2521,7 +2689,8 @@ ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, is
                         logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
                         url: `stalker-series:${seriesId}`,
                         type: 'series',
-                        group: categoryName || 'Series'
+                        group: categoryName || 'Series',
+                        tmdb_id: m.tmdb_id || m.tmdbId || m.tmdb || ''
                     };
                 } else {
                     const movieId = m.id || m.video_id || m.movie_id || '';
@@ -2532,7 +2701,8 @@ ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, is
                         logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
                         url: `stalker-cmd:vod|${m.cmd || ''}`,
                         type: 'movie',
-                        group: categoryName || 'Movies'
+                        group: categoryName || 'Movies',
+                        tmdb_id: m.tmdb_id || m.tmdbId || m.tmdb || ''
                     };
                 }
             });

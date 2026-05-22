@@ -95,6 +95,7 @@ def parse_m3u(content, source=""):
     channels = []
     current_channel = {}
     epg_url = None
+    exp_date = None
     
     is_hls_chunklist = False
 
@@ -113,6 +114,9 @@ def parse_m3u(content, source=""):
             epg_match = re.search(r'(?:x-tvg-url|url-tvg)=["\']([^"\']+)["\']', line, re.IGNORECASE)
             if epg_match:
                 epg_url = epg_match.group(1)
+            exp_match = re.search(r'(?:exp-date|expire)=["\']([^"\']+)["\']', line, re.IGNORECASE)
+            if exp_match:
+                exp_date = exp_match.group(1)
             continue
             
         if line_upper.startswith('#EXTINF'):
@@ -149,6 +153,7 @@ def parse_m3u(content, source=""):
             current_channel['tvg_id'] = attrs.get('tvg-id', '')
             current_channel['tvg_name'] = attrs.get('tvg-name', '')
             current_channel['group'] = attrs.get('group-title', 'Uncategorized')
+            current_channel['tmdb_id'] = attrs.get('tmdb-id') or attrs.get('tmdb_id') or attrs.get('tmdbid') or ''
             
         elif line_upper.startswith('#EXT-X-STREAM-INF'):
             # Handle HLS Master Playlists that list channels as variant streams
@@ -190,9 +195,9 @@ def parse_m3u(content, source=""):
     # If it was an HLS stream with NO valid named channels extracted, return it as a single Live Stream fallback
     if is_hls_chunklist and len(channels) == 0:
         title = urlparse(source).hostname or "HLS Stream"
-        return {"channels": [{"title": f"Live Stream ({title})", "logo": "", "url": source}], "epg_url": None}
+        return {"channels": [{"title": f"Live Stream ({title})", "logo": "", "url": source}], "epg_url": None, "exp_date": None}
 
-    return {"channels": channels, "epg_url": epg_url}
+    return {"channels": channels, "epg_url": epg_url, "exp_date": exp_date}
 
 def attach_epg(channels, epg_data, channel_mappings={}):
     if not epg_data or not channels:
@@ -281,12 +286,13 @@ def main():
             # If the proxy returns binary video data, treat as direct stream
             if ctype.startswith('video/') and 'mpegurl' not in ctype:
                 channels = [{"title": f"Live Stream ({urlparse(source).hostname or 'Direct Stream'})", "logo": "", "url": source}]
-                print(json.dumps({"channels": attach_epg(channels, {}, channel_mappings), "epg_url": None}))
+                print(json.dumps({"channels": attach_epg(channels, {}, channel_mappings), "epg_url": None, "exp_date": None}))
                 sys.exit(0)
                 
             parsed = parse_m3u(content, source)
             channels = parsed.get("channels") if parsed else None
             m3u_epg_url = parsed.get("epg_url") if parsed else None
+            exp_date = parsed.get("exp_date") if parsed else None
             
             # Smart proxy resolution: If it was an HTML page, returned 0 channels, OR returned a single fallback stream
             is_fallback = channels is not None and len(channels) == 1 and channels[0].get('url') == source
@@ -306,6 +312,7 @@ def main():
                             if guess_channels is not None and len(guess_channels) > (1 if is_fallback else 0):
                                 channels = guess_channels
                                 m3u_epg_url = guess_parsed.get("epg_url")
+                                exp_date = guess_parsed.get("exp_date")
                                 break
                         except:
                             pass
@@ -324,6 +331,7 @@ def main():
             parsed = parse_m3u(content, source)
             channels = parsed.get("channels") if parsed else None
             m3u_epg_url = parsed.get("epg_url") if parsed else None
+            exp_date = parsed.get("exp_date") if parsed else None
             if channels is None or len(channels) == 0:
                 print(json.dumps({"error": "No channels found in this file."}))
                 sys.exit(1)
@@ -352,7 +360,7 @@ def main():
                 except Exception:
                     pass
                     
-        print(json.dumps({"channels": attach_epg(channels, epg_data, channel_mappings), "epg_url": m3u_epg_url}))
+        print(json.dumps({"channels": attach_epg(channels, epg_data, channel_mappings), "epg_url": m3u_epg_url, "exp_date": exp_date}))
             
     except Exception as e:
         print(json.dumps({"error": str(e)}))
