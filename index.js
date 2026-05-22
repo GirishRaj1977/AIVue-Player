@@ -1420,7 +1420,7 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
     const playStream = () => {
         if (ipcClient && !ipcClient.destroyed) {
             let ua = '';
-            let headersList = '';
+            let headersVal = [];
             
             if (mac && session) {
                 ua = 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
@@ -1431,22 +1431,21 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
                     referer = urlStr.split('/play/')[0] + '/c/index.html';
                 }
                 const cookies = `mac=${mac}; stb_lang=en; timezone=GMT` + (session.phpSessionId ? `; PHPSESSID=${session.phpSessionId}` : '');
-                const fields = [
+                headersVal = [
                     'X-User-Agent: Model: MAG250; Link: Ethernet',
                     `Cookie: ${cookies}`,
                     `Referer: ${referer}`
                 ];
                 if (session.token) {
-                    fields.push(`Authorization: Bearer ${session.token}`);
+                    headersVal.push(`Authorization: Bearer ${session.token}`);
                 }
-                headersList = fields.join(',');
                 console.log('[MPV HEADER INJECT] Injecting MAG stbapp headers for Stalker stream. MAC:', mac, 'Referer:', referer);
             } else {
                 console.log('[MPV HEADER INJECT] Clearing custom MAG headers for standard stream.');
             }
             
             ipcClient.write(JSON.stringify({ command: ["set_property", "user-agent", ua] }) + '\n');
-            ipcClient.write(JSON.stringify({ command: ["set_property", "http-header-fields", headersList] }) + '\n');
+            ipcClient.write(JSON.stringify({ command: ["set_property", "http-header-fields", headersVal] }) + '\n');
             
             console.log('[MPV IPC SEND]', JSON.stringify({ command: ["loadfile", data.url, "replace"] }));
             ipcClient.write(JSON.stringify({ command: ["loadfile", data.url, "replace"] }) + '\n');
