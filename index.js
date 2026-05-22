@@ -1721,25 +1721,31 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
                 
                 console.log(`[STALKER EPG] Fetching EPG for ${stalkerChannels.length} channels...`);
                 
-                // 2. Fetch short EPG for all channels in parallel with limit
+                // 2. Fetch EPG for all channels in parallel with limit
                 const stalkerEpgDict = {};
                 const chunkSize = 12; // concurrency limit
                 for (let i = 0; i < stalkerChannels.length; i += chunkSize) {
                     const chunk = stalkerChannels.slice(i, i + chunkSize);
                     await Promise.all(chunk.map(async (ch) => {
-                        const chId = ch.id || ch.ch_id;
+                        const chId = chooseStalkerChannelId(ch);
                         if (!chId) return;
                         
                         try {
-                            const epgRes = await stalkerRequest(baseUrl, mac, 'get_short_epg', { type: 'itv', ch_id: chId });
-                            const events = epgRes.js || [];
-                            if (Array.isArray(events) && events.length > 0) {
-                                stalkerEpgDict[String(chId)] = events.map(ev => ({
-                                    start: formatStalkerDate(ev.time, ev.start_timestamp),
-                                    stop: formatStalkerDate(ev.time_to, ev.stop_timestamp),
-                                    title: ev.name || 'No Title',
-                                    desc: ev.descr || ev.desc || ''
-                                }));
+                            // Try get_short_epg first
+                            let epgRes = await stalkerRequest(baseUrl, mac, 'get_short_epg', { type: 'itv', ch_id: chId, size: '10' });
+                            let events = extractStalkerEpgItems(epgRes);
+                            
+                            // If empty, try get_epg_info fallback
+                            if (!events || events.length === 0) {
+                                epgRes = await stalkerRequest(baseUrl, mac, 'get_epg_info', { type: 'itv', ch_id: chId });
+                                events = extractStalkerEpgItems(epgRes);
+                            }
+                            
+                            if (events && events.length > 0) {
+                                const normalized = normalizeStalkerEpgItems(events);
+                                if (normalized.length > 0) {
+                                    stalkerEpgDict[String(chId)] = normalized;
+                                }
                             }
                         } catch (e) {
                             console.error(`[STALKER EPG ERR] Failed for channel ${chId}:`, e.message);
@@ -2109,6 +2115,155 @@ ipcMain.handle('load-channels', (event) => {
 });
 
 // Stalker Portal Helper & Handles
+function chooseStalkerChannelId(ch) {
+    if (!ch || typeof ch !== 'object') return null;
+    for (const k of ["ch_id", "id", "number", "channel_id", "cmd"]) {
+        const v = ch[k];
+        if (v !== undefined && v !== null) {
+            const s = String(v).trim();
+            if (s) {
+                const digits = s.replace(/\D/g, '');
+                return digits || s;
+            }
+        }
+    }
+    return null;
+}
+
+function extractStalkerEpgItems(res) {
+    if (!res) return [];
+    const data = res.js;
+    if (Array.isArray(data)) return data;
+    if (data && typeof data === 'object') {
+        if (Array.isArray(data.epg)) return data.epg;
+        if (Array.isArray(data.data)) return data.data;
+    }
+    return [];
+}
+
+function parseEpochToDate(ts) {
+    if (ts === null || ts === undefined) return null;
+    let val = Number(ts);
+    if (isNaN(val)) return null;
+    if (val > 10000000000) { // ms?
+        val = val / 1000;
+    }
+    return new Date(val * 1000);
+}
+
+function parseDtStr(s) {
+    if (!s || typeof s !== 'string') return null;
+    const clean = s.trim();
+    // Try parsing 'YYYY-MM-DD HH:MM:SS'
+    const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+    if (match) {
+        const [_, year, month, day, hour, minute, second] = match;
+        return new Date(Date.UTC(
+            parseInt(year, 10),
+            parseInt(month, 10) - 1,
+            parseInt(day, 10),
+            parseInt(hour, 10),
+            parseInt(minute, 10),
+            parseInt(second, 10)
+        ));
+    }
+    const parsed = Date.parse(clean);
+    if (!isNaN(parsed)) {
+        return new Date(parsed);
+    }
+    return null;
+}
+
+function firstNonEmpty(d, keys) {
+    if (!d || typeof d !== 'object') return null;
+    for (const k of keys) {
+        const v = d[k];
+        if (v !== undefined && v !== null && String(v).trim()) {
+            return String(v).trim();
+        }
+    }
+    return null;
+}
+
+function safeInt(x) {
+    if (x === null || x === undefined) return null;
+    const parsed = parseInt(x, 10);
+    return isNaN(parsed) ? null : parsed;
+}
+
+function formatDateToEpgString(date) {
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) return '';
+    const pad = n => n.toString().padStart(2, '0');
+    return `${date.getUTCFullYear()}${pad(date.getUTCMonth()+1)}${pad(date.getUTCDate())}${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())} +0000`;
+}
+
+function normalizeStalkerEpgItems(items) {
+    if (!Array.isArray(items)) return [];
+    const norm = [];
+    for (const it of items) {
+        if (!it || typeof it !== 'object') continue;
+        
+        const title = (firstNonEmpty(it, ["name", "title", "progname", "program"]) || 'No Title').trim();
+        
+        // Timestamps
+        const start_ts = safeInt(it.start) || safeInt(it.start_timestamp) || safeInt(it.from);
+        const end_ts = safeInt(it.end) || safeInt(it.stop_timestamp) || safeInt(it.to);
+        
+        let start_dt = null;
+        if (start_ts) {
+            start_dt = parseEpochToDate(start_ts);
+        } else {
+            const start_dt_str = firstNonEmpty(it, ["time", "start_time"]);
+            start_dt = parseDtStr(start_dt_str);
+        }
+        
+        let end_dt = null;
+        if (end_ts) {
+            end_dt = parseEpochToDate(end_ts);
+        } else {
+            const end_dt_str = firstNonEmpty(it, ["time_to", "end_time"]);
+            end_dt = parseDtStr(end_dt_str);
+        }
+        
+        // Duration
+        let duration = safeInt(firstNonEmpty(it, ["duration", "prog_duration", "length"]));
+        if (!duration && start_ts && end_ts && start_dt && end_dt) {
+            const delta = Math.floor((end_dt.getTime() - start_dt.getTime()) / 1000);
+            if (delta > 0 && delta < 24 * 3600) {
+                duration = delta;
+            }
+        }
+        
+        // If end_dt is not present but start_dt and duration are, derive end_dt
+        if (!end_dt && start_dt && duration && duration < 24 * 3600) {
+            end_dt = new Date(start_dt.getTime() + duration * 1000);
+        }
+        
+        const desc = (firstNonEmpty(it, ["descr", "description", "desc", "short_description", "long_description", "plot", "overview"]) || '').trim();
+        
+        if (start_dt && end_dt) {
+            norm.push({
+                start: formatDateToEpgString(start_dt),
+                stop: formatDateToEpgString(end_dt),
+                title,
+                desc,
+                start_ms: start_dt.getTime()
+            });
+        }
+    }
+    
+    // Sort normalized items by start_ms
+    norm.sort((a, b) => a.start_ms - b.start_ms);
+    
+    // Clean up the temporary start_ms field
+    return norm.map(item => ({
+        start: item.start,
+        stop: item.stop,
+        title: item.title,
+        desc: item.desc
+    }));
+}
+
 function getStalkerUrl(baseUrl) {
     return baseUrl.trim().includes('/c/') ? baseUrl.trim().replace('/c/', '/portal.php') : 
            (baseUrl.trim().includes('/c') ? baseUrl.trim().replace('/c', '/portal.php') : 
