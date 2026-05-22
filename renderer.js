@@ -767,6 +767,24 @@ async function renderSettings() {
     console.log('[UI] Rendering settings view.');
     if (!settingsView) return;
 
+    // Load TMDB config and test connection dynamically on settings load
+    const tmdbConfig = await window.iptvAPI.getTmdbConfig();
+    let tmdbStatus = 'Not Configured';
+    let tmdbStatusColor = '#888';
+    if (tmdbConfig.apiKey || tmdbConfig.apiToken) {
+        try {
+            const testResult = await window.iptvAPI.saveTmdbConfig(tmdbConfig);
+            tmdbStatus = testResult.status;
+            if (tmdbStatus === 'Connected') tmdbStatusColor = '#43CB44';
+            else if (tmdbStatus === 'Invalid Credentials') tmdbStatusColor = '#cf6679';
+            else tmdbStatusColor = '#cf6679';
+        } catch (e) {
+            console.error('Error auto-testing TMDB connection on load:', e);
+            tmdbStatus = 'Error';
+            tmdbStatusColor = '#cf6679';
+        }
+    }
+
     savedEpgs.sort((a, b) => sortAlphaNum(getEpgName(a), getEpgName(b)));
 
     let epgListHtml = savedEpgs.map((epg, idx) => `
@@ -918,6 +936,36 @@ async function renderSettings() {
                     <div style="display: flex; align-items: center; justify-content: space-between; background: #121212; border: 1px solid #444; border-radius: 4px; padding: 10px 15px; gap: 15px; flex-wrap: wrap;">
                         <span style="font-family: monospace; color: #bb86fc; font-size: 1.1em; word-break: break-all; flex: 1; min-width: 200px;">${remoteUrl}</span>
                         <button id="settings-copy-remote-btn" class="playlist-btn" data-url="${remoteUrlWithAuth}" style="background: #2a2a2a; color: #e0e0e0; padding: 8px 16px; border-radius: 4px; font-weight: bold; white-space: nowrap; flex-shrink: 0;" title="Copies a link with embedded login credentials">Copy Auto-Login URL</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TMDB Integration -->
+            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px;">TMDB API Integration</h3>
+                        <p style="color: #888; font-size: 0.9em; margin: 0;">Scrape premium poster art, cast lists, backdrops, and rich descriptions dynamically from The Movie Database.</p>
+                    </div>
+                    <div>
+                        <span id="settings-tmdb-status" style="background: ${tmdbStatusColor}22; color: ${tmdbStatusColor}; border: 1px solid ${tmdbStatusColor}; padding: 6px 14px; border-radius: 20px; font-size: 0.85em; font-weight: bold; transition: all 0.3s ease;">${tmdbStatus}</span>
+                    </div>
+                </div>
+                
+                <div style="border-top: 1px solid #333; padding-top: 20px; margin-top: 10px;">
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
+                        <div style="flex: 1; min-width: 250px;">
+                            <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">TMDB API Key (v3)</label>
+                            <input type="text" id="settings-tmdb-key" value="${tmdbConfig.apiKey || ''}" placeholder="Enter v3 API Key..." style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box; font-family: monospace;">
+                        </div>
+                        <div style="flex: 2; min-width: 350px;">
+                            <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">TMDB Bearer Token (v4)</label>
+                            <input type="password" id="settings-tmdb-token" value="${tmdbConfig.apiToken || ''}" placeholder="Enter v4 Bearer Token..." style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box; font-family: monospace;">
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <span style="color: #666; font-size: 0.85em;">Need a key? Register on <a href="https://www.themoviedb.org/" target="_blank" style="color: #bb86fc; text-decoration: none;">themoviedb.org</a> and generate an API key in settings.</span>
+                        <button id="settings-save-tmdb-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 24px; border-radius: 4px; white-space: nowrap;">Save & Test Connection</button>
                     </div>
                 </div>
             </div>
@@ -1142,6 +1190,45 @@ async function renderSettings() {
 
         btn.textContent = originalText;
         btn.disabled = false;
+    });
+
+    // TMDB Save & Test connection event listener
+    document.getElementById('settings-save-tmdb-btn').addEventListener('click', async (e) => {
+        const btn = e.target;
+        const apiKey = document.getElementById('settings-tmdb-key').value.trim();
+        const apiToken = document.getElementById('settings-tmdb-token').value.trim();
+        const statusSpan = document.getElementById('settings-tmdb-status');
+        
+        const originalText = btn.textContent;
+        btn.textContent = 'Testing connection... ⏳';
+        btn.disabled = true;
+        
+        try {
+            const result = await window.iptvAPI.saveTmdbConfig({ apiKey, apiToken });
+            
+            let statusColor = '#888';
+            if (result.status === 'Connected') {
+                statusColor = '#43CB44';
+                showToast('TMDB Connection successful!');
+            } else if (result.status === 'Invalid Credentials') {
+                statusColor = '#cf6679';
+                showToast('TMDB Connection failed: Invalid Credentials', true);
+            } else {
+                statusColor = '#cf6679';
+                showToast(`TMDB Connection failed: ${result.error || 'Unknown error'}`, true);
+            }
+            
+            statusSpan.textContent = result.status;
+            statusSpan.style.background = `${statusColor}22`;
+            statusSpan.style.color = statusColor;
+            statusSpan.style.borderColor = statusColor;
+        } catch (err) {
+            console.error('Error saving TMDB config:', err);
+            showToast('Error testing connection.', true);
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
     });
 
     document.getElementById('settings-factory-reset-btn').addEventListener('click', async () => {
@@ -3762,164 +3849,787 @@ document.getElementById('btn-vod').addEventListener('click', function() { if (!t
 document.getElementById('btn-recording').addEventListener('click', function() { showToast('Coming in Next Version'); });
 
 let currentMovieCategory = null;
+let laneObserver = null;
+let tmdbObserver = null;
+let loadedMovieLanes = {};
+let loadedVodLanes = {};
+
+function injectPremiumStyles() {
+    if (document.getElementById('premium-catalog-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'premium-catalog-styles';
+    style.innerHTML = `
+        .category-lane-row {
+            margin-bottom: 30px;
+            position: relative;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        .category-lane-row.visible {
+            opacity: 1;
+        }
+        .category-lane-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 0 5px;
+        }
+        .category-lane-title {
+            margin: 0;
+            font-size: 1.3em;
+            color: #bb86fc;
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .category-lane-track-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .category-lane-track {
+            display: flex;
+            gap: 15px;
+            overflow-x: auto;
+            scroll-behavior: smooth;
+            padding: 10px 5px;
+            scrollbar-width: none;
+            width: 100%;
+        }
+        .category-lane-track::-webkit-scrollbar {
+            display: none;
+        }
+        .category-lane-arrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 40px;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            opacity: 0;
+            transition: opacity 0.2s ease, background 0.2s ease, transform 0.2s ease;
+        }
+        .category-lane-track-container:hover .category-lane-arrow {
+            opacity: 1;
+        }
+        .category-lane-arrow:hover {
+            background: #bb86fc;
+            color: black;
+            transform: translateY(-50%) scale(1.15);
+            box-shadow: 0 0 10px rgba(187,134,252,0.5);
+        }
+        .category-lane-arrow.left {
+            left: 10px;
+        }
+        .category-lane-arrow.right {
+            right: 10px;
+        }
+        
+        .catalog-card {
+            flex: 0 0 160px;
+            width: 160px;
+            background: rgba(30, 30, 30, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), border-color 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        .catalog-card:hover {
+            transform: translateY(-5px) scale(1.04);
+            border-color: rgba(187, 134, 252, 0.5);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            z-index: 2;
+        }
+        .catalog-poster-wrapper {
+            position: relative;
+            width: 100%;
+            padding-top: 150%;
+            background: #1a1a1a;
+            overflow: hidden;
+        }
+        .catalog-poster {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: opacity 0.3s ease;
+        }
+        .catalog-rating-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 193, 7, 0.5);
+            color: #ffc107;
+            font-weight: bold;
+            font-size: 0.75em;
+            padding: 2px 6px;
+            border-radius: 4px;
+            z-index: 3;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .catalog-info {
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            background: rgba(20, 20, 20, 0.8);
+            flex-grow: 1;
+        }
+        .catalog-title {
+            margin: 0;
+            font-size: 0.9em;
+            font-weight: 600;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .catalog-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75em;
+            color: #888;
+        }
+        .catalog-badge {
+            background: rgba(255, 255, 255, 0.08);
+            color: #bbb;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.85em;
+        }
+        
+        #premium-details-modal > div::-webkit-scrollbar {
+            display: none;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function initLaneObserver() {
+    if (laneObserver) return;
+    laneObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const laneRow = entry.target;
+                const loadFn = laneRow.dataset.loadFn;
+                laneRow.classList.add('visible');
+                if (loadFn && typeof window[loadFn] === 'function') {
+                    window[loadFn](laneRow);
+                }
+                laneObserver.unobserve(laneRow);
+            }
+        });
+    }, {
+        rootMargin: '100px 0px 300px 0px'
+    });
+}
+
+function initTmdbObserver() {
+    if (tmdbObserver) return;
+    
+    let requestQueue = [];
+    let isProcessingQueue = false;
+    
+    async function processQueue() {
+        if (requestQueue.length === 0) {
+            isProcessingQueue = false;
+            return;
+        }
+        isProcessingQueue = true;
+        const task = requestQueue.shift();
+        try {
+            await task();
+        } catch (e) {
+            console.error('[TMDB QUEUE] Scraper task failed:', e);
+        }
+        setTimeout(processQueue, 150);
+    }
+    
+    tmdbObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const card = entry.target;
+                const title = card.dataset.title;
+                const type = card.dataset.type;
+                
+                if (title && card.dataset.tmdbLoaded !== 'true') {
+                    requestQueue.push(async () => {
+                        if (card.dataset.tmdbLoaded === 'true') return;
+                        
+                        console.log(`[TMDB] Live viewport scraping: "${title}" (${type})`);
+                        const tmdbType = type === 'series' ? 'tv' : 'movie';
+                        const res = await window.iptvAPI.fetchTmdbByTitle({ title, type: tmdbType });
+                        
+                        if (res && !res.error) {
+                            card.dataset.tmdbLoaded = 'true';
+                            card.dataset.tmdbData = JSON.stringify(res);
+                            
+                            if (res.poster_path) {
+                                const img = card.querySelector('.catalog-poster');
+                                if (img) {
+                                    img.src = res.poster_path;
+                                    img.style.opacity = '1';
+                                }
+                            }
+                            
+                            if (res.vote_average && res.vote_average > 0) {
+                                const wrapper = card.querySelector('.catalog-poster-wrapper');
+                                if (wrapper) {
+                                    const badge = document.createElement('div');
+                                    badge.className = 'catalog-rating-badge';
+                                    badge.innerHTML = `★ ${parseFloat(res.vote_average).toFixed(1)}`;
+                                    wrapper.appendChild(badge);
+                                }
+                            }
+                        }
+                    });
+                    
+                    if (!isProcessingQueue) {
+                        processQueue();
+                    }
+                }
+                tmdbObserver.unobserve(card);
+            }
+        });
+    }, {
+        rootMargin: '0px 200px 0px 200px'
+    });
+}
+
+function createLaneRowElement({ title, playlistId, categoryId, isStalker, loadFnName }) {
+    const laneRow = document.createElement('div');
+    laneRow.className = 'category-lane-row';
+    laneRow.dataset.playlistId = playlistId;
+    laneRow.dataset.categoryId = categoryId;
+    laneRow.dataset.isStalker = isStalker ? 'true' : 'false';
+    laneRow.dataset.loadFn = loadFnName;
+    
+    const header = document.createElement('div');
+    header.className = 'category-lane-header';
+    
+    const h3 = document.createElement('h3');
+    h3.className = 'category-lane-title';
+    h3.textContent = title;
+    header.appendChild(h3);
+    
+    const trackContainer = document.createElement('div');
+    trackContainer.className = 'category-lane-track-container';
+    
+    const leftArrow = document.createElement('button');
+    leftArrow.className = 'category-lane-arrow left';
+    leftArrow.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`;
+    
+    const track = document.createElement('div');
+    track.className = 'category-lane-track';
+    
+    const rightArrow = document.createElement('button');
+    rightArrow.className = 'category-lane-arrow right';
+    rightArrow.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+    
+    leftArrow.addEventListener('click', () => {
+        track.scrollBy({ left: -track.clientWidth * 0.75, behavior: 'smooth' });
+    });
+    rightArrow.addEventListener('click', () => {
+        track.scrollBy({ left: track.clientWidth * 0.75, behavior: 'smooth' });
+    });
+    
+    trackContainer.appendChild(leftArrow);
+    trackContainer.appendChild(track);
+    trackContainer.appendChild(rightArrow);
+    
+    laneRow.appendChild(header);
+    laneRow.appendChild(trackContainer);
+    
+    return laneRow;
+}
+
+async function loadMoviesForLane(laneRow) {
+    const track = laneRow.querySelector('.category-lane-track');
+    const playlistId = laneRow.dataset.playlistId;
+    const categoryId = laneRow.dataset.categoryId;
+    const isStalker = laneRow.dataset.isStalker === 'true';
+    
+    track.innerHTML = '<div style="color: #bb86fc; padding: 20px 40px; font-weight: bold; font-family: \'Outfit\', sans-serif;">Loading movies...</div>';
+    
+    try {
+        let items = [];
+        if (isStalker) {
+            const playlist = savedPlaylists.find(p => p.id.toString() === playlistId.toString());
+            if (playlist) {
+                items = await window.iptvAPI.loadStalkerCategory({
+                    url: playlist.source,
+                    mac: playlist.epg.substring(8),
+                    categoryId: categoryId,
+                    isSeries: false
+                });
+            }
+        } else {
+            const laneId = `${playlistId}-${categoryId}`;
+            if (loadedMovieLanes[laneId]) {
+                items = loadedMovieLanes[laneId].allItems;
+            }
+        }
+        
+        if (items.length === 0) {
+            laneRow.style.display = 'none';
+            return;
+        }
+        
+        items.sort((a, b) => sortAlphaNum(a.name || a.title, b.name || b.title));
+        
+        const laneId = `${playlistId}-${categoryId}`;
+        loadedMovieLanes[laneId] = {
+            allItems: items,
+            renderedCount: 0,
+            isStalker: isStalker
+        };
+        
+        track.innerHTML = '';
+        renderNextLanePage(laneRow, 'movie');
+        
+        track.addEventListener('scroll', () => {
+            if (track.scrollWidth - track.scrollLeft - track.clientWidth < 200) {
+                renderNextLanePage(laneRow, 'movie');
+            }
+        });
+        
+    } catch (e) {
+        console.error('[LANE LOAD ERROR] Movies load failed:', e);
+        track.innerHTML = '<div style="color: #cf6679; padding: 20px 40px;">Failed to load items.</div>';
+    }
+}
+
+async function loadVodForLane(laneRow) {
+    const track = laneRow.querySelector('.category-lane-track');
+    const playlistId = laneRow.dataset.playlistId;
+    const categoryId = laneRow.dataset.categoryId;
+    const isStalker = laneRow.dataset.isStalker === 'true';
+    
+    track.innerHTML = '<div style="color: #bb86fc; padding: 20px 40px; font-weight: bold; font-family: \'Outfit\', sans-serif;">Loading series...</div>';
+    
+    try {
+        let items = [];
+        if (isStalker) {
+            const playlist = savedPlaylists.find(p => p.id.toString() === playlistId.toString());
+            if (playlist) {
+                items = await window.iptvAPI.loadStalkerCategory({
+                    url: playlist.source,
+                    mac: playlist.epg.substring(8),
+                    categoryId: categoryId,
+                    isSeries: true
+                });
+            }
+        } else {
+            const laneId = `${playlistId}-${categoryId}`;
+            if (loadedVodLanes[laneId]) {
+                items = loadedVodLanes[laneId].allItems;
+            }
+        }
+        
+        if (items.length === 0) {
+            laneRow.style.display = 'none';
+            return;
+        }
+        
+        items.sort((a, b) => sortAlphaNum(a.name || a.title, b.name || b.title));
+        
+        const laneId = `${playlistId}-${categoryId}`;
+        loadedVodLanes[laneId] = {
+            allItems: items,
+            renderedCount: 0,
+            isStalker: isStalker
+        };
+        
+        track.innerHTML = '';
+        renderNextLanePage(laneRow, 'series');
+        
+        track.addEventListener('scroll', () => {
+            if (track.scrollWidth - track.scrollLeft - track.clientWidth < 200) {
+                renderNextLanePage(laneRow, 'series');
+            }
+        });
+        
+    } catch (e) {
+        console.error('[LANE LOAD ERROR] Series load failed:', e);
+        track.innerHTML = '<div style="color: #cf6679; padding: 20px 40px;">Failed to load items.</div>';
+    }
+}
+
+function renderNextLanePage(laneRow, contentType) {
+    const playlistId = laneRow.dataset.playlistId;
+    const categoryId = laneRow.dataset.categoryId;
+    const laneId = `${playlistId}-${categoryId}`;
+    const laneData = contentType === 'series' ? loadedVodLanes[laneId] : loadedMovieLanes[laneId];
+    
+    if (!laneData) return;
+    
+    const track = laneRow.querySelector('.category-lane-track');
+    const startIdx = laneData.renderedCount;
+    const pageSize = 20;
+    const endIdx = Math.min(startIdx + pageSize, laneData.allItems.length);
+    
+    if (startIdx >= laneData.allItems.length) return;
+    
+    for (let i = startIdx; i < endIdx; i++) {
+        const item = laneData.allItems[i];
+        const card = document.createElement('div');
+        card.className = 'catalog-card';
+        
+        const title = item.name || item.title;
+        const logoUrl = item.logo || 'assets/logo.ico';
+        
+        card.dataset.title = title;
+        card.dataset.type = contentType;
+        
+        card.innerHTML = `
+            <div class="catalog-poster-wrapper">
+                <img class="catalog-poster" src="${logoUrl}" alt="${title}" onerror="this.onerror=null; this.src='assets/logo.ico';">
+            </div>
+            <div class="catalog-info">
+                <h4 class="catalog-title" title="${title}">${title}</h4>
+                <div class="catalog-meta">
+                    <span class="catalog-badge">${contentType === 'series' ? 'Series' : 'Movie'}</span>
+                </div>
+            </div>
+        `;
+        
+        card.addEventListener('click', () => {
+            const streamInfo = {
+                title: title,
+                url: item.url,
+                logo: logoUrl,
+                playlistId: playlistId,
+                type: contentType,
+                tvg_id: item.id || item.tvg_id
+            };
+            
+            if (card.dataset.tmdbLoaded === 'true' && card.dataset.tmdbData) {
+                streamInfo.tmdbData = JSON.parse(card.dataset.tmdbData);
+            }
+            
+            openMovieDetailsModal(streamInfo);
+        });
+        
+        track.appendChild(card);
+        
+        if (tmdbObserver) {
+            tmdbObserver.observe(card);
+        }
+    }
+    
+    laneData.renderedCount = endIdx;
+}
+
+async function openMovieDetailsModal(streamInfo) {
+    const modal = document.getElementById('premium-details-modal');
+    if (!modal) return;
+    
+    document.getElementById('details-title').textContent = streamInfo.title;
+    document.getElementById('details-rating').textContent = '★ --';
+    document.getElementById('details-year').textContent = '----';
+    document.getElementById('details-duration').textContent = '--';
+    document.getElementById('details-type-badge').textContent = streamInfo.type === 'series' ? 'Series' : 'Movie';
+    document.getElementById('details-overview').textContent = 'Scraping details...';
+    document.getElementById('details-genres').textContent = '-';
+    document.getElementById('details-crew').textContent = '-';
+    document.getElementById('details-cast').textContent = '-';
+    
+    const bannerUrl = streamInfo.logo || 'assets/logo.ico';
+    document.getElementById('details-backdrop-banner').style.backgroundImage = `linear-gradient(to top, #181818, rgba(24, 24, 24, 0.7) 40%, rgba(24, 24, 24, 0) 80%), url(${bannerUrl})`;
+    
+    const playBtn = document.getElementById('details-play-btn');
+    const episodesSection = document.getElementById('details-episodes-section');
+    
+    episodesSection.style.display = 'none';
+    playBtn.style.display = 'flex';
+    
+    playBtn.replaceWith(playBtn.cloneNode(true));
+    const newPlayBtn = document.getElementById('details-play-btn');
+    newPlayBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+        switchTab('live-tv', document.getElementById('btn-live-tv'));
+        embedStream(streamInfo);
+    });
+    
+    modal.style.display = 'flex';
+    
+    let tmdbData = null;
+    if (streamInfo.tmdbData) {
+        tmdbData = streamInfo.tmdbData;
+    } else {
+        const res = await window.iptvAPI.fetchTmdbByTitle({ title: streamInfo.title, type: streamInfo.type === 'series' ? 'tv' : 'movie' });
+        if (res && !res.error) {
+            tmdbData = res;
+        }
+    }
+    
+    if (tmdbData) {
+        if (tmdbData.backdrop_path) {
+            document.getElementById('details-backdrop-banner').style.backgroundImage = `linear-gradient(to top, #181818, rgba(24, 24, 24, 0.7) 40%, rgba(24, 24, 24, 0) 80%), url(${tmdbData.backdrop_path})`;
+        }
+        
+        if (tmdbData.vote_average) {
+            document.getElementById('details-rating').textContent = `★ ${parseFloat(tmdbData.vote_average).toFixed(1)}`;
+        }
+        
+        const releaseDate = tmdbData.release_date || tmdbData.first_air_date;
+        if (releaseDate) {
+            document.getElementById('details-year').textContent = new Date(releaseDate).getFullYear();
+        }
+        
+        if (tmdbData.runtime) {
+            document.getElementById('details-duration').textContent = `${tmdbData.runtime}m`;
+        } else if (tmdbData.episode_run_time && tmdbData.episode_run_time.length > 0) {
+            document.getElementById('details-duration').textContent = `${tmdbData.episode_run_time[0]}m`;
+        }
+        
+        document.getElementById('details-overview').textContent = tmdbData.overview || 'No synopsis available.';
+        
+        if (tmdbData.genres && tmdbData.genres.length > 0) {
+            document.getElementById('details-genres').textContent = tmdbData.genres.map(g => g.name).join(', ');
+        }
+        
+        if (tmdbData.credits) {
+            const crew = tmdbData.credits.crew || [];
+            const directors = crew.filter(c => c.job === 'Director').map(c => c.name);
+            if (directors.length > 0) {
+                document.getElementById('details-crew').textContent = directors.join(', ');
+            } else {
+                const creators = tmdbData.created_by || [];
+                if (creators.length > 0) {
+                    document.getElementById('details-crew').textContent = creators.map(c => c.name).join(', ');
+                }
+            }
+            
+            const cast = tmdbData.credits.cast || [];
+            if (cast.length > 0) {
+                document.getElementById('details-cast').textContent = cast.slice(0, 5).map(c => c.name).join(', ');
+            }
+        }
+    } else {
+        document.getElementById('details-overview').textContent = 'No detailed information found on TMDB.';
+    }
+    
+    if (streamInfo.type === 'series') {
+        newPlayBtn.style.display = 'none';
+        episodesSection.style.display = 'block';
+        
+        const epGrid = document.getElementById('details-episodes-grid');
+        const seasonSelect = document.getElementById('details-season-select');
+        
+        epGrid.innerHTML = '<div style="color: #bb86fc; padding: 20px; font-weight: bold; font-family: \'Outfit\', sans-serif;">Loading episodes...</div>';
+        seasonSelect.innerHTML = '';
+        
+        try {
+            const playlist = savedPlaylists.find(p => p.id.toString() === streamInfo.playlistId.toString());
+            if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
+                const url = playlist.source;
+                const mac = playlist.epg.substring(8);
+                const seriesId = streamInfo.tvg_id;
+                
+                const episodes = await window.iptvAPI.getStalkerEpisodes({ url, mac, seriesId });
+                
+                if (!episodes || episodes.length === 0) {
+                    epGrid.innerHTML = '<div style="color: #888; padding: 20px;">No episodes found.</div>';
+                    return;
+                }
+                
+                const seasons = {};
+                episodes.forEach(ep => {
+                    const sNum = ep.season || 1;
+                    if (!seasons[sNum]) seasons[sNum] = [];
+                    seasons[sNum].push(ep);
+                });
+                
+                Object.keys(seasons).forEach(sNum => {
+                    seasons[sNum].sort((a, b) => parseInt(a.episodeNum || 0) - parseInt(b.episodeNum || 0));
+                });
+                
+                const sortedSeasons = Object.keys(seasons).sort((a, b) => parseInt(a) - parseInt(b));
+                
+                const renderSeason = (seasonNum) => {
+                    epGrid.innerHTML = '';
+                    const eps = seasons[seasonNum] || [];
+                    eps.forEach(ep => {
+                        const card = document.createElement('div');
+                        card.className = 'catalog-card';
+                        card.style.flex = '1 1 calc(33.33% - 10px)';
+                        card.style.minWidth = '200px';
+                        
+                        card.innerHTML = `
+                            <div class="catalog-poster-wrapper" style="padding-top: 56.25%;">
+                                <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.05); color: #bb86fc; font-size: 1.5em; font-weight: bold;">
+                                    E${ep.episodeNum || ''}
+                                </div>
+                            </div>
+                            <div class="catalog-info" style="background: rgba(30, 30, 30, 0.9);">
+                                <h4 class="catalog-title" title="${ep.name || `Episode ${ep.episodeNum}`}" style="font-size: 0.85em;">${ep.name || `Episode ${ep.episodeNum}`}</h4>
+                                <div class="catalog-meta">
+                                    <span class="catalog-badge">Play</span>
+                                </div>
+                            </div>
+                        `;
+                        
+                        card.addEventListener('click', () => {
+                            modal.style.display = 'none';
+                            switchTab('live-tv', document.getElementById('btn-live-tv'));
+                            embedStream({
+                                title: `${streamInfo.title} - S${seasonNum}E${ep.episodeNum} - ${ep.name || 'Episode'}`,
+                                url: ep.url,
+                                logo: streamInfo.logo,
+                                playlistId: streamInfo.playlistId
+                            });
+                        });
+                        
+                        epGrid.appendChild(card);
+                    });
+                };
+                
+                seasonSelect.innerHTML = '';
+                sortedSeasons.forEach(sNum => {
+                    const opt = document.createElement('option');
+                    opt.value = sNum;
+                    opt.textContent = `Season ${sNum}`;
+                    seasonSelect.appendChild(opt);
+                });
+                
+                seasonSelect.replaceWith(seasonSelect.cloneNode(true));
+                const newSeasonSelect = document.getElementById('details-season-select');
+                newSeasonSelect.addEventListener('change', (e) => {
+                    renderSeason(e.target.value);
+                });
+                
+                if (sortedSeasons.length > 0) {
+                    renderSeason(sortedSeasons[0]);
+                }
+            } else {
+                epGrid.innerHTML = '<div style="color: #888; padding: 20px;">Episodes details unavailable.</div>';
+            }
+        } catch (e) {
+            console.error('[DETAILS EPISODES ERR]', e);
+            epGrid.innerHTML = '<div style="color: #cf6679; padding: 20px;">Failed to load episodes list.</div>';
+        }
+    }
+}
+
+function initDetailsModalEvents() {
+    if (window.detailsModalEventsInitialized) return;
+    window.detailsModalEventsInitialized = true;
+
+    const closeBtn = document.getElementById('premium-details-close');
+    const modal = document.getElementById('premium-details-modal');
+    if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    }
+}
 
 async function renderMovies() {
     console.log('[CATALOG] Rendering Movies Catalog');
+    injectPremiumStyles();
+    initTmdbObserver();
+    initLaneObserver();
+    
     const grid = document.getElementById('movies-grid');
     const empty = document.getElementById('movies-empty');
     if (!grid) return;
     grid.innerHTML = '';
+    grid.style.display = 'flex';
+    grid.style.flexDirection = 'column';
+    grid.style.gap = '20px';
+    grid.style.width = '100%';
     
-    let headerContainer = document.getElementById('movies-header-container');
-    if (!headerContainer) {
-        headerContainer = document.createElement('div');
-        headerContainer.id = 'movies-header-container';
-        headerContainer.style.display = 'flex';
-        headerContainer.style.alignItems = 'center';
-        headerContainer.style.gap = '15px';
-        headerContainer.style.marginBottom = '20px';
-        
-        const backBtn = document.createElement('button');
-        backBtn.className = 'playlist-btn';
-        backBtn.innerHTML = '&larr; Back to Categories';
-        backBtn.style.display = 'none';
-        backBtn.id = 'movies-back-btn';
-        backBtn.onclick = () => {
-            currentMovieCategory = null;
-            renderMovies();
-        };
-        
-        const titleLabel = document.createElement('h3');
-        titleLabel.id = 'movies-category-title';
-        titleLabel.style.margin = '0';
-        titleLabel.style.color = '#bb86fc';
-        
-        headerContainer.appendChild(backBtn);
-        headerContainer.appendChild(titleLabel);
-        
-        grid.parentNode.insertBefore(headerContainer, grid);
-    }
+    const headerContainer = document.getElementById('movies-header-container');
+    if (headerContainer) headerContainer.remove();
     
-    const backBtn = document.getElementById('movies-back-btn');
-    const titleLabel = document.getElementById('movies-category-title');
+    let stalkerCategories = [];
+    let m3uGroups = {};
+    let hasMovies = false;
     
-    if (currentMovieCategory) {
-        backBtn.style.display = 'block';
-        titleLabel.textContent = currentMovieCategory.title;
-        
-        grid.innerHTML = '<div style="color: #888; text-align: center; padding: 50px; grid-column: 1 / -1;">Loading movies...</div>';
-        
-        const playlist = savedPlaylists.find(p => p.id === currentMovieCategory.playlistId);
-        if (playlist) {
-            const items = await window.iptvAPI.loadStalkerCategory({
-                url: playlist.source,
-                mac: playlist.epg.substring(8),
-                categoryId: currentMovieCategory.tvg_id,
-                isSeries: false
-            });
-            
-            grid.innerHTML = '';
-            if (items.length === 0) {
-                grid.innerHTML = '<div style="color: #888; text-align: center; padding: 50px; grid-column: 1 / -1;">No movies found in this category.</div>';
-                return;
-            }
-            
-            items.sort((a, b) => {
-                const isCatA = a.type === 'movie_category' || a.type === 'vod_category' || a.type === 'series_category';
-                const isCatB = b.type === 'movie_category' || b.type === 'vod_category' || b.type === 'series_category';
-                if (isCatA && !isCatB) return -1;
-                if (!isCatA && isCatB) return 1;
-                return sortAlphaNum(a.name, b.name);
-            });
-            items.forEach(movie => {
-                const card = document.createElement('div');
-                card.className = 'catalog-card';
-                const logoUrl = movie.logo || 'assets/logo.ico';
-                card.innerHTML = `
-                    <div class="catalog-poster-wrapper">
-                        <img class="catalog-poster" src="${logoUrl}" alt="${movie.name}" onerror="this.onerror=null; this.src='assets/logo.ico';">
-                    </div>
-                    <div class="catalog-info">
-                        <h4 class="catalog-title" title="${movie.name}">${movie.name}</h4>
-                        <div class="catalog-meta">
-                            <span class="catalog-badge">Movie</span>
-                        </div>
-                    </div>
-                `;
-                card.addEventListener('click', () => {
-                    switchTab('live-tv', document.getElementById('btn-live-tv'));
-                    embedStream({
-                        title: movie.name,
-                        url: movie.url,
-                        logo: movie.logo,
-                        playlistId: playlist.id,
-                        type: 'movie'
-                    });
-                });
-                grid.appendChild(card);
-            });
-        }
-        return;
-    }
-    
-    backBtn.style.display = 'none';
-    titleLabel.textContent = 'Movie Categories';
-
-    let movies = [];
     savedPlaylists.forEach(p => {
         if (p.channels && !p.disabled) {
             p.channels.forEach(c => {
-                if ((c.type === 'movie' || c.type === 'movie_category') && !c.disabled) {
+                if (c.disabled) return;
+                if (c.type === 'movie_category') {
                     c.playlistId = p.id;
-                    movies.push(c);
+                    stalkerCategories.push(c);
+                    hasMovies = true;
+                } else if (c.type === 'movie') {
+                    c.playlistId = p.id;
+                    const groupName = c.group || 'Movies';
+                    if (!m3uGroups[groupName]) m3uGroups[groupName] = [];
+                    m3uGroups[groupName].push(c);
+                    hasMovies = true;
                 }
             });
         }
     });
-
-    if (movies.length === 0) {
+    
+    if (!hasMovies) {
         if (empty) empty.style.display = 'block';
         return;
     }
     if (empty) empty.style.display = 'none';
-
-    movies.sort((a, b) => {
-        const isCatA = a.type === 'movie_category' || a.type === 'vod_category' || a.type === 'series_category';
-        const isCatB = b.type === 'movie_category' || b.type === 'vod_category' || b.type === 'series_category';
-        if (isCatA && !isCatB) return -1;
-        if (!isCatA && isCatB) return 1;
-        return sortAlphaNum(a.title, b.title);
-    });
-
-    movies.forEach(movie => {
-        const card = document.createElement('div');
-        card.className = 'catalog-card';
-        const logoUrl = movie.logo || 'assets/logo.ico';
-        const isCategory = movie.type === 'movie_category';
-        card.innerHTML = `
-            <div class="catalog-poster-wrapper" style="${isCategory ? 'padding-top: 100%;' : ''}">
-                ${isCategory ? `<div style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size: 3em; color: #bb86fc; background: #1a1a1a;">📁</div>` : `<img class="catalog-poster" src="${logoUrl}" alt="${movie.title}" onerror="this.onerror=null; this.src='assets/logo.ico';">`}
-            </div>
-            <div class="catalog-info">
-                <h4 class="catalog-title" title="${movie.title}">${movie.title}</h4>
-                <div class="catalog-meta">
-                    <span class="catalog-badge">${isCategory ? 'Folder' : 'Movie'}</span>
-                </div>
-            </div>
-        `;
-        card.addEventListener('click', () => {
-            if (isCategory) {
-                currentMovieCategory = movie;
-                renderMovies();
-            } else {
-                console.log('[CATALOG] Playing Movie:', movie.title);
-                switchTab('live-tv', document.getElementById('btn-live-tv'));
-                embedStream(movie);
-            }
+    
+    stalkerCategories.forEach(cat => {
+        const laneRow = createLaneRowElement({
+            title: cat.title || cat.name,
+            playlistId: cat.playlistId,
+            categoryId: cat.tvg_id,
+            isStalker: true,
+            loadFnName: 'loadMoviesForLane'
         });
-        grid.appendChild(card);
+        grid.appendChild(laneRow);
+        if (laneObserver) laneObserver.observe(laneRow);
     });
-
+    
+    Object.keys(m3uGroups).forEach(groupName => {
+        const playlistId = m3uGroups[groupName][0].playlistId;
+        const laneId = `${playlistId}-${groupName}`;
+        loadedMovieLanes[laneId] = {
+            allItems: m3uGroups[groupName],
+            renderedCount: 0,
+            isStalker: false
+        };
+        
+        const laneRow = createLaneRowElement({
+            title: groupName,
+            playlistId: playlistId,
+            categoryId: groupName,
+            isStalker: false,
+            loadFnName: 'loadMoviesForLane'
+        });
+        grid.appendChild(laneRow);
+        if (laneObserver) laneObserver.observe(laneRow);
+    });
+    
     const searchInput = document.getElementById('movies-search');
     if (searchInput) {
         searchInput.replaceWith(searchInput.cloneNode(true));
@@ -3927,13 +4637,25 @@ async function renderMovies() {
         newSearchInput.value = '';
         newSearchInput.addEventListener('keyup', (e) => {
             const query = e.target.value.toLowerCase().trim();
-            const cards = grid.querySelectorAll('.catalog-card');
-            cards.forEach(card => {
-                const title = card.querySelector('.catalog-title').textContent.toLowerCase();
-                if (title.includes(query)) {
-                    card.style.display = 'flex';
+            const laneRows = grid.querySelectorAll('.category-lane-row');
+            
+            laneRows.forEach(lane => {
+                const cards = lane.querySelectorAll('.catalog-card');
+                let visibleCount = 0;
+                cards.forEach(card => {
+                    const title = card.dataset.title.toLowerCase();
+                    if (title.includes(query)) {
+                        card.style.display = 'flex';
+                        visibleCount++;
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+                
+                if (query !== '' && visibleCount === 0) {
+                    lane.style.display = 'none';
                 } else {
-                    card.style.display = 'none';
+                    lane.style.display = 'block';
                 }
             });
         });
@@ -3942,156 +4664,85 @@ async function renderMovies() {
 
 let currentVodCategory = null;
 
-function renderVod() {
+async function renderVod() {
     console.log('[CATALOG] Rendering VOD/Series Catalog');
+    injectPremiumStyles();
+    initTmdbObserver();
+    initLaneObserver();
+    
     const grid = document.getElementById('vod-grid');
     const empty = document.getElementById('vod-empty');
     if (!grid) return;
     grid.innerHTML = '';
+    grid.style.display = 'flex';
+    grid.style.flexDirection = 'column';
+    grid.style.gap = '20px';
+    grid.style.width = '100%';
     
-    let headerContainer = document.getElementById('vod-header-container');
-    if (!headerContainer) {
-        headerContainer = document.createElement('div');
-        headerContainer.id = 'vod-header-container';
-        headerContainer.style.display = 'flex';
-        headerContainer.style.alignItems = 'center';
-        headerContainer.style.gap = '15px';
-        headerContainer.style.marginBottom = '20px';
-        
-        const backBtn = document.createElement('button');
-        backBtn.className = 'playlist-btn';
-        backBtn.innerHTML = '&larr; Back to Categories';
-        backBtn.style.display = 'none';
-        backBtn.id = 'vod-back-btn';
-        backBtn.onclick = () => {
-            currentVodCategory = null;
-            renderVod();
-        };
-        
-        const titleLabel = document.createElement('h3');
-        titleLabel.id = 'vod-category-title';
-        titleLabel.style.margin = '0';
-        titleLabel.style.color = '#bb86fc';
-        
-        headerContainer.appendChild(backBtn);
-        headerContainer.appendChild(titleLabel);
-        
-        grid.parentNode.insertBefore(headerContainer, grid);
-    }
+    const headerContainer = document.getElementById('vod-header-container');
+    if (headerContainer) headerContainer.remove();
     
-    const backBtn = document.getElementById('vod-back-btn');
-    const titleLabel = document.getElementById('vod-category-title');
+    let stalkerCategories = [];
+    let m3uGroups = {};
+    let hasSeries = false;
     
-    if (currentVodCategory) {
-        backBtn.style.display = 'block';
-        titleLabel.textContent = currentVodCategory.title;
-        
-        grid.innerHTML = '<div style="color: #888; text-align: center; padding: 50px; grid-column: 1 / -1;">Loading series...</div>';
-        
-        const playlist = savedPlaylists.find(p => p.id === currentVodCategory.playlistId);
-        if (playlist) {
-            window.iptvAPI.loadStalkerCategory({
-                url: playlist.source,
-                mac: playlist.epg.substring(8),
-                categoryId: currentVodCategory.tvg_id,
-                isSeries: true
-            }).then(items => {
-                grid.innerHTML = '';
-                if (items.length === 0) {
-                    grid.innerHTML = '<div style="color: #888; text-align: center; padding: 50px; grid-column: 1 / -1;">No series found in this category.</div>';
-                    return;
-                }
-                
-                items.sort((a, b) => {
-                    const isCatA = a.type === 'movie_category' || a.type === 'vod_category' || a.type === 'series_category';
-                    const isCatB = b.type === 'movie_category' || b.type === 'vod_category' || b.type === 'series_category';
-                    if (isCatA && !isCatB) return -1;
-                    if (!isCatA && isCatB) return 1;
-                    return sortAlphaNum(a.name, b.name);
-                });
-                items.forEach(s => {
-                    const card = document.createElement('div');
-                    card.className = 'catalog-card';
-                    const logoUrl = s.logo || 'assets/logo.ico';
-                    card.innerHTML = `
-                        <div class="catalog-poster-wrapper">
-                            <img class="catalog-poster" src="${logoUrl}" alt="${s.name}" onerror="this.onerror=null; this.src='assets/logo.ico';">
-                        </div>
-                        <div class="catalog-info">
-                            <h4 class="catalog-title" title="${s.name}">${s.name}</h4>
-                            <div class="catalog-meta">
-                                <span class="catalog-badge">Series</span>
-                            </div>
-                        </div>
-                    `;
-                    card.addEventListener('click', () => {
-                        console.log('[CATALOG] Opening Series Episodes:', s.name);
-                        openEpisodesModal(playlist.id, s.id, s.name, s.logo);
-                    });
-                    grid.appendChild(card);
-                });
-            });
-        }
-        return;
-    }
-    
-    backBtn.style.display = 'none';
-    titleLabel.textContent = 'Series Categories';
-
-    let series = [];
     savedPlaylists.forEach(p => {
         if (p.channels && !p.disabled) {
             p.channels.forEach(c => {
-                if ((c.type === 'vod' || c.type === 'series' || c.type === 'vod_category' || c.type === 'series_category') && !c.disabled) {
+                if (c.disabled) return;
+                if (c.type === 'vod_category' || c.type === 'series_category') {
                     c.playlistId = p.id;
-                    series.push(c);
+                    stalkerCategories.push(c);
+                    hasSeries = true;
+                } else if (c.type === 'vod' || c.type === 'series') {
+                    c.playlistId = p.id;
+                    const groupName = c.group || 'Series';
+                    if (!m3uGroups[groupName]) m3uGroups[groupName] = [];
+                    m3uGroups[groupName].push(c);
+                    hasSeries = true;
                 }
             });
         }
     });
-
-    if (series.length === 0) {
+    
+    if (!hasSeries) {
         if (empty) empty.style.display = 'block';
         return;
     }
     if (empty) empty.style.display = 'none';
-
-    series.sort((a, b) => {
-        const isCatA = a.type === 'movie_category' || a.type === 'vod_category' || a.type === 'series_category';
-        const isCatB = b.type === 'movie_category' || b.type === 'vod_category' || b.type === 'series_category';
-        if (isCatA && !isCatB) return -1;
-        if (!isCatA && isCatB) return 1;
-        return sortAlphaNum(a.title, b.title);
-    });
-
-    series.forEach(s => {
-        const card = document.createElement('div');
-        card.className = 'catalog-card';
-        const logoUrl = s.logo || 'assets/logo.ico';
-        const isCategory = s.type === 'vod_category' || s.type === 'series_category';
-        card.innerHTML = `
-            <div class="catalog-poster-wrapper" style="${isCategory ? 'padding-top: 100%;' : ''}">
-                ${isCategory ? `<div style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size: 3em; color: #bb86fc; background: #1a1a1a;">📁</div>` : `<img class="catalog-poster" src="${logoUrl}" alt="${s.title}" onerror="this.onerror=null; this.src='assets/logo.ico';">`}
-            </div>
-            <div class="catalog-info">
-                <h4 class="catalog-title" title="${s.title}">${s.title}</h4>
-                <div class="catalog-meta">
-                    <span class="catalog-badge">${isCategory ? 'Folder' : 'Series'}</span>
-                </div>
-            </div>
-        `;
-        card.addEventListener('click', () => {
-            if (isCategory) {
-                currentVodCategory = s;
-                renderVod();
-            } else {
-                console.log('[CATALOG] Opening Series Episodes:', s.title);
-                openEpisodesModal(s.playlistId, s.tvg_id, s.title, s.logo);
-            }
+    
+    stalkerCategories.forEach(cat => {
+        const laneRow = createLaneRowElement({
+            title: cat.title || cat.name,
+            playlistId: cat.playlistId,
+            categoryId: cat.tvg_id,
+            isStalker: true,
+            loadFnName: 'loadVodForLane'
         });
-        grid.appendChild(card);
+        grid.appendChild(laneRow);
+        if (laneObserver) laneObserver.observe(laneRow);
     });
-
+    
+    Object.keys(m3uGroups).forEach(groupName => {
+        const playlistId = m3uGroups[groupName][0].playlistId;
+        const laneId = `${playlistId}-${groupName}`;
+        loadedVodLanes[laneId] = {
+            allItems: m3uGroups[groupName],
+            renderedCount: 0,
+            isStalker: false
+        };
+        
+        const laneRow = createLaneRowElement({
+            title: groupName,
+            playlistId: playlistId,
+            categoryId: groupName,
+            isStalker: false,
+            loadFnName: 'loadVodForLane'
+        });
+        grid.appendChild(laneRow);
+        if (laneObserver) laneObserver.observe(laneRow);
+    });
+    
     const searchInput = document.getElementById('vod-search');
     if (searchInput) {
         searchInput.replaceWith(searchInput.cloneNode(true));
@@ -4099,13 +4750,25 @@ function renderVod() {
         newSearchInput.value = '';
         newSearchInput.addEventListener('keyup', (e) => {
             const query = e.target.value.toLowerCase().trim();
-            const cards = grid.querySelectorAll('.catalog-card');
-            cards.forEach(card => {
-                const title = card.querySelector('.catalog-title').textContent.toLowerCase();
-                if (title.includes(query)) {
-                    card.style.display = 'flex';
+            const laneRows = grid.querySelectorAll('.category-lane-row');
+            
+            laneRows.forEach(lane => {
+                const cards = lane.querySelectorAll('.catalog-card');
+                let visibleCount = 0;
+                cards.forEach(card => {
+                    const title = card.dataset.title.toLowerCase();
+                    if (title.includes(query)) {
+                        card.style.display = 'flex';
+                        visibleCount++;
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+                
+                if (query !== '' && visibleCount === 0) {
+                    lane.style.display = 'none';
                 } else {
-                    card.style.display = 'none';
+                    lane.style.display = 'block';
                 }
             });
         });
@@ -4372,6 +5035,9 @@ async function backgroundAutoUpdate() {
 // Load saved channels on startup
 window.addEventListener('DOMContentLoaded', async () => {
     console.log('[LIFECYCLE] DOMContentLoaded event fired.');
+
+    // Initialize premium details modal events
+    initDetailsModalEvents();
 
     // Hide all main view containers initially to prevent UI flash before data loads
     ['sidebar', 'main-view', 'playlist-view', 'epg-view', 'settings-view'].forEach(id => {

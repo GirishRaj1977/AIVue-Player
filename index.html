@@ -452,6 +452,79 @@
             </div>
         </div>
     </div>
+
+    <!-- Premium Netflix-Style Movie & Series Details Modal -->
+    <div id="premium-details-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1001; align-items: center; justify-content: center; backdrop-filter: blur(12px); padding: 20px; box-sizing: border-box;">
+        <div style="background: #181818; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; width: 90%; max-width: 900px; max-height: 90%; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; box-shadow: 0 25px 60px rgba(0,0,0,0.8); position: relative; scrollbar-width: none;">
+            
+            <!-- Close Button -->
+            <button id="premium-details-close" style="position: absolute; top: 20px; right: 20px; z-index: 10; background: rgba(0, 0, 0, 0.5); border: none; width: 40px; height: 40px; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; border: 1px solid rgba(255,255,255,0.1);">
+                <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: currentColor;"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            </button>
+
+            <!-- Backdrop Banner Section -->
+            <div id="details-backdrop-banner" style="position: relative; width: 100%; height: 350px; background-size: cover; background-position: center; background-repeat: no-repeat; display: flex; align-items: flex-end;">
+                <!-- Linear Gradient overlay from bottom to top -->
+                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to top, #181818, rgba(24, 24, 24, 0.7) 40%, rgba(24, 24, 24, 0) 80%); pointer-events: none;"></div>
+                
+                <!-- Bottom banner content -->
+                <div style="position: relative; z-index: 2; padding: 30px; width: 100%; box-sizing: border-box; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 20px;">
+                    <div style="flex: 1; min-width: 250px;">
+                        <h1 id="details-title" style="margin: 0 0 10px 0; color: white; font-family: 'Outfit', 'Inter', sans-serif; font-size: 2.2em; font-weight: 800; text-shadow: 0 2px 10px rgba(0,0,0,0.5);">Title</h1>
+                        <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                            <span id="details-rating" style="background: rgba(255, 193, 7, 0.2); color: #ffc107; font-weight: bold; padding: 4px 10px; border-radius: 4px; font-size: 0.9em; border: 1px solid rgba(255,193,7,0.3);">★ 8.5</span>
+                            <span id="details-year" style="color: #bbb; font-weight: 500;">2024</span>
+                            <span id="details-duration" style="color: #bbb; font-weight: 500;">2h 15m</span>
+                            <span id="details-type-badge" style="background: rgba(187, 134, 252, 0.2); color: #bb86fc; font-weight: bold; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; text-transform: uppercase; border: 1px solid rgba(187,134,252,0.3);">Movie</span>
+                        </div>
+                    </div>
+                    <div>
+                        <button id="details-play-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 12px 35px; border-radius: 8px; font-size: 1.1em; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 8px 20px rgba(187,134,252,0.3); display: flex; align-items: center; gap: 10px;">
+                            <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: currentColor;"><path d="M8 5v14l11-7z"/></svg> Play Now
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content Details Section -->
+            <div style="padding: 30px; box-sizing: border-box; display: flex; gap: 40px; flex-wrap: wrap; background: #181818;">
+                
+                <!-- Left Main Content Column -->
+                <div style="flex: 2; min-width: 300px; display: flex; flex-direction: column; gap: 20px;">
+                    <div>
+                        <h3 style="color: #bb86fc; margin: 0 0 10px 0; font-family: 'Outfit', sans-serif;">Overview</h3>
+                        <p id="details-overview" style="color: #ccc; margin: 0; line-height: 1.6; font-size: 1em;">Synopsis goes here...</p>
+                    </div>
+                    
+                    <!-- Episodes lists (For TV Shows only) -->
+                    <div id="details-episodes-section" style="display: none; border-top: 1px solid #333; padding-top: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3 style="color: #bb86fc; margin: 0; font-family: 'Outfit', sans-serif;">Episodes</h3>
+                            <select id="details-season-select" style="background: #121212; color: white; border: 1px solid #444; padding: 6px 12px; border-radius: 6px; outline: none; cursor: pointer;"></select>
+                        </div>
+                        <div id="details-episodes-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px;"></div>
+                    </div>
+                </div>
+
+                <!-- Right Sidebar Column -->
+                <div style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 20px; background: rgba(255,255,255,0.02); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.04);">
+                    <div>
+                        <span style="color: #777; font-size: 0.85em; display: block; text-transform: uppercase; margin-bottom: 4px;">Genres</span>
+                        <span id="details-genres" style="color: #e0e0e0; font-size: 0.95em;">-</span>
+                    </div>
+                    <div>
+                        <span style="color: #777; font-size: 0.85em; display: block; text-transform: uppercase; margin-bottom: 4px;">Director / Crew</span>
+                        <span id="details-crew" style="color: #e0e0e0; font-size: 0.95em;">-</span>
+                    </div>
+                    <div>
+                        <span style="color: #777; font-size: 0.85em; display: block; text-transform: uppercase; margin-bottom: 4px;">Cast</span>
+                        <span id="details-cast" style="color: #e0e0e0; font-size: 0.95em; line-height: 1.4;">-</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
     
     <!-- Link to your frontend logic -->
     <script src="renderer.js"></script>

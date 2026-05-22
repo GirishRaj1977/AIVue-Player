@@ -109,6 +109,188 @@ ipcMain.handle('save-remote-settings', (event, settings) => {
     return true;
 });
 
+// --- TMDB API Settings Initialization ---
+let tmdbConfig = { apiKey: '', apiToken: '' };
+const tmdbConfigPath = path.join(app.getPath('userData'), 'tmdb_config.json');
+try {
+    if (fs.existsSync(tmdbConfigPath)) {
+        tmdbConfig = { ...tmdbConfig, ...JSON.parse(fs.readFileSync(tmdbConfigPath, 'utf8')) };
+    }
+} catch (e) {
+    console.error("Failed to load TMDB config", e);
+}
+
+async function testTmdbConnection(config) {
+    if (!config.apiKey && !config.apiToken) {
+        return { valid: false, error: 'API credentials missing' };
+    }
+    
+    let url = 'https://api.themoviedb.org/3/authentication';
+    let headers = { 'Accept': 'application/json' };
+    
+    if (config.apiToken) {
+        headers['Authorization'] = `Bearer ${config.apiToken}`;
+    } else if (config.apiKey) {
+        url += `?api_key=${config.apiKey}`;
+    }
+    
+    try {
+        const response = await fetch(url, { headers });
+        if (response.ok) {
+            const data = await response.json();
+            return { valid: data.success === true, error: null };
+        } else {
+            const data = await response.json().catch(() => ({}));
+            return { valid: false, error: data.status_message || `HTTP ${response.status}` };
+        }
+    } catch (e) {
+        return { valid: false, error: e.message };
+    }
+}
+
+async function cleanTitleForSearch(title) {
+    if (!title) return { cleanTitle: '', year: null };
+    // Normalize and remove common quality/release tags:
+    let clean = title.replace(/\b(1080p|720p|4k|2160p|uhd|fhd|hd|hdr|bluray|blu-ray|webrip|web-dl|h264|h265|x264|x265|hevc|multi|dd5\.1|aac)\b/gi, '');
+    const yearMatch = clean.match(/\b(19\d\d|20\d\d)\b/);
+    const year = yearMatch ? yearMatch[0] : null;
+    
+    // Remove punctuation except spaces
+    clean = clean.replace(/[.\-_\[\]()]/g, ' ');
+    clean = clean.replace(/\s+/g, ' ').trim();
+    
+    return { cleanTitle: clean, year };
+}
+
+async function fetchDetails(tmdbId, tmdbType, headers) {
+    let url = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?append_to_response=credits,recommendations`;
+    if (tmdbConfig.apiToken) {
+        // Bearer auth in headers
+    } else if (tmdbConfig.apiKey) {
+        url += `&api_key=${tmdbConfig.apiKey}`;
+    }
+    
+    try {
+        const res = await fetch(url, { headers });
+        if (!res.ok) {
+            throw new Error(`Details fetch failed: HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        
+        let director = 'N/A';
+        let cast = [];
+        if (data.credits) {
+            if (data.credits.crew) {
+                const dirObj = data.credits.crew.find(c => c.job === 'Director');
+                if (dirObj) director = dirObj.name;
+            }
+            if (data.credits.cast) {
+                cast = data.credits.cast.slice(0, 5).map(c => c.name);
+            }
+        }
+        
+        return {
+            tmdbId: String(data.id),
+            title: data.title || data.name || 'Unknown Title',
+            overview: data.overview || 'No description available.',
+            backdrop_path: data.backdrop_path ? `https://image.tmdb.org/t/p/original${data.backdrop_path}` : '',
+            poster_path: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : '',
+            vote_average: data.vote_average ? data.vote_average.toFixed(1) : 'N/A',
+            release_date: data.release_date || data.first_air_date || 'N/A',
+            genres: data.genres ? data.genres.map(g => g.name) : [],
+            director,
+            cast,
+            runtime: data.runtime || (data.episode_run_time ? data.episode_run_time[0] : null) || 'N/A'
+        };
+    } catch (e) {
+        console.error(`[TMDB API ERR] Details fetch failed:`, e.message);
+        return { error: e.message };
+    }
+}
+
+ipcMain.handle('get-tmdb-config', () => tmdbConfig);
+ipcMain.handle('save-tmdb-config', async (event, config) => {
+    tmdbConfig = config;
+    try {
+        fs.writeFileSync(tmdbConfigPath, JSON.stringify(tmdbConfig));
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+    
+    if (!tmdbConfig.apiKey && !tmdbConfig.apiToken) {
+        return { success: true, status: 'Not Configured' };
+    }
+    
+    try {
+        const testRes = await testTmdbConnection(tmdbConfig);
+        return { success: testRes.valid, status: testRes.valid ? 'Connected' : 'Invalid Credentials', error: testRes.error };
+    } catch (err) {
+        return { success: false, status: 'Error', error: err.message };
+    }
+});
+
+ipcMain.handle('fetch-tmdb-by-title', async (event, { title, type }) => {
+    if (!tmdbConfig.apiKey && !tmdbConfig.apiToken) {
+        return { error: 'TMDB API not configured' };
+    }
+    
+    const { cleanTitle, year } = await cleanTitleForSearch(title);
+    if (!cleanTitle) return { error: 'Empty search query' };
+    
+    const isSeries = type === 'series' || type === 'vod';
+    const tmdbType = isSeries ? 'tv' : 'movie';
+    
+    let url = `https://api.themoviedb.org/3/search/${tmdbType}?query=${encodeURIComponent(cleanTitle)}`;
+    if (year) {
+        if (isSeries) {
+            url += `&first_air_date_year=${year}`;
+        } else {
+            url += `&year=${year}`;
+        }
+    }
+    
+    let headers = { 'Accept': 'application/json' };
+    if (tmdbConfig.apiToken) {
+        headers['Authorization'] = `Bearer ${tmdbConfig.apiToken}`;
+    } else if (tmdbConfig.apiKey) {
+        url += `&api_key=${tmdbConfig.apiKey}`;
+    }
+    
+    try {
+        console.log(`[TMDB API] Searching for ${tmdbType}: "${cleanTitle}" (Year: ${year || 'Any'})`);
+        const searchRes = await fetch(url, { headers });
+        if (!searchRes.ok) {
+            throw new Error(`Search failed: HTTP ${searchRes.status}`);
+        }
+        const searchData = await searchRes.json();
+        if (!searchData.results || searchData.results.length === 0) {
+            if (year) {
+                console.log(`[TMDB API] No results with year. Retrying search without year for: "${cleanTitle}"`);
+                let retryUrl = `https://api.themoviedb.org/3/search/${tmdbType}?query=${encodeURIComponent(cleanTitle)}`;
+                if (tmdbConfig.apiToken) {
+                    // already in headers
+                } else if (tmdbConfig.apiKey) {
+                    retryUrl += `&api_key=${tmdbConfig.apiKey}`;
+                }
+                const retryRes = await fetch(retryUrl, { headers });
+                if (retryRes.ok) {
+                    const retryData = await retryRes.json();
+                    if (retryData.results && retryData.results.length > 0) {
+                        return await fetchDetails(retryData.results[0].id, tmdbType, headers);
+                    }
+                }
+            }
+            return { error: 'No results found' };
+        }
+        
+        const bestMatch = searchData.results[0];
+        return await fetchDetails(bestMatch.id, tmdbType, headers);
+    } catch (err) {
+        console.error(`[TMDB API ERR] Search failed for "${title}":`, err.message);
+        return { error: err.message };
+    }
+});
+
 let mainWindow;
 let playerWindow;
 let mpvProcess;
