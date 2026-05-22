@@ -207,7 +207,10 @@ async function fetchDetails(tmdbId, tmdbType, headers) {
             genres: data.genres ? data.genres.map(g => g.name) : [],
             director,
             cast,
-            runtime: data.runtime || (data.episode_run_time ? data.episode_run_time[0] : null) || 'N/A'
+            runtime: data.runtime || (data.episode_run_time && data.episode_run_time.length > 0 ? data.episode_run_time[0] : null) || 'N/A',
+            seasons: data.seasons || [],
+            number_of_seasons: data.number_of_seasons || 0,
+            number_of_episodes: data.number_of_episodes || 0
         };
     } catch (e) {
         console.error(`[TMDB API ERR] Details fetch failed:`, e.message);
@@ -318,6 +321,50 @@ ipcMain.handle('fetch-tmdb-by-id', async (event, { tmdbId, type }) => {
         return await fetchDetails(tmdbId, tmdbType, headers);
     } catch (err) {
         console.error(`[TMDB API ERR] Details fetch failed for ID "${tmdbId}":`, err.message);
+        return { error: err.message };
+    }
+});
+
+ipcMain.handle('fetch-tmdb-season-episodes', async (event, { tmdbId, seasonNumber }) => {
+    if (!tmdbConfig.apiKey && !tmdbConfig.apiToken) {
+        return { error: 'TMDB API not configured' };
+    }
+    
+    if (!tmdbId) return { error: 'Empty TMDB ID' };
+    const cleanSeasonNum = parseInt(seasonNumber) || 1;
+    
+    let url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${cleanSeasonNum}`;
+    let headers = { 'Accept': 'application/json' };
+    if (tmdbConfig.apiToken) {
+        headers['Authorization'] = `Bearer ${tmdbConfig.apiToken}`;
+    } else if (tmdbConfig.apiKey) {
+        url += `&api_key=${tmdbConfig.apiKey}`;
+    }
+    
+    try {
+        console.log(`[TMDB API] Fetching season episodes for TV ID ${tmdbId}, Season ${cleanSeasonNum}`);
+        const res = await fetch(url, { headers });
+        if (!res.ok) {
+            throw new Error(`Season fetch failed: HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        
+        const episodes = (data.episodes || []).map(ep => ({
+            episode_number: ep.episode_number,
+            name: ep.name || `Episode ${ep.episode_number}`,
+            overview: ep.overview || 'No description available.',
+            still_path: ep.still_path ? `https://image.tmdb.org/t/p/w500${ep.still_path}` : ''
+        }));
+        
+        return {
+            season_number: data.season_number,
+            name: data.name,
+            overview: data.overview,
+            poster_path: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : '',
+            episodes
+        };
+    } catch (err) {
+        console.error(`[TMDB API ERR] Season episodes fetch failed for TV ID "${tmdbId}", Season "${cleanSeasonNum}":`, err.message);
         return { error: err.message };
     }
 });

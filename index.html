@@ -235,6 +235,132 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
+        /* Premium Details Modal Episode Card Styles */
+        .details-episode-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+        .details-episode-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(187, 134, 252, 0.35);
+            background: rgba(187, 134, 252, 0.04);
+            box-shadow: 0 10px 20px rgba(187, 134, 252, 0.08);
+        }
+        .details-episode-thumbnail-wrapper {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* 16:9 Aspect Ratio */
+            background: #151515;
+            overflow: hidden;
+        }
+        .details-episode-thumbnail {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.4s ease;
+        }
+        .details-episode-card:hover .details-episode-thumbnail {
+            transform: scale(1.06);
+        }
+        .details-episode-info {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: rgba(24, 24, 24, 0.8);
+            flex-grow: 1;
+        }
+        .details-episode-title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .details-episode-title {
+            margin: 0;
+            color: #e0e0e0;
+            font-size: 0.88em;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-family: 'Outfit', 'Inter', sans-serif;
+            flex: 1;
+        }
+        .details-episode-card:hover .details-episode-title {
+            color: #bb86fc;
+        }
+        .details-episode-num-badge {
+            font-size: 0.75em;
+            color: #bb86fc;
+            background: rgba(187, 134, 252, 0.12);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            border: 1px solid rgba(187, 134, 252, 0.2);
+            flex-shrink: 0;
+        }
+        .details-episode-overview {
+            margin: 0;
+            color: #888;
+            font-size: 0.76em;
+            line-height: 1.45;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            height: 3.3em; /* Restrict height for alignment */
+        }
+        .details-episode-card:hover .details-episode-overview {
+            color: #b0b0b0;
+        }
+        .details-episode-play-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            z-index: 2;
+        }
+        .details-episode-card:hover .details-episode-play-overlay {
+            opacity: 1;
+        }
+        .details-episode-play-icon {
+            background: #bb86fc;
+            color: black;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(187,134,252,0.4);
+            transform: scale(0.8);
+            transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .details-episode-card:hover .details-episode-play-icon {
+            transform: scale(1);
+        }
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }

@@ -4100,6 +4100,66 @@ function initTmdbObserver() {
     });
 }
 
+function parseM3uSeriesName(title) {
+    let name = (title || '').trim();
+    
+    // Pattern 1: S01E02 or similar
+    let match = name.match(/^(.*?)\s*[-_.]?\s*s(\d+)\s*[-_.]?\s*e(\d+)/i);
+    if (match) {
+        return {
+            seriesTitle: match[1].replace(/[-_.\s]+$/, '').trim(),
+            season: parseInt(match[2]),
+            episode: parseInt(match[3])
+        };
+    }
+    
+    // Pattern 2: Season 1 Episode 2
+    match = name.match(/^(.*?)\s+season\s+(\d+)\s+episode\s+(\d+)/i);
+    if (match) {
+        return {
+            seriesTitle: match[1].trim(),
+            season: parseInt(match[2]),
+            episode: parseInt(match[3])
+        };
+    }
+
+    // Pattern 3: Ep 1 or Episode 1
+    match = name.match(/^(.*?)\s+(?:ep|episode)\s*(\d+)/i);
+    if (match) {
+        return {
+            seriesTitle: match[1].trim(),
+            season: 1, // Fallback to season 1
+            episode: parseInt(match[2])
+        };
+    }
+    
+    // Pattern 4: 1x02 (season 1, episode 2)
+    match = name.match(/^(.*?)\s+(\d+)x(\d+)/i);
+    if (match) {
+        return {
+            seriesTitle: match[1].trim(),
+            season: parseInt(match[2]),
+            episode: parseInt(match[3])
+        };
+    }
+    
+    // Pattern 5: Ending with S01 or Season 1
+    match = name.match(/^(.*?)\s*[-_.]?\s*s(\d+)$/i);
+    if (match) {
+        return {
+            seriesTitle: match[1].replace(/[-_.\s]+$/, '').trim(),
+            season: parseInt(match[2]),
+            episode: 1
+        };
+    }
+    
+    return {
+        seriesTitle: name,
+        season: 1,
+        episode: 1
+    };
+}
+
 async function openMovieDetailsModal(streamInfo) {
     const modal = document.getElementById('premium-details-modal');
     if (!modal) return;
@@ -4197,7 +4257,6 @@ async function openMovieDetailsModal(streamInfo) {
     }
     
     if (streamInfo.type === 'series') {
-        newPlayBtn.style.display = 'none';
         episodesSection.style.display = 'block';
         
         const epGrid = document.getElementById('details-episodes-grid');
@@ -4206,90 +4265,248 @@ async function openMovieDetailsModal(streamInfo) {
         epGrid.innerHTML = '<div style="color: #bb86fc; padding: 20px; font-weight: bold; font-family: \'Outfit\', sans-serif;">Loading episodes...</div>';
         seasonSelect.innerHTML = '';
         
+        // Re-clone play button to support series-specific first episode playback
+        const seriesPlayBtn = document.getElementById('details-play-btn');
+        seriesPlayBtn.replaceWith(seriesPlayBtn.cloneNode(true));
+        const finalPlayBtn = document.getElementById('details-play-btn');
+        
         try {
             const playlist = savedPlaylists.find(p => p.id.toString() === streamInfo.playlistId.toString());
+            let episodes = [];
+            
             if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
                 const url = playlist.source;
                 const mac = playlist.epg.substring(8);
                 const seriesId = streamInfo.tvg_id;
                 
-                const episodes = await window.iptvAPI.getStalkerEpisodes({ url, mac, seriesId });
-                
-                if (!episodes || episodes.length === 0) {
-                    epGrid.innerHTML = '<div style="color: #888; padding: 20px;">No episodes found.</div>';
-                    return;
+                episodes = await window.iptvAPI.getStalkerEpisodes({ url, mac, seriesId });
+            } else {
+                // Group related flat M3U series channels
+                const parsedClicked = parseM3uSeriesName(streamInfo.title);
+                if (playlist && playlist.channels) {
+                    playlist.channels.forEach(item => {
+                        if (item.disabled) return;
+                        if (item.type === 'series' || item.type === 'vod') {
+                            const parsedItem = parseM3uSeriesName(item.name || item.title);
+                            if (parsedItem.seriesTitle.toLowerCase() === parsedClicked.seriesTitle.toLowerCase()) {
+                                episodes.push({
+                                    id: item.id || item.tvg_id || item.tvgId,
+                                    name: item.name || item.title,
+                                    season: parsedItem.season,
+                                    episodeNum: parsedItem.episode,
+                                    url: item.url,
+                                    logo: item.logo || streamInfo.logo
+                                });
+                            }
+                        }
+                    });
                 }
                 
-                const seasons = {};
-                episodes.forEach(ep => {
-                    const sNum = ep.season || 1;
-                    if (!seasons[sNum]) seasons[sNum] = [];
-                    seasons[sNum].push(ep);
+                // Fallback: clicked item itself is the only episode
+                if (episodes.length === 0) {
+                    episodes.push({
+                        id: streamInfo.tvg_id || streamInfo.id,
+                        name: streamInfo.title,
+                        season: 1,
+                        episodeNum: 1,
+                        url: streamInfo.url,
+                        logo: streamInfo.logo
+                    });
+                }
+            }
+            
+            if (!episodes || episodes.length === 0) {
+                epGrid.innerHTML = '<div style="color: #888; padding: 20px;">No episodes found.</div>';
+                
+                // Default click to play the whole series details entry
+                finalPlayBtn.addEventListener('click', () => {
+                    modal.style.display = 'none';
+                    switchTab('live-tv', document.getElementById('btn-live-tv'));
+                    embedStream(streamInfo);
                 });
-                
-                Object.keys(seasons).forEach(sNum => {
-                    seasons[sNum].sort((a, b) => parseInt(a.episodeNum || 0) - parseInt(b.episodeNum || 0));
+                return;
+            }
+            
+            const seasons = {};
+            episodes.forEach(ep => {
+                const sNum = ep.season || 1;
+                if (!seasons[sNum]) seasons[sNum] = [];
+                seasons[sNum].push(ep);
+            });
+            
+            Object.keys(seasons).forEach(sNum => {
+                seasons[sNum].sort((a, b) => parseInt(a.episodeNum || 0) - parseInt(b.episodeNum || 0));
+            });
+            
+            const sortedSeasons = Object.keys(seasons).sort((a, b) => parseInt(a) - parseInt(b));
+            
+            // Reconfigure Play Button to play the first episode of the first season
+            const firstSeason = sortedSeasons[0];
+            const firstEp = seasons[firstSeason] ? seasons[firstSeason][0] : null;
+            if (firstEp) {
+                let firstEpDisplayName = firstEp.name || `Episode ${firstEp.episodeNum}`;
+                if (firstEp.name && playlist && !playlist.epg?.startsWith('stalker:')) {
+                    const cleanPrefix = new RegExp(`^.*?\\b(s\\d+e\\d+|\\d+x\\d+|episode\\s*\\d+|ep\\s*\\d+)\\b\\s*[-_.:]?\\s*`, 'i');
+                    const cleaned = firstEp.name.replace(cleanPrefix, '').trim();
+                    if (cleaned) firstEpDisplayName = cleaned;
+                }
+                finalPlayBtn.addEventListener('click', () => {
+                    modal.style.display = 'none';
+                    switchTab('live-tv', document.getElementById('btn-live-tv'));
+                    embedStream({
+                        title: `${streamInfo.title} - S${firstSeason}E${firstEp.episodeNum} - ${firstEpDisplayName}`,
+                        url: firstEp.url,
+                        logo: streamInfo.logo,
+                        playlistId: streamInfo.playlistId
+                    });
                 });
+            } else {
+                finalPlayBtn.addEventListener('click', () => {
+                    modal.style.display = 'none';
+                    switchTab('live-tv', document.getElementById('btn-live-tv'));
+                    embedStream(streamInfo);
+                });
+            }
+            
+            const renderSeason = async (seasonNum) => {
+                epGrid.innerHTML = '';
+                const eps = seasons[seasonNum] || [];
+                const cardsMap = {};
                 
-                const sortedSeasons = Object.keys(seasons).sort((a, b) => parseInt(a) - parseInt(b));
-                
-                const renderSeason = (seasonNum) => {
-                    epGrid.innerHTML = '';
-                    const eps = seasons[seasonNum] || [];
-                    eps.forEach(ep => {
-                        const card = document.createElement('div');
-                        card.className = 'catalog-card';
-                        card.style.flex = '1 1 calc(33.33% - 10px)';
-                        card.style.minWidth = '200px';
-                        
-                        card.innerHTML = `
-                            <div class="catalog-poster-wrapper" style="padding-top: 56.25%;">
-                                <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.05); color: #bb86fc; font-size: 1.5em; font-weight: bold;">
-                                    E${ep.episodeNum || ''}
+                eps.forEach(ep => {
+                    const card = document.createElement('div');
+                    card.className = 'details-episode-card';
+                    card.style.flex = '1 1 calc(33.33% - 10px)';
+                    card.style.minWidth = '220px';
+                    
+                    let epDisplayName = ep.name || `Episode ${ep.episodeNum}`;
+                    if (ep.name && playlist && !playlist.epg?.startsWith('stalker:')) {
+                        const cleanPrefix = new RegExp(`^.*?\\b(s\\d+e\\d+|\\d+x\\d+|episode\\s*\\d+|ep\\s*\\d+)\\b\\s*[-_.:]?\\s*`, 'i');
+                        const cleaned = ep.name.replace(cleanPrefix, '').trim();
+                        if (cleaned) epDisplayName = cleaned;
+                    }
+                    
+                    card.innerHTML = `
+                        <div class="details-episode-thumbnail-wrapper">
+                            <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.03); color: #bb86fc; font-size: 1.8em; font-weight: bold; font-family: 'Outfit', sans-serif;">
+                                E${ep.episodeNum}
+                            </div>
+                            <img class="details-episode-thumbnail" src="" style="display: none;" onerror="this.style.display='none';">
+                            <div class="details-episode-play-overlay">
+                                <div class="details-episode-play-icon">
+                                    <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: currentColor;"><path d="M8 5v14l11-7z"/></svg>
                                 </div>
                             </div>
-                            <div class="catalog-info" style="background: rgba(30, 30, 30, 0.9);">
-                                <h4 class="catalog-title" title="${ep.name || `Episode ${ep.episodeNum}`}" style="font-size: 0.85em;">${ep.name || `Episode ${ep.episodeNum}`}</h4>
-                                <div class="catalog-meta">
-                                    <span class="catalog-badge">Play</span>
-                                </div>
+                        </div>
+                        <div class="details-episode-info">
+                            <div class="details-episode-title-row">
+                                <h4 class="details-episode-title" title="${epDisplayName}">${epDisplayName}</h4>
+                                <span class="details-episode-num-badge">E${ep.episodeNum}</span>
                             </div>
-                        `;
-                        
-                        card.addEventListener('click', () => {
-                            modal.style.display = 'none';
-                            switchTab('live-tv', document.getElementById('btn-live-tv'));
-                            embedStream({
-                                title: `${streamInfo.title} - S${seasonNum}E${ep.episodeNum} - ${ep.name || 'Episode'}`,
-                                url: ep.url,
-                                logo: streamInfo.logo,
-                                playlistId: streamInfo.playlistId
-                            });
+                            <p class="details-episode-overview">Episode details loading...</p>
+                        </div>
+                    `;
+                    
+                    card.addEventListener('click', () => {
+                        modal.style.display = 'none';
+                        switchTab('live-tv', document.getElementById('btn-live-tv'));
+                        embedStream({
+                            title: `${streamInfo.title} - S${seasonNum}E${ep.episodeNum} - ${epDisplayName}`,
+                            url: ep.url,
+                            logo: streamInfo.logo,
+                            playlistId: streamInfo.playlistId
+                        });
+                    });
+                    
+                    epGrid.appendChild(card);
+                    cardsMap[ep.episodeNum] = card;
+                });
+                
+                // Asynchronously request TMDB season details
+                if (tmdbData && tmdbData.tmdbId) {
+                    try {
+                        console.log(`[UI] Requesting TMDB metadata for TV ID: ${tmdbData.tmdbId}, Season: ${seasonNum}`);
+                        const tmdbSeason = await window.iptvAPI.fetchTmdbSeasonEpisodes({
+                            tmdbId: tmdbData.tmdbId,
+                            seasonNumber: seasonNum
                         });
                         
-                        epGrid.appendChild(card);
+                        if (tmdbSeason && tmdbSeason.episodes && !tmdbSeason.error) {
+                            tmdbSeason.episodes.forEach(tmdbEp => {
+                                const card = cardsMap[tmdbEp.episode_number];
+                                if (card) {
+                                    if (tmdbEp.name) {
+                                        card.querySelector('.details-episode-title').textContent = tmdbEp.name;
+                                        card.querySelector('.details-episode-title').setAttribute('title', tmdbEp.name);
+                                    }
+                                    if (tmdbEp.overview) {
+                                        card.querySelector('.details-episode-overview').textContent = tmdbEp.overview;
+                                    } else {
+                                        card.querySelector('.details-episode-overview').textContent = 'No description available.';
+                                    }
+                                    if (tmdbEp.still_path) {
+                                        const img = card.querySelector('.details-episode-thumbnail');
+                                        img.src = tmdbEp.still_path;
+                                        img.style.display = 'block';
+                                    }
+                                }
+                            });
+                            
+                            eps.forEach(ep => {
+                                const card = cardsMap[ep.episodeNum];
+                                if (card) {
+                                    const overview = card.querySelector('.details-episode-overview');
+                                    if (overview && overview.textContent === 'Episode details loading...') {
+                                        overview.textContent = 'No description available.';
+                                    }
+                                }
+                            });
+                        } else {
+                            eps.forEach(ep => {
+                                const card = cardsMap[ep.episodeNum];
+                                if (card) {
+                                    const overview = card.querySelector('.details-episode-overview');
+                                    if (overview) overview.textContent = 'No description available.';
+                                }
+                            });
+                        }
+                    } catch (tmdbErr) {
+                        console.error('[UI TMDB EPISODES LOAD ERR]', tmdbErr);
+                        eps.forEach(ep => {
+                            const card = cardsMap[ep.episodeNum];
+                            if (card) {
+                                const overview = card.querySelector('.details-episode-overview');
+                                if (overview) overview.textContent = 'No description available.';
+                            }
+                        });
+                    }
+                } else {
+                    eps.forEach(ep => {
+                        const card = cardsMap[ep.episodeNum];
+                        if (card) {
+                            const overview = card.querySelector('.details-episode-overview');
+                            if (overview) overview.textContent = 'No description available.';
+                        }
                     });
-                };
-                
-                seasonSelect.innerHTML = '';
-                sortedSeasons.forEach(sNum => {
-                    const opt = document.createElement('option');
-                    opt.value = sNum;
-                    opt.textContent = `Season ${sNum}`;
-                    seasonSelect.appendChild(opt);
-                });
-                
-                seasonSelect.replaceWith(seasonSelect.cloneNode(true));
-                const newSeasonSelect = document.getElementById('details-season-select');
-                newSeasonSelect.addEventListener('change', (e) => {
-                    renderSeason(e.target.value);
-                });
-                
-                if (sortedSeasons.length > 0) {
-                    renderSeason(sortedSeasons[0]);
                 }
-            } else {
-                epGrid.innerHTML = '<div style="color: #888; padding: 20px;">Episodes details unavailable.</div>';
+            };
+            
+            seasonSelect.innerHTML = '';
+            sortedSeasons.forEach(sNum => {
+                const opt = document.createElement('option');
+                opt.value = sNum;
+                opt.textContent = `Season ${sNum}`;
+                seasonSelect.appendChild(opt);
+            });
+            
+            seasonSelect.replaceWith(seasonSelect.cloneNode(true));
+            const newSeasonSelect = document.getElementById('details-season-select');
+            newSeasonSelect.addEventListener('change', (e) => {
+                renderSeason(e.target.value);
+            });
+            
+            if (sortedSeasons.length > 0) {
+                renderSeason(sortedSeasons[0]);
             }
         } catch (e) {
             console.error('[DETAILS EPISODES ERR]', e);
