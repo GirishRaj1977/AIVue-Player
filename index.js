@@ -973,7 +973,9 @@ function initMpv() {
         `--prefetch-playlist=yes`,
         `--stream-lavf-o=reconnect=1`,
         `--stream-lavf-o=reconnect_streamed=1`,
-        `--idle=yes` 
+        `--idle=yes`,
+        `--log-file=D:\\Play\\mpv-test.log`,
+        `--msg-level=modernz=warn`
     ];
     console.log('[MPV] Spawning MPV process ONCE with args:', mpvArgs);
     mpvProcess = spawn(mpvPath, mpvArgs, { windowsHide: true });
@@ -1910,6 +1912,12 @@ async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = 
     }
     
     const requestUrl = `${url}?${queryParams}`;
+    if (action === 'create_link') {
+        console.log('[CREATE LINK REQUEST URL]', requestUrl);
+        console.log('[CREATE LINK TOKEN]', session.token);
+        console.log('[CREATE LINK CMD PARAM]', extraParams.cmd);
+    }
+    
     try {
         const response = await fetch(requestUrl, { headers: reqHeaders });
         
@@ -1921,6 +1929,10 @@ async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = 
         }
         
         const text = await response.text();
+        if (action === 'create_link') {
+            console.log('[CREATE LINK RAW]', text.substring(0, 500));
+        }
+        
         if (!text || !text.trim()) {
             console.warn(`[STALKER] Empty response for ${action}`, requestUrl);
             if (!isRetry) {
@@ -2028,14 +2040,64 @@ async function fetchAllStalkerPages(baseUrl, mac, action, extraParams) {
     return uniqueItems;
 }
 
-ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd }) => {
+ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, series }) => {
     try {
-        console.log('[STALKER IPC] Resolving link for:', { url, mac, type, cmd });
-        const res = await stalkerRequest(url, mac, 'create_link', { type, cmd });
-        let finalUrl = res.js?.cmd || res.js?.url || '';
+        console.log('[STALKER IPC] Resolving link for:', { url, mac, type, cmd, series });
+        
+        const probes = [];
+
+        if (series !== undefined && series !== null) {
+            probes.push({ type: 'vod', cmd, series });
+        }
+        
+        probes.push({ type, cmd });
+
+        // Create variations of the cmd to bypass common Stalker portal quirks
+        let parsedObj = null;
+        if (typeof cmd === 'string') {
+            if (cmd.startsWith('{')) {
+                try { parsedObj = JSON.parse(cmd); } catch (e) {}
+            } else {
+                try {
+                    const decoded = Buffer.from(cmd, 'base64').toString('utf8');
+                    if (decoded.startsWith('{')) parsedObj = JSON.parse(decoded);
+                } catch (e) {}
+            }
+        }
+
+        if (parsedObj) {
+            const altObj = { ...parsedObj };
+            // Ensure both episode_num and episode_number are present
+            if (altObj.episode_num && !altObj.episode_number) altObj.episode_number = altObj.episode_num;
+            if (altObj.episode_number && !altObj.episode_num) altObj.episode_num = altObj.episode_number;
+
+            const asJson = JSON.stringify(altObj);
+            const asBase64 = Buffer.from(asJson).toString('base64');
+            
+            if (cmd !== asJson) probes.push({ type, cmd: asJson, ...(series !== undefined ? { series } : {}) });
+            if (cmd !== asBase64) probes.push({ type, cmd: asBase64, ...(series !== undefined ? { series } : {}) });
+            
+            if (type === 'series') {
+                probes.push({ type: 'vod', cmd: asBase64, ...(series !== undefined ? { series } : {}) });
+                probes.push({ type: 'vod', cmd: asJson, ...(series !== undefined ? { series } : {}) });
+            }
+        }
+
+        let finalUrl = '';
+        
+        for (const probe of probes) {
+            console.log('[CREATE LINK PROBE]', probe);
+            const res = await stalkerRequest(url, mac, 'create_link', probe);
+            
+            finalUrl = res?.js?.cmd || res?.js?.url || '';
+            if (finalUrl) {
+                console.log('[CREATE LINK SUCCESS] Found URL using probe.');
+                break;
+            }
+        }
         
         if (!finalUrl) {
-            console.error('[STALKER IPC] Could not find stream URL in response', res);
+            console.error('[STALKER IPC] Could not find stream URL in response across all probes.');
             return null;
         }
 
@@ -2234,7 +2296,12 @@ ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, is
         
         if (itemList.length > 0) {
             console.log(`[PERF DEBUG] First raw item keys:`, Object.keys(itemList[0] || {}));
-            console.log(`[PERF DEBUG] First raw item preview:`, JSON.stringify(itemList[0]).substring(0, 400));
+            console.log(`[PERF DEBUG] First raw item full:`, JSON.stringify(itemList[0], null, 2));
+            console.log(`[SERIES OBJECT DEBUG]`);
+            console.log(`[ID FIELD]`, itemList[0].id);
+            console.log(`[MOVIE_ID FIELD]`, itemList[0].movie_id);
+            console.log(`[VIDEO_ID FIELD]`, itemList[0].video_id);
+            console.log(`[SERIES FIELD]`, itemList[0].series);
         } else {
             console.log(`[PERF WARNING] Portal returned 0 raw items for this category!`);
         }
@@ -2259,7 +2326,12 @@ ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, is
                 return isSeries ? isItemSeries : !isItemSeries;
             }).map(m => {
                 if (isSeries || params.type === 'series') {
-                    const seriesId = m.video_id || m.series_id || m.movie_id || m.id || '';
+                // Fix: m.series can be an empty array []. In JS, [] is truthy.
+                // Prioritize m.id per Stalker standard, ignoring empty arrays.
+                let seriesId = m.id || m.video_id || m.series_id || m.movie_id || '';
+                if (m.series && !Array.isArray(m.series) && typeof m.series !== 'object') {
+                    seriesId = m.series;
+                }
                     return {
                         id: seriesId,
                         tvg_id: seriesId,
@@ -2303,8 +2375,8 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
     console.log(`\n=================== [PERF ANALYSIS START: SERIES EPISODES] ===================`);
     console.log(`[PERF] Loading Episodes for Series ID: ${seriesId}`);
     
-    // Keep raw series ID with colons intact as expected by Stalker portals (e.g. "48:48")
-    const cleanSeriesId = seriesId;
+    // Ensure seriesId is a valid string to prevent empty array [] corruption
+    const cleanSeriesId = Array.isArray(seriesId) ? (seriesId[0] || '') : String(seriesId);
     console.log(`[PERF] Series ID: ${cleanSeriesId}`);
 
     // Helper to parse season and episode numbers from properties or name
@@ -2350,353 +2422,259 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
     };
     
     try {
-        // Step 1: Attempt to load seasons (standard stalker portal hierarchy)
-        console.log(`[PERF] Step 1: Fetching seasons for series...`);
+        const strippedId = cleanSeriesId.includes(':') ? cleanSeriesId.split(':')[0] : cleanSeriesId;
+        
+        console.log(`[PERF] Step 1: Running diagnostic probes to find correct season/episode query parameters...`);
         const seasonsFetchStart = Date.now();
-        let seasonsData = [];
-        let successfulType = 'vod';
-        
-        const processSeasonsQueryResult = (rawData) => {
-            if (!Array.isArray(rawData) || rawData.length === 0) return { trueSeasons: [], isFlatList: false };
-            
-            const trueSeasons = rawData.filter(it => {
-                if (!it) return false;
-                const isSeasonValue = it.is_season;
-                const hasSeasonField = isSeasonValue === true || 
-                       isSeasonValue === 1 || 
-                       isSeasonValue === '1' || 
-                       String(isSeasonValue).toLowerCase() === 'true' || 
-                       String(isSeasonValue).toLowerCase() === 'yes';
-                if (hasSeasonField) return true;
-                
-                // Heuristic fallback for naming-based season folders (e.g. "Season 1")
-                const name = (it.name || '').toLowerCase();
-                const isPlayable = it.file || it.url || (it.cmd && String(it.cmd).includes('/media/'));
-                return name.includes('season') && !isPlayable;
-            });
-            
-            const isFlatList = rawData.some(item => {
-                if (!item) return false;
-                const name = (item.name || '').toLowerCase();
-                return item.file || item.url || name.includes('episode') || name.includes('ep.') || /\bep\b/.test(name) || /s\d+\s*e\d+/.test(name);
-            });
-            
-            return { trueSeasons, isFlatList };
-        };
+        const probes = [
+            { name: 'Probe 1', params: { type: 'vod', movie_id: strippedId, season_id: '0', episode_id: '0' } },
+            { name: 'Probe 2', params: { type: 'vod', movie_id: cleanSeriesId, season_id: '0', episode_id: '0' } },
+            { name: 'Probe 3', params: { type: 'series', movie_id: cleanSeriesId, season_id: '0', episode_id: '0' } }
+        ];
 
-        try {
-            console.log(`[PERF] Attempting seasons query with type: 'vod', movie_id: ${cleanSeriesId}`);
-            const rawData = await fetchAllStalkerPages(url, mac, 'get_ordered_list', { type: 'vod', movie_id: cleanSeriesId, season_id: '0', episode_id: '0' });
-            const { trueSeasons, isFlatList } = processSeasonsQueryResult(rawData);
-            
-            if (trueSeasons.length > 0) {
-                seasonsData = trueSeasons;
-                successfulType = 'vod';
-                console.log(`[PERF] Found ${seasonsData.length} true seasons using type 'vod'`);
-            } else if (isFlatList) {
-                seasonsData = rawData;
-                successfulType = 'vod';
-                console.log(`[PERF] Found flat list of direct episodes using type 'vod' (count: ${seasonsData.length})`);
-            }
-        } catch (err) {
-            console.warn(`[PERF] Error fetching seasons with type: 'vod':`, err.message);
-        }
+        let rawData = [];
+        let winningParams = { type: 'vod', movie_id: seriesId }; // fallback
         
-        if (seasonsData.length === 0) {
+        for (const probe of probes) {
+            console.log(`\n[${probe.name}] Requesting:`, probe.params);
             try {
-                console.log(`[PERF] Attempting seasons query with type: 'series', movie_id: ${cleanSeriesId}`);
-                const rawData = await fetchAllStalkerPages(url, mac, 'get_ordered_list', { type: 'series', movie_id: cleanSeriesId, season_id: '0', episode_id: '0' });
-                const { trueSeasons, isFlatList } = processSeasonsQueryResult(rawData);
+                // Just do a single page request first to check total_items and avoid rate limiting
+                const res = await stalkerRequest(url, mac, 'get_ordered_list', { ...probe.params, p: 1 });
+                const data = res.js?.data || (Array.isArray(res.js) ? res.js : []);
+                const totalItems = res.js?.total_items ? parseInt(res.js.total_items, 10) : data.length;
                 
-                if (trueSeasons.length > 0) {
-                    seasonsData = trueSeasons;
-                    successfulType = 'series';
-                    console.log(`[PERF] Found ${seasonsData.length} true seasons using type 'series'`);
-                } else if (isFlatList) {
-                    seasonsData = rawData;
-                    successfulType = 'series';
-                    console.log(`[PERF] Found flat list of direct episodes using type 'series' (count: ${seasonsData.length})`);
+                console.log(`[${probe.name}] Total Items reported: ${totalItems}, Array length: ${data.length}`);
+                if (data.length > 0) {
+                    console.log(`[${probe.name}] First item preview:`, JSON.stringify(data[0], null, 2));
                 }
-            } catch (err) {
-                console.warn(`[PERF] Error fetching seasons with type: 'series':`, err.message);
+                
+                // If it returns a reasonable number of items (not the entire 20k catalog), consider it a valid candidate
+                if (totalItems > 0 && totalItems < 5000 && data.length > 0) {
+                    console.log(`[${probe.name}] Looks like a valid response! Fetching all pages...`);
+                    const allData = await fetchAllStalkerPages(url, mac, 'get_ordered_list', probe.params);
+                    if (rawData.length === 0 || allData.length > rawData.length) {
+                        rawData = allData;
+                        winningParams = probe.params;
+                    }
+                }
+            } catch (e) {
+                console.log(`[${probe.name}] Error:`, e.message);
             }
         }
         
         const seasonsFetchDuration = Date.now() - seasonsFetchStart;
-        console.log(`[PERF] Seasons Fetch took ${seasonsFetchDuration}ms. Seasons found: ${seasonsData ? seasonsData.length : 0} using type: '${successfulType}'`);
+        console.log(`\n[PERF] Probes completed in ${seasonsFetchDuration}ms. Found ${rawData.length} items using params:`, winningParams);
         
-        if (seasonsData && seasonsData.length > 0) {
-            console.log(`[PERF DEBUG] First raw season preview:`, JSON.stringify(seasonsData[0]).substring(0, 400));
-            
-            // Smart Schema Detection: Check if the seasonsData is actually a flat list of direct episodes
-            const isFlatList = seasonsData.some(item => {
-                if (!item) return false;
-                const name = (item.name || '').toLowerCase();
-                // Season items carry a 'cmd' field pointing to the season query. Playable flat episodes have a file/url or explicit episode name identifiers.
-                return item.file || item.url || name.includes('episode') || name.includes('ep.') || /\bep\b/.test(name) || /s\d+\s*e\d+/.test(name);
+        if (!rawData || rawData.length === 0) {
+            console.log(`[PERF SUCCESS] No seasons or episodes found using any probe.`);
+            console.log(`=================== [PERF ANALYSIS END] ===================\n`);
+            return [];
+        }
+        
+        // Check if rawData is actually a flat list of direct episodes
+        const isFlatList = rawData.some(item => {
+            if (!item) return false;
+            const name = (item.name || '').toLowerCase();
+            return item.file || item.url || name.includes('episode') || name.includes('ep.') || /\bep\b/.test(name) || /s\d+\s*e\d+/.test(name);
+        });
+        
+        if (isFlatList) {
+            console.log(`[PERF] Smart check detected flat list of episodes. Mapping directly...`);
+            const mapped = rawData.map((e, index) => {
+                const { season, episodeNum } = parseSeasonAndEpisode(e, index);
+                let cmdVal = e.cmd || '';
+                if (!cmdVal && e.id) {
+                    cmdVal = `/media/file_${e.id}.mpg`;
+                }
+                
+                let linkType = winningParams.type || 'vod';
+                if (e.cmd && typeof e.cmd === 'string' && e.cmd.includes('"type":"series"')) linkType = 'series';
+                
+                return {
+                    ...e,
+                    id: e.id,
+                    episode_id: e.id,
+                    episode_number: e.series_number || episodeNum,
+                    name: e.name || `Episode ${episodeNum}`,
+                    season: season,
+                    episodeNum: episodeNum,
+                    url: `stalker-cmd:${linkType}|${cmdVal}`
+                };
             });
             
-            if (isFlatList) {
-                console.log(`[PERF] Smart check detected seasonsData is a flat list of episodes. Mapping directly...`);
-                const mapped = seasonsData.map((e, index) => {
-                    const { season, episodeNum } = parseSeasonAndEpisode(e, index);
+            const totalDuration = Date.now() - startTime;
+            console.log(`[PERF SUCCESS] Total Episodes Load Time (Direct Flat list): ${totalDuration}ms. Count: ${mapped.length}`);
+            console.log(`=================== [PERF ANALYSIS END] ===================\n`);
+            return mapped;
+        }
+        
+        console.log('================ RAW SEASONS ================');
+        rawData.forEach((s, i) => {
+            console.log(`[${i}]`, {
+                id: s.id,
+                name: s.name,
+                is_series: s.is_series,
+                is_season: s.is_season,
+                series_length: Array.isArray(s.series) ? s.series.length : 'N/A',
+                cmd: s.cmd
+            });
+        });
+        
+        const seasonsData = rawData.filter(s => {
+            if (!s) return false;
+            if (s.is_season === true || s.is_season === 1 || s.is_season === '1' || String(s.is_season).toLowerCase() === 'true') return true;
+            if (s.name && /^season\s+\d+/i.test(s.name)) return true;
+            if (s.id && String(s.id).includes(':') && Array.isArray(s.series)) return true;
+            return false;
+        });
+        
+        // Step 2: Fetch episodes for each season
+        console.log(`[PERF] Step 2: Fetching episodes for all ${seasonsData.length} true seasons...`);
+        const epFetchStart = Date.now();
+        
+        const allEpisodes = [];
+        const chunkSize = 4;
+        for (let i = 0; i < seasonsData.length; i += chunkSize) {
+            const chunk = seasonsData.slice(i, i + chunkSize);
+            const chunkPromises = chunk.map(async (season, index) => {
+                const actualIndex = i + index;
+                const seasonId = season.id || season.season_id;
+                const sNum = season.season_number || season.series_number || (actualIndex + 1);
+                
+                let reqObj = {
+                    type: winningParams.type,
+                    movie_id: winningParams.movie_id,
+                    season_id: String(seasonId),
+                    episode_id: '0'
+                };
+                
+                let decodedCmd = {};
+                if (season.cmd) {
+                    try {
+                        console.log(`[SEASON CMD]`, season.cmd);
+                        let decodedCmdStr = season.cmd;
+                        if (!decodedCmdStr.startsWith('{')) {
+                            decodedCmdStr = Buffer.from(season.cmd, 'base64').toString('utf8');
+                        }
+                        if (decodedCmdStr.startsWith('{')) {
+                            decodedCmd = JSON.parse(decodedCmdStr);
+                            console.log(`[SEASON CMD DECODED]`, decodedCmd);
+                            // Merge decoded portal-specific state directly into the query
+                            reqObj = { ...reqObj, ...decodedCmd };
+                        }
+                    } catch (e) {
+                        console.log(`[SEASON CMD DECODE ERROR]`, e.message);
+                    }
+                }
+                
+                const hasInlineEpisodes = Array.isArray(season.series) && season.series.length > 0 && typeof season.series[0] !== 'object';
+                
+                let eps = [];
+                if (hasInlineEpisodes) {
+                    console.log(`[PERF] Season already contains episode numbers. Skipping redundant network request.`);
+                } else {
+                    console.log('[EP REQUEST]', reqObj);
+                    try {
+                        eps = await fetchAllStalkerPages(url, mac, 'get_ordered_list', reqObj);
+                    } catch (err) {
+                        console.warn(`[PERF] Probe failed for season ${sNum}:`, err.message);
+                    }
+                    console.log('[EP RESPONSE]', eps ? eps.slice(0, 3) : []);
+                    console.log('[EP CHECK]', eps[0]?.id, eps[0]?.name, Array.isArray(eps[0]?.series) ? `Array(${eps[0].series.length})` : eps[0]?.series);
+                    
+                    // Detection: If the portal ignored our episode query and just returned the seasons list again
+                    if (eps && eps.length > 0 && (eps[0].is_season || /^season\s+\d+/i.test(eps[0].name) || eps[0].id === seasonId)) {
+                        console.log(`[PERF] Portal returned seasons instead of episodes! Discarding bogus response.`);
+                        eps = [];
+                    }
+                }
+                
+                console.log('[EP RESPONSE]', eps ? eps.slice(0, 3) : []);
+                
+                if (!eps || eps.length === 0) {
+                    // Fallback: Check if season object has a 'series' array with episode numbers
+                    if (Array.isArray(season.series) && season.series.length > 0) {
+                        console.log(`[PERF] Generating episodes directly from season.series array...`);
+                        eps = season.series.map(ep => {
+                            return {
+                                id: `${seasonId}:${ep}`,
+                                episode_id: ep,
+                                series_number: ep,
+                                name: `Episode ${ep}`,
+                                cmd: season.cmd, // Package verbatim
+                                is_inline_episode: true
+                            };
+                        });
+                    } else {
+                        return [];
+                    }
+                }
+                
+                return eps.map((e, epIndex) => {
+                    const { season: parsedSeason, episodeNum } = parseSeasonAndEpisode(e, epIndex);
+                    const finalSeason = (parsedSeason === 1 && sNum !== 1) ? sNum : parsedSeason;
+                    
+                    if (e.is_inline_episode) {
+                        return {
+                            ...e,
+                            id: e.id,
+                            episode_id: e.id,
+                            episode_number: e.series_number || episodeNum,
+                            name: e.name || `Episode ${episodeNum}`,
+                            season: finalSeason,
+                            episodeNum: episodeNum,
+                            url: `stalker-series-ep:${e.cmd}|${episodeNum}`
+                        };
+                    }
+                    
                     let cmdVal = e.cmd || '';
                     if (!cmdVal && e.id) {
                         cmdVal = `/media/file_${e.id}.mpg`;
                     }
+                    
+                    let linkType = 'vod';
+                    if (reqObj.type === 'series') linkType = 'series';
+                    if (decodedCmd.type) linkType = decodedCmd.type;
+                    if (e.cmd && typeof e.cmd === 'string' && e.cmd.includes('"type":"series"')) linkType = 'series';
+                    
                     return {
+                        ...e,
                         id: e.id,
+                        episode_id: e.id,
+                        episode_number: e.series_number || episodeNum,
                         name: e.name || `Episode ${episodeNum}`,
-                        season: season,
+                        season: finalSeason,
                         episodeNum: episodeNum,
-                        url: `stalker-cmd:vod|${cmdVal}`
+                        url: `stalker-cmd:${linkType}|${cmdVal}`
                     };
                 });
-                
-                const totalDuration = Date.now() - startTime;
-                console.log(`[PERF SUCCESS] Total Episodes Load Time (Direct Flat list): ${totalDuration}ms. Count: ${mapped.length}`);
-                console.log(`=================== [PERF ANALYSIS END] ===================\n`);
-                return mapped;
-            }
+            });
             
-            // Step 2: Fetch episodes for each season in chunks to prevent server rate-limiting
-            console.log(`[PERF] Step 2: Fetching episodes for all ${seasonsData.length} true seasons (chunked)...`);
-            const epFetchStart = Date.now();
+            const results = await Promise.all(chunkPromises);
+            allEpisodes.push(...results.flat());
             
-            // Helper to evaluate and score the episode queries to reject ignored VOD listings
-            const evaluateEpisodesResponse = (eps, seasonNum) => {
-                if (!Array.isArray(eps) || eps.length === 0) return { score: -1, reason: 'Empty' };
-                
-                // Check if it's a list of seasons/folders
-                const containsSeasons = eps.some(it => 
-                    it && (it.is_season || (it.name && it.name.toLowerCase().includes('season')) || it.is_folder == 1 || it.is_folder == "1")
-                );
-                if (containsSeasons) return { score: 0, reason: 'Contains seasons/folders' };
-                
-                // Check if they look like episodes
-                let episodeNameMatchCount = 0;
-                let hasEpisodeNumField = 0;
-                let matchedSeasonCount = 0;
-                eps.forEach(it => {
-                    if (!it) return;
-                    const name = (it.name || '').toLowerCase();
-                    if (name.includes('episode') || name.includes('ep.') || /\bep\b/.test(name) || /s\d+\s*e\d+/.test(name) || /\bep\d+/.test(name)) {
-                        episodeNameMatchCount++;
-                    }
-                    if (it.series_number || it.episode || it.episode_number) {
-                        hasEpisodeNumField++;
-                    }
-                    const itemSeason = parseInt(it.season_number || it.season || it.season_num || 0);
-                    if (itemSeason === parseInt(seasonNum)) {
-                        matchedSeasonCount++;
-                    }
-                });
-                
-                // Calculate a score
-                let score = 1; // Base score for any non-empty non-season list
-                
-                // If the items have explicit episode names or numbers, increase score
-                if (episodeNameMatchCount > 0) score += 10;
-                if (hasEpisodeNumField > 0) score += 5;
-                if (matchedSeasonCount > 0) score += 20; // Highest signal: matches requested season!
-                
-                return { score, reason: 'Success' };
-            };
-            
-            const allEpisodes = [];
-            const chunkSize = 4;
-            for (let i = 0; i < seasonsData.length; i += chunkSize) {
-                const chunk = seasonsData.slice(i, i + chunkSize);
-                const chunkPromises = chunk.map(async (season, index) => {
-                    const actualIndex = i + index;
-                    const sId = season.id || season.season_id;
-                    const sNum = season.season_number || season.series_number || (actualIndex + 1);
-                    
-                    console.log('[SEASON]', season);
-                    
-                    const parentSeriesId = season.movie_id || season.video_id || season.series_id || cleanSeriesId;
-                    
-                    // Parse cmd if available
-                    let cmdParams = {};
-                    if (season.cmd) {
-                        let cmdStr = String(season.cmd).trim();
-                        if (cmdStr.startsWith('{')) {
-                            try { cmdParams = JSON.parse(cmdStr); } catch (e) {}
-                        }
-                        if (Object.keys(cmdParams).length === 0) {
-                            try {
-                                const decoded = Buffer.from(cmdStr, 'base64').toString('utf8').trim();
-                                if (decoded.startsWith('{')) {
-                                    cmdParams = JSON.parse(decoded);
-                                }
-                            } catch (e) {}
-                        }
-                        if (Object.keys(cmdParams).length === 0 && cmdStr.includes('=')) {
-                            try {
-                                const urlParams = new URLSearchParams(cmdStr);
-                                for (const [k, v] of urlParams.entries()) {
-                                    cmdParams[k] = v;
-                                }
-                            } catch (e) {}
-                        }
-                    }
-                    
-                    // Create combinations of parameters to probe
-                    const candidates = [];
-                    const idsToTry = [];
-                    if (cmdParams.movie_id) idsToTry.push(String(cmdParams.movie_id));
-                    if (cmdParams.series_id) idsToTry.push(String(cmdParams.series_id));
-                    idsToTry.push(String(parentSeriesId));
-                    
-                    const uniqueIds = [];
-                    for (const id of idsToTry) {
-                        if (!id) continue;
-                        if (!uniqueIds.includes(id)) uniqueIds.push(id);
-                        const stripped = id.includes(':') ? id.split(':')[0] : id;
-                        if (!uniqueIds.includes(stripped)) uniqueIds.push(stripped);
-                    }
-                    
-                    const typesToTry = ['vod', 'series'];
-                    if (cmdParams.type && !typesToTry.includes(cmdParams.type)) {
-                        typesToTry.unshift(cmdParams.type);
-                    }
-                    
-                    for (const typeVal of typesToTry) {
-                        for (const idVal of uniqueIds) {
-                            candidates.push({
-                                type: typeVal,
-                                movie_id: idVal,
-                                season_id: cmdParams.season_id || sId,
-                                episode_id: '0',
-                                season_num: cmdParams.season_num || cmdParams.season_number || sNum,
-                                season_number: cmdParams.season_num || cmdParams.season_number || sNum,
-                                series_id: idVal
-                            });
-                        }
-                    }
-                    
-                    let bestEps = [];
-                    let bestScore = -1;
-                    
-                    for (const queryParams of candidates) {
-                        try {
-                            console.log('[EP QUERY]', queryParams);
-                            let eps = await fetchAllStalkerPages(url, mac, 'get_ordered_list', queryParams);
-                            
-                            if (eps && eps.length > 0) {
-                                console.log('[EP RESPONSE]', JSON.stringify(eps.slice(0, 5), null, 2));
-                            } else {
-                                console.log('[EP RESPONSE] []');
-                            }
-                            
-                            // Double-traversal: if the returned items are folders, traverse into them!
-                            const containsFolders = eps && eps.some(it => it && (it.is_folder == 1 || it.is_folder == "1" || it.is_season));
-                            if (containsFolders) {
-                                console.log(`[PERF] Episode query returned folder structure. Traversing folders...`);
-                                const traversedEps = [];
-                                for (const item of eps) {
-                                    if (item && (item.is_folder == 1 || item.is_folder == "1" || item.is_season)) {
-                                        const folderId = item.id;
-                                        console.log(`[PERF] Fetching contents of episode folder ${item.name} (ID: ${folderId})`);
-                                        try {
-                                            const folderEps = await fetchAllStalkerPages(url, mac, 'get_ordered_list', {
-                                                ...queryParams,
-                                                movie_id: folderId.includes(':') ? folderId.split(':')[0] : folderId,
-                                                season_id: sId
-                                            });
-                                            if (Array.isArray(folderEps)) {
-                                                traversedEps.push(...folderEps);
-                                            }
-                                        } catch (folderErr) {
-                                            console.warn(`[PERF] Failed to fetch folder ${folderId} contents:`, folderErr.message);
-                                        }
-                                    } else if (item) {
-                                        traversedEps.push(item);
-                                    }
-                                }
-                                eps = traversedEps;
-                            }
-                            
-                            const evaluation = evaluateEpisodesResponse(eps, sNum);
-                            console.log(`[EP RESPONSE EVAL] Score: ${evaluation.score}, Reason: ${evaluation.reason}, Count: ${eps ? eps.length : 0}`);
-                            
-                            if (evaluation.score > bestScore) {
-                                bestScore = evaluation.score;
-                                bestEps = eps;
-                            }
-                            
-                            // Highly confident episodes list found: short-circuit candidate search
-                            if (evaluation.score >= 10) {
-                                console.log(`[PERF] Found highly confident episodes list (Score: ${evaluation.score}). Stopping search.`);
-                                break;
-                            }
-                        } catch (err) {
-                            console.warn(`[PERF] Probe failed for parameters ${JSON.stringify(queryParams)}:`, err.message);
-                        }
-                    }
-                    
-                    console.log(`[PERF] Selected best episode list for season ${sNum} with score ${bestScore} and count ${bestEps.length}`);
-                    
-                    return bestEps.map((e, epIndex) => {
-                        const { season: parsedSeason, episodeNum } = parseSeasonAndEpisode(e, epIndex);
-                        const finalSeason = (parsedSeason === 1 && sNum !== 1) ? sNum : parsedSeason;
-                        let cmdVal = e.cmd || '';
-                        if (!cmdVal && e.id) {
-                            cmdVal = `/media/file_${e.id}.mpg`;
-                        }
-                        return {
-                            id: e.id,
-                            name: e.name || `Episode ${episodeNum}`,
-                            season: finalSeason,
-                            episodeNum: episodeNum,
-                            url: `stalker-cmd:vod|${cmdVal}`
-                        };
-                    });
-                });
-                
-                const results = await Promise.all(chunkPromises);
-                allEpisodes.push(...results.flat());
-                
-                if (i + chunkSize < seasonsData.length) {
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                }
-            }
-            const epFetchDuration = Date.now() - epFetchStart;
-            const totalDuration = Date.now() - startTime;
-            
-            console.log(`[PERF] Season-based Episodes Fetch took ${epFetchDuration}ms. Total episodes collected: ${allEpisodes.length}`);
-            console.log(`[PERF SUCCESS] Total Episodes Load Time: ${totalDuration}ms`);
-            console.log(`=================== [PERF ANALYSIS END] ===================\n`);
-            
-            if (allEpisodes.length > 0) {
-                return allEpisodes;
+            if (i + chunkSize < seasonsData.length) {
+                await new Promise(resolve => setTimeout(resolve, 50));
             }
         }
         
-        // Step 3: Fallback if no seasons were found (flat portals)
-        console.log(`[PERF] Step 3: Fallback - Fetching all episodes directly...`);
-        const fallbackStart = Date.now();
+        const epFetchDuration = Date.now() - epFetchStart;
+        const totalDuration = Date.now() - startTime;
+        
+        console.log(`[PERF] Season-based Episodes Fetch took ${epFetchDuration}ms. Total episodes collected: ${allEpisodes.length}`);
+        console.log(`[PERF SUCCESS] Total Episodes Load Time: ${totalDuration}ms`);
+        console.log(`=================== [PERF ANALYSIS END] ===================\n`);
+        
+        if (allEpisodes.length > 0) {
+            return allEpisodes;
+        }
+        
+        // Step 3: Fallback if no episodes found inside seasons
+        console.log(`[PERF] Fallback - Fetching all episodes directly as VOD fallback...`);
         let episodes = [];
         try {
-            episodes = await fetchAllStalkerPages(url, mac, 'get_ordered_list', { type: 'series', movie_id: cleanSeriesId });
-        } catch (e) {
-            console.warn(`[PERF] Direct series fetch failed:`, e.message);
-        }
-        
-        if (!episodes || episodes.length === 0) {
-            try {
-                episodes = await fetchAllStalkerPages(url, mac, 'get_ordered_list', { type: 'vod', movie_id: cleanSeriesId });
-            } catch (e) {
-                console.warn(`[PERF] Direct VOD fetch failed:`, e.message);
-            }
-        }
-        
-        const fallbackDuration = Date.now() - fallbackStart;
-        console.log(`[PERF] Fallback Episodes Fetch took ${fallbackDuration}ms. Episodes found: ${episodes.length}`);
-        
-        if (episodes.length > 0) {
-            console.log(`[PERF DEBUG] First raw episode preview:`, JSON.stringify(episodes[0]).substring(0, 400));
-        }
+            episodes = await fetchAllStalkerPages(url, mac, 'get_ordered_list', { type: winningParams.type, movie_id: winningParams.movie_id });
+        } catch (e) {}
         
         const mapped = episodes.map((e, index) => {
             const { season, episodeNum } = parseSeasonAndEpisode(e, index);
@@ -2704,18 +2682,21 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
             if (!cmdVal && e.id) {
                 cmdVal = `/media/file_${e.id}.mpg`;
             }
+            
+            let linkType = winningParams.type || 'vod';
+            if (e.cmd && typeof e.cmd === 'string' && e.cmd.includes('"type":"series"')) linkType = 'series';
+            
             return {
+                ...e,
                 id: e.id,
+                episode_id: e.id,
+                episode_number: e.series_number || episodeNum,
                 name: e.name || `Episode ${episodeNum}`,
                 season: season,
                 episodeNum: episodeNum,
-                url: `stalker-cmd:vod|${cmdVal}`
+                url: `stalker-cmd:${linkType}|${cmdVal}`
             };
         });
-        
-        const totalDuration = Date.now() - startTime;
-        console.log(`[PERF SUCCESS] Total Episodes Load Time (Fallback): ${totalDuration}ms. Mapped items: ${mapped.length}`);
-        console.log(`=================== [PERF ANALYSIS END] ===================\n`);
         
         return mapped;
     } catch (e) {

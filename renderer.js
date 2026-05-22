@@ -3025,11 +3025,39 @@ async function embedStream(channel) {
     let finalStreamUrl = channel.url;
     const playlist = savedPlaylists.find(p => String(p.id) === String(channel.playlistId));
 
-    if (playlist && playlist.epg && playlist.epg.startsWith('stalker:') && !finalStreamUrl.startsWith('stalker-cmd:') && !finalStreamUrl.startsWith('stalker-series:')) {
+    if (playlist && playlist.epg && playlist.epg.startsWith('stalker:') && !finalStreamUrl.startsWith('stalker-cmd:') && !finalStreamUrl.startsWith('stalker-series:') && !finalStreamUrl.startsWith('stalker-series-ep:')) {
         finalStreamUrl = `stalker-cmd:${channel.type === 'live' ? 'itv' : 'vod'}|${finalStreamUrl}`;
     }
 
-    if (finalStreamUrl.startsWith('stalker-cmd:')) {
+    if (finalStreamUrl.startsWith('stalker-series-ep:')) {
+        const parts = finalStreamUrl.substring(18).split('|');
+        const cmd = parts[0];
+        const seriesNum = parts[1];
+        
+        if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
+            const mac = playlist.epg.substring(8);
+            const resolved = await window.iptvAPI.resolveStalkerLink({ url: playlist.source, mac, type: 'vod', cmd, series: seriesNum });
+            if (resolved) finalStreamUrl = resolved;
+            else {
+                showToast("Failed to authenticate stream link.");
+                const playerOverlay = document.getElementById('player-overlay');
+                if (playerOverlay) {
+                    playerOverlay.innerHTML = `
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
+                            <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
+                            <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Channel currently not available</span>
+                        </div>
+                    `;
+                }
+                streamActive = false;
+                currentPlayingChannelIndex = -1;
+                document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+                const fsBtn = document.getElementById('fullscreen-btn');
+                if (fsBtn) fsBtn.style.display = 'none';
+                return;
+            }
+        }
+    } else if (finalStreamUrl.startsWith('stalker-cmd:')) {
         const parts = finalStreamUrl.substring(12).split('|');
         const type = parts[0];
         const cmd = parts.slice(1).join('|');
@@ -3608,9 +3636,8 @@ playerContainer.addEventListener('mousemove', (e) => {
     if (now - lastMouseMove > 30) {
         lastMouseMove = now;
         const rect = playerContainer.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
-        const x = Math.round((e.clientX - rect.left) * dpr);
-        const y = Math.round((e.clientY - rect.top) * dpr);
+        const x = Math.round(e.clientX - rect.left);
+        const y = Math.round(e.clientY - rect.top);
         window.iptvAPI.sendMpvCommand(`script-message-to modernz electron-mouse-move ${x} ${y}`);
     }
 });
@@ -4425,6 +4452,30 @@ window.addEventListener('DOMContentLoaded', async () => {
                 const lastChannel = allChannels.find(c => c.url === lastUrl);
                 if (lastChannel) {
                     embedStream(lastChannel);
+                    startedPlayback = true;
+                }
+            }
+            if (!startedPlayback) {
+                // Determine the first channel according to the sidebar sorting/groups
+                const filterVal = localStorage.getItem('iptv_playlist_filter') || 'all';
+                const groupedChannels = {};
+                allChannels.forEach(channel => {
+                    if (filterVal === 'favs' && !channel.favourite) return;
+                    if (filterVal !== 'all' && filterVal !== 'favs' && String(channel.playlistId) !== String(filterVal)) return;
+                    
+                    const channelGroup = channel.group || 'Uncategorized';
+                    if (!groupedChannels[channelGroup]) {
+                        groupedChannels[channelGroup] = [];
+                    }
+                    groupedChannels[channelGroup].push(channel);
+                });
+                const sortedGroups = Object.keys(groupedChannels).sort(sortAlphaNum);
+                if (sortedGroups.length > 0 && groupedChannels[sortedGroups[0]].length > 0) {
+                    const firstChannel = groupedChannels[sortedGroups[0]][0];
+                    embedStream(firstChannel);
+                    startedPlayback = true;
+                } else if (allChannels.length > 0) {
+                    embedStream(allChannels[0]);
                     startedPlayback = true;
                 }
             }

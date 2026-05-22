@@ -14,6 +14,17 @@ local msg = require "mp.msg"
 local opt = require "mp.options"
 local utils = require "mp.utils"
 
+local function safe_escape_ass(str)
+    if not str or str == "" then return "" end
+    local escaped
+    if utils.escape_ass then
+        escaped = utils.escape_ass(tostring(str))
+    else
+        escaped = tostring(str):gsub("{", "\226\128\140{")
+    end
+    return escaped or tostring(str)
+end
+
 -- Parameters
 -- default user option values
 -- do not touch, change them in modernz.conf
@@ -716,7 +727,11 @@ local function get_virt_mouse_pos()
                     x = state.electron_mouseX
                     y = state.electron_mouseY
                 end
-        return x * sx, y * sy
+        local vx, vy = x * sx, y * sy
+        local w, h = mp.get_osd_size()
+        msg.debug(string.format("get_virt_mouse_pos: electron_mouseX=%s, electron_mouseY=%s, OSD size=%dx%d, scale=%f,%f, virt_mouse=%f,%f", 
+            tostring(state.electron_mouseX), tostring(state.electron_mouseY), w, h, sx, sy, vx, vy))
+        return vx, vy
     else
         return -1, -1
     end
@@ -2668,7 +2683,7 @@ local function osc_init()
     ne.content = function ()
         local title = mp.command_native({"expand-text", user_opts.window_title}) or ""
         title = title:gsub("\n", " ")
-        return title ~= "" and mp.command_native({"escape-ass", title}) or "mpv"
+        return title ~= "" and safe_escape_ass(title) or "mpv"
     end
 
     -- OSC title
@@ -2679,28 +2694,28 @@ local function osc_init()
             local epg = state.epg_data
             if epg.title == "" and epg.progTitle == "" then return "" end
             
-            local txt = "{\\b1\\c&HFFFFFF&}" .. mp.command_native({"escape-ass", epg.title or ""}) .. "{\\b0}"
+            local txt = "{\\b1\\c&HFFFFFF&}" .. safe_escape_ass(epg.title or "") .. "{\\b0}"
             
             if epg.progTitle and epg.progTitle ~= "" then
                 if txt ~= "" then txt = txt .. " - " end
-                txt = txt .. "{\\c&HFFFFFF&}" .. mp.command_native({"escape-ass", epg.progTitle}) .. "{\\c&HFFFFFF&}"
+                txt = txt .. "{\\c&HFFFFFF&}" .. safe_escape_ass(epg.progTitle) .. "{\\c&HFFFFFF&}"
             end
             
             if epg.progTime and epg.progTime ~= "" then
-                txt = txt .. " {\\fs" .. (user_opts.title_font_size * 0.7) .. "}" .. mp.command_native({"escape-ass", epg.progTime}) .. "{\\fs" .. user_opts.title_font_size .. "}"
+                txt = txt .. " {\\fs" .. (user_opts.title_font_size * 0.7) .. "}" .. safe_escape_ass(epg.progTime) .. "{\\fs" .. user_opts.title_font_size .. "}"
             end
             
             if epg.progDesc and epg.progDesc ~= "" then
                 local desc = epg.progDesc
                 if #desc > 120 then desc = desc:sub(1, 117) .. "..." end
-                txt = txt .. "\\N{\\fs" .. (user_opts.title_font_size * 0.8) .. "\\c&Haaaaaa&}" .. mp.command_native({"escape-ass", desc}) .. "{\\c&HFFFFFF&}"
+                txt = txt .. "\\N{\\fs" .. (user_opts.title_font_size * 0.8) .. "\\c&Haaaaaa&}" .. safe_escape_ass(desc) .. "{\\c&HFFFFFF&}"
             end
             if txt ~= "" then return txt end
         end
 
         local title = state.forced_title or mp.command_native({"expand-text", user_opts.title})
         title = title:gsub("\n", " ")
-        return title ~= "" and mp.command_native({"escape-ass", title}) or "mpv"
+        return title ~= "" and safe_escape_ass(title) or "mpv"
     end
     ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.title_mbtn_left_command)
     ne.eventresponder["mbtn_right_up"] = command_callback(user_opts.title_mbtn_right_command)
@@ -2717,10 +2732,10 @@ local function osc_init()
 
         local chapters = mp.get_property_native("chapter-list", {})
         local chapter_data = chapters[chapter_index + 1]
-        local chapter_title = chapter_data and chapter_data.title ~= "" and chapter_data.title
+        local chapter_title = (chapter_data and chapter_data.title and chapter_data.title ~= "") and chapter_data.title
             or string.format("%s: %d/%d", locale.chapter, chapter_index + 1, #chapters)
 
-        chapter_title = mp.command_native({"escape-ass", chapter_title})
+        chapter_title = safe_escape_ass(chapter_title)
         if thumbfast.disabled and not user_opts.show_title and state.forced_title then
             chapter_title = state.forced_title
         end
@@ -3420,9 +3435,12 @@ end
 
 local function show_osc()
     -- show when disabled can happen (e.g. mouse_move) due to async/delayed unbinding
-    if not state.enabled then return end
+    if not state.enabled then 
+        msg.warn("show_osc ignored because state.enabled is false!")
+        return 
+    end
 
-    msg.trace("show_osc")
+    msg.warn("show_osc called! state.osc_visible=" .. tostring(state.osc_visible) .. ", user_opts.visibility=" .. tostring(user_opts.visibility))
     --remember last time of invocation (mouse move)
     state.showtime = mp.get_time()
 
@@ -3557,6 +3575,8 @@ local function process_event(source, what)
         state.mouse_in_window = true
 
         local mouseX, mouseY = get_virt_mouse_pos()
+        msg.debug(string.format("mouse_move event: mouseX=%f, mouseY=%f, bottomhover=%s, playresy=%f", 
+            mouseX, mouseY, tostring(user_opts.bottomhover), tostring(osc_param.playresy)))
         if user_opts.minmousemove == 0 or
             ((state.last_mouseX ~= nil and state.last_mouseY ~= nil) and
                 ((math.abs(mouseX - state.last_mouseX) >= user_opts.minmousemove)
@@ -3720,9 +3740,14 @@ local function render()
         for _,cords in ipairs(osc_param.areas["window-controls"]) do
             if state.osc_visible then -- activate only when OSC is actually visible
                 set_virt_mouse_area(cords.x1, cords.y1, cords.x2, cords.y2, "window-controls")
-                mp.enable_key_bindings("window-controls")
-            else
-                mp.disable_key_bindings("window-controls")
+            end
+            if state.osc_visible ~= state.windowcontrols_buttons then
+                if state.osc_visible then
+                    mp.enable_key_bindings("window-controls")
+                else
+                    mp.disable_key_bindings("window-controls")
+                end
+                state.windowcontrols_buttons = state.osc_visible
             end
 
             if mouse_hit_coords(cords.x1, cords.y1, cords.x2, cords.y2) then
