@@ -1,9 +1,28 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, clipboard } = require('electron');
 const path = require('path');
-const { spawn, execFile } = require('child_process');
+const { spawn, execFile, exec } = require('child_process');
 const net = require('net');
 const fs = require('fs');
 const crypto = require('crypto');
+
+function applyRoundedCorners(hwnd) {
+    if (process.platform !== 'win32') return;
+    const preference = 2; // DWMWCP_ROUND = 2
+    const psCommand = `
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Dwm {
+    [DllImport(\\"dwmapi.dll\\")]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+}
+"@
+[Dwm]::DwmSetWindowAttribute([IntPtr]${hwnd}, 33, [ref]${preference}, 4)
+`;
+    exec(`powershell -NoProfile -Command "${psCommand.replace(/\n/g, ' ').replace(/"/g, '\\"')}"`, (err) => {
+        if (err) console.error('[DWM] Failed to set rounded corners:', err);
+    });
+}
 
 // Force all native warnings, dialogs, and popups to use the main window title
 const originalUserData = app.getPath('userData');
@@ -984,6 +1003,20 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                         #epg-time-indicator { position: absolute; top: 0; width: 2px; background: #cf6679; z-index: 5; pointer-events: none; }
                         .epg-play-channel { cursor: pointer; }
                         .epg-play-channel:active { background-color: #2a2a2a !important; }
+                        .epg-program-cell {
+                            border-right: 1px solid rgba(255, 255, 255, 0.15) !important;
+                            border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+                            border-top: 1px solid rgba(255, 255, 255, 0.15) !important;
+                            box-sizing: border-box;
+                        }
+                        .epg-program-cell[style*="border-top: 2px solid rgb(187, 134, 252)"],
+                        .epg-program-cell[style*="border-top-color: rgb(187, 134, 252)"],
+                        .epg-program-cell[style*="border-top: 2px solid #bb86fc"],
+                        .epg-program-cell[style*="border-top-color: #bb86fc"] {
+                            background: rgba(187, 134, 252, 0.12) !important;
+                            border-top: 1px solid rgba(255, 255, 255, 0.15) !important;
+                            box-shadow: inset 0 0 14px rgba(187, 134, 252, 0.35), 0 0 10px rgba(187, 134, 252, 0.2) !important;
+                        }
                         .epg-program-cell:active { background: #333 !important; }
                         .loader { text-align: center; padding: 50px; color: #888; }
                         
@@ -1295,6 +1328,9 @@ function initMpv() {
     
     if (process.platform === 'win32' || process.platform === 'linux') {
         wid = handle.readUInt32LE(0);
+        if (process.platform === 'win32') {
+            applyRoundedCorners(wid);
+        }
     } else {
         console.error("macOS Native --wid embedding requires custom NSView Swift implementation.");
         return;
@@ -1317,8 +1353,7 @@ function initMpv() {
         `--cache-pause=yes`,
         `--demuxer-max-bytes=100M`,
         `--demuxer-max-back-bytes=50M`,
-        `--audio-buffer=1.0`,
-        `--ao=wasapi`,
+        `--framedrop=vo`,
         `--video-sync=audio`,
         `--config-dir=${binDir}`, 
         `--load-scripts=no`,    
@@ -1329,6 +1364,7 @@ function initMpv() {
         `--osc=no`,             
         `--demuxer-lavf-analyzeduration=20`,
         `--demuxer-lavf-probescore=100`,
+        `--demuxer-lavf-o-add=fflags=+genpts`,
         `--keep-open=yes`,
         `--prefetch-playlist=yes`,
         `--stream-lavf-o=reconnect=1`,
@@ -1697,9 +1733,16 @@ ipcMain.handle('get-epg-dict', async (event, epgSources, filterIds) => {
 });
 
 // Standalone EPG Extractor
+let epgChannelsCache = {};
+
 ipcMain.handle('get-epg-channels', async (event, epgSources) => {
     console.log('[IPC HANDLE] get-epg-channels', { epgSources });
     if (!epgSources) return [];
+    
+    if (epgChannelsCache[epgSources]) {
+        console.log('[CACHE HIT] Returning cached EPG channels');
+        return epgChannelsCache[epgSources];
+    }
     
     const sources = epgSources.split(',').map(s => s.trim()).filter(s => s);
     const stalkerSources = sources.filter(s => s.startsWith('stalker:'));
@@ -1749,6 +1792,7 @@ ipcMain.handle('get-epg-channels', async (event, epgSources) => {
         }
     }
     
+    epgChannelsCache[epgSources] = allEpgChannels;
     return allEpgChannels;
 });
 
@@ -3382,6 +3426,9 @@ ipcMain.handle('clear-cache', async (event, url) => {
     console.log('[IPC HANDLE] clear-cache', { url });
     if (!url) return false;
     
+    // Invalidate in-memory cache
+    epgChannelsCache = {};
+    
     if (db) {
         try { db.prepare('DELETE FROM epg WHERE source_url = ?').run(url); } 
         catch (e) { console.error(e); }
@@ -3432,6 +3479,36 @@ ipcMain.handle('save-mapping', (event, title, epgId) => {
         return true;
     } catch (e) {
         console.error('[DB ERR] Failed to save mapping:', e);
+        throw e;
+    }
+});
+
+ipcMain.handle('save-mappings-bulk', (event, mappingsArray) => {
+    console.log('[IPC HANDLE] save-mappings-bulk START', mappingsArray.length);
+    if (!db) return false;
+    try {
+        const insertStmt = db.prepare(`
+            INSERT INTO mappings (channel_title, epg_id)
+            VALUES (@title, @epg)
+            ON CONFLICT(channel_title) DO UPDATE SET epg_id = @epg
+        `);
+        const deleteStmt = db.prepare('DELETE FROM mappings WHERE channel_title = ?');
+        
+        const transaction = db.transaction((mappings) => {
+            for (const { title, epgId } of mappings) {
+                if (epgId) {
+                    insertStmt.run({ title, epg: epgId });
+                } else {
+                    deleteStmt.run(title);
+                }
+            }
+        });
+        
+        transaction(mappingsArray);
+        console.log('[IPC HANDLE] save-mappings-bulk END');
+        return true;
+    } catch (e) {
+        console.error('[DB ERR] Failed to save mappings bulk:', e);
         throw e;
     }
 });

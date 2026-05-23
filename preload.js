@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     getEpg: (channelIds, startLimit, endLimit) => ipcRenderer.invoke('get-epg', channelIds, startLimit, endLimit),
     getMappings: () => ipcRenderer.invoke('get-mappings'),
     saveMapping: (title, epgId) => ipcRenderer.invoke('save-mapping', title, epgId),
+    saveMappingsBulk: (mappings) => ipcRenderer.invoke('save-mappings-bulk', mappings),
     getExternalEpgs: () => ipcRenderer.invoke('get-external-epgs'),
     addExternalEpg: (url) => ipcRenderer.invoke('add-external-epg', url),
     removeExternalEpg: (url) => ipcRenderer.invoke('remove-external-epg', url),

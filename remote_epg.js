@@ -111,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const scrollLeft = scrollContainer.scrollLeft;
         const viewportHeight = scrollContainer.clientHeight;
         const viewportWidth = scrollContainer.clientWidth;
-        const rowHeight = 60;
+        const rowHeight = 45;
         
         // Pinned elements are handled naturally via CSS sticky and absolute height: 100%
 
@@ -187,25 +187,25 @@ document.addEventListener('DOMContentLoaded', () => {
                         const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' data-prog='${JSON.stringify(prog).replace(/'/g, "&apos;")}' style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
 
                         programsHtml += `
-                        <div class="epg-play-channel epg-program-cell" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' data-program='${JSON.stringify(progData).replace(/'/g, "&apos;")}' style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 60px; background: ${isCurrent ? '#2c2c2c' : '#1e1e1e'}; border-right: 1px solid #111; border-top: 2px solid ${isCurrent ? '#bb86fc' : '#444'}; border-bottom: 1px solid #2a2a2a; box-sizing: border-box; padding: 6px 10px; overflow: hidden;">
+                        <div class="epg-play-channel epg-program-cell" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' data-program='${JSON.stringify(progData).replace(/'/g, "&apos;")}' style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${isCurrent ? '#2c2c2c' : '#1e1e1e'}; border-right: 1px solid rgba(255, 255, 255, 0.15); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; padding: 2px 4px; overflow: hidden;">
                             <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${pTitle}</div>
                             <div style="font-size: 0.75em; color: #888; margin-top: 4px;">${timeStr}</div>
                         </div>`;
                     }
                 } else {
-                    programsHtml = `<div class="epg-play-channel" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 60px; border-bottom: 1px solid #2a2a2a; box-sizing: border-box; color: #555; font-size: 0.9em; width: 100%;">No EPG Data</div>`;
+                    programsHtml = `<div class="epg-play-channel" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 45px; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; color: #555; font-size: 0.9em; width: 100%;">No EPG Data</div>`;
                 }
             } else {
-                programsHtml = `<div style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 60px; border-bottom: 1px solid #2a2a2a; box-sizing: border-box; color: #888; font-size: 0.9em; width: 100%;">Loading...</div>`;
+                programsHtml = `<div style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 45px; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; color: #888; font-size: 0.9em; width: 100%;">Loading...</div>`;
             }
             
             channelsHtml += `
-            <div class="epg-play-channel" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' style="position: absolute; top: ${topPos}px; left: 0; width: 120px; height: 60px; background: #1e1e1e; border-bottom: 1px solid #2a2a2a; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 5px; box-sizing: border-box; text-align: center;">
-                <img src="${imgSrc}" style="height: 24px; max-width: 100%; object-fit: contain; margin-bottom: 4px; border-radius: 2px; background: #fff; padding: 2px;">
-                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.7em; font-weight: bold; color: #e0e0e0; width: 100%;" title="${safeTitle}">${safeTitle}</span>
+            <div class="epg-play-channel" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' style="position: absolute; top: ${topPos}px; left: 0; width: 120px; height: 45px; background: #1e1e1e; border-bottom: 1px solid rgba(255, 255, 255, 0.15); border-top: 1px solid rgba(255, 255, 255, 0.15); border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 3px; box-sizing: border-box; text-align: center;">
+                <img src="${imgSrc}" style="height: 18px; max-width: 100%; object-fit: contain; margin-bottom: 2px; border-radius: 2px; background: #fff; padding: 2px;">
+                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.65em; font-weight: bold; color: #e0e0e0; width: 100%;" title="${safeTitle}">${safeTitle}</span>
             </div>`;
             
-            gridHtml += `<div style="position: absolute; top: ${topPos}px; left: 0; width: ${totalWidth}px; height: 60px;">${programsHtml}</div>`;
+            gridHtml += `<div style="position: absolute; top: ${topPos}px; left: 0; width: ${totalWidth}px; height: 45px;">${programsHtml}</div>`;
         }
         
         channelsInner.innerHTML = channelsHtml;
@@ -237,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         });
 
-        const pxPerMinute = 4;
+        const pxPerMinute = 10;
         const hourWidth = 60 * pxPerMinute;
         const now = new Date();
         const gridStart = new Date(now.getTime());
@@ -270,12 +270,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div id="epg-scroll-container" style="flex-grow: 1; overflow: auto; position: relative;">
                     <!-- Sticky Header Row -->
                     <div id="epg-header-row" style="position: sticky; top: 0; z-index: 20; display: flex; width: ${totalWidth + 120}px; background: #bb86fc; flex-shrink: 0; height: 30px; overflow: visible !important; border-bottom: 2px solid #333; box-sizing: border-box;">
-                        <div id="epg-channels-header" style="position: sticky; left: 0; z-index: 30; width: 120px; min-width: 120px; background: #bb86fc; border-right: 2px solid rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000; box-sizing: border-box; height: 100%; font-size: 0.9em;">Channels</div>
+                        <div id="epg-channels-header" style="position: sticky; left: 0; z-index: 30; width: 120px; min-width: 120px; background: #bb86fc; border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000; box-sizing: border-box; height: 100%; font-size: 0.9em;">Channels</div>
                         <div id="epg-header-inner" style="position: relative; flex-grow: 1; height: 100%;">${headerHtml}</div>
                     </div>
                     <!-- Main Content Flex Row -->
-                    <div id="epg-main-content" style="display: flex; position: relative; width: ${totalWidth + 120}px; height: ${epgChannelsToRender.length * 60}px; overflow: visible !important;">
-                        <div id="epg-channels-col" style="position: sticky; left: 0; z-index: 10; width: 120px; min-width: 120px; background: #1a1a1a; border-right: 2px solid #333; height: 100%;">
+                    <div id="epg-main-content" style="display: flex; position: relative; width: ${totalWidth + 120}px; height: ${epgChannelsToRender.length * 45}px; overflow: visible !important;">
+                        <div id="epg-channels-col" style="position: sticky; left: 0; z-index: 10; width: 120px; min-width: 120px; background: #1a1a1a; border-right: 1px solid rgba(255, 255, 255, 0.15); height: 100%;">
                             <div id="epg-channels-inner" style="position: relative; width: 100%; height: 100%;"></div>
                         </div>
                         <div id="epg-grid-inner" style="position: relative; flex-grow: 1; height: 100%;">

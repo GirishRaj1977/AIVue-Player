@@ -214,7 +214,7 @@ aeroStyles.textContent = `
 
     /* Channel List selection styles */
     .channel-item {
-        padding: 8px 12px !important;
+        padding: 2px 6px !important;
         margin: 4px 10px !important;
         width: calc(100% - 20px) !important;
         border-radius: 8px !important;
@@ -236,7 +236,7 @@ aeroStyles.textContent = `
     
     .channel-item span {
         font-weight: 500 !important;
-        font-size: 0.82rem !important;
+        font-size: 0.72rem !important;
         letter-spacing: -0.01em !important;
         color: #a1a1aa !important;
         transition: color 0.2s ease !important;
@@ -479,12 +479,13 @@ aeroStyles.textContent = `
     
     #player-wrapper {
         flex: 5 !important;
-        order: 2 !important;
+        order: 1 !important;
+        margin-left: 24px !important;
         background-color: #050507 !important;
         padding: 1px !important;
         box-sizing: border-box !important;
         border: 1px solid rgba(255, 255, 255, 0.05) !important;
-        border-radius: 16px !important;
+        border-radius: 24px !important;
         position: relative !important;
         display: flex !important;
         flex-direction: column !important;
@@ -506,7 +507,7 @@ aeroStyles.textContent = `
     /* Channel details premium info widget styling */
     #channel-details {
         flex: 2 !important;
-        order: 1 !important;
+        order: 2 !important;
         overflow-y: auto !important;
         min-width: 0 !important;
         min-height: 0 !important;
@@ -514,7 +515,7 @@ aeroStyles.textContent = `
         backdrop-filter: blur(20px) !important;
         -webkit-backdrop-filter: blur(20px) !important;
         border: 1px solid rgba(255, 255, 255, 0.05) !important;
-        border-radius: 16px !important;
+        border-radius: 24px !important;
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
         display: flex !important;
         flex-direction: column !important;
@@ -531,10 +532,10 @@ aeroStyles.textContent = `
         padding: 8px !important;
         box-shadow: inset 0 2px 6px rgba(0,0,0,0.4) !important;
         margin-bottom: 12px !important;
-        width: 70px !important;
-        height: 70px !important;
-        max-width: 70px !important;
-        max-height: 70px !important;
+        width: 100px !important;
+        height: 100px !important;
+        max-width: 100px !important;
+        max-height: 100px !important;
         object-fit: contain !important;
         align-self: center !important;
         transition: all 0.3s ease !important;
@@ -634,7 +635,7 @@ aeroStyles.textContent = `
     .live-epg-item {
         background: rgba(255, 255, 255, 0.015) !important;
         border: 1px solid rgba(255, 255, 255, 0.04) !important;
-        padding: 14px 18px !important;
+        padding: 4px 8px !important;
         border-radius: 12px !important;
         border-left: 3px solid rgba(255, 255, 255, 0.08) !important;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
@@ -937,11 +938,11 @@ aeroStyles.textContent = `
     
     /* Program timeline cells styling */
     .epg-program-cell {
-        border-right: 1px solid rgba(255, 255, 255, 0.03) !important;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
-        border-top: 1.5px solid rgba(255, 255, 255, 0.06) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.15) !important;
         background: rgba(255, 255, 255, 0.015) !important;
-        padding: 8px 12px !important;
+        padding: 2px 4px !important;
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
         box-sizing: border-box !important;
     }
@@ -956,8 +957,9 @@ aeroStyles.textContent = `
     .epg-program-cell[style*="border-top-color: rgb(187, 134, 252)"],
     .epg-program-cell[style*="border-top: 2px solid #bb86fc"],
     .epg-program-cell[style*="border-top-color: #bb86fc"] {
-        background: rgba(187, 134, 252, 0.05) !important;
-        border-top: 1.5px solid var(--primary-accent) !important;
+        background: rgba(187, 134, 252, 0.12) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.15) !important;
+        box-shadow: inset 0 0 14px rgba(187, 134, 252, 0.35), 0 0 10px rgba(187, 134, 252, 0.2) !important;
     }
     
     .epg-program-cell div:first-child {
@@ -1187,8 +1189,24 @@ aeroStyles.textContent = `
         font-weight: 600 !important;
     }
 
+    .settings-menu-btn[data-target="card-danger"] {
+        color: #ff6b6b !important;
+        border-color: rgba(207, 102, 121, 0.15) !important;
+    }
+    .settings-menu-btn[data-target="card-danger"]:hover {
+        color: #ffffff !important;
+        background: rgba(207, 102, 121, 0.15) !important;
+        border-color: rgba(207, 102, 121, 0.3) !important;
+    }
+    .settings-menu-btn[data-target="card-danger"].active {
+        color: #ffffff !important;
+        background: rgba(207, 102, 121, 0.3) !important;
+        border-color: rgba(207, 102, 121, 0.5) !important;
+        box-shadow: 0 4px 16px rgba(207, 102, 121, 0.2) !important;
+    }
+
     /* Right column panels overrides */
-    #card-epg, #card-reminders, #card-mapping, #card-remote, #card-tmdb, #card-danger {
+    #card-epg, #card-reminders, #card-mapping, #card-remote, #card-tmdb {
         background: rgba(18, 18, 24, 0.45) !important;
         backdrop-filter: blur(24px) !important;
         -webkit-backdrop-filter: blur(24px) !important;
@@ -1199,8 +1217,43 @@ aeroStyles.textContent = `
         box-sizing: border-box !important;
         transition: all 0.25s ease !important;
     }
-    #card-epg:hover, #card-reminders:hover, #card-mapping:hover, #card-remote:hover, #card-tmdb:hover, #card-danger:hover {
+    #card-epg:hover, #card-reminders:hover, #card-mapping:hover, #card-remote:hover, #card-tmdb:hover {
         border-color: rgba(187, 134, 252, 0.1) !important;
+    }
+
+    #card-danger {
+        background: linear-gradient(135deg, rgba(207, 102, 121, 0.08), rgba(207, 102, 121, 0.02)) !important;
+        backdrop-filter: blur(24px) !important;
+        -webkit-backdrop-filter: blur(24px) !important;
+        border: 1px solid rgba(207, 102, 121, 0.35) !important;
+        border-radius: 16px !important;
+        box-shadow: 0 8px 32px rgba(207, 102, 121, 0.1), inset 0 0 20px rgba(207, 102, 121, 0.05) !important;
+        padding: 24px !important;
+        box-sizing: border-box !important;
+        transition: all 0.25s ease !important;
+    }
+    #card-danger:hover {
+        border-color: rgba(207, 102, 121, 0.5) !important;
+        box-shadow: 0 12px 40px rgba(207, 102, 121, 0.15), inset 0 0 20px rgba(207, 102, 121, 0.08) !important;
+    }
+
+    #settings-factory-reset-btn {
+        background: #ff5252 !important;
+        color: white !important;
+        border: 1px solid rgba(255, 82, 82, 0.2) !important;
+        box-shadow: 0 4px 15px rgba(255, 82, 82, 0.3) !important;
+        font-weight: bold !important;
+        transition: all 0.2s ease !important;
+    }
+    #settings-factory-reset-btn:hover {
+        background: #ff6b6b !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 20px rgba(255, 82, 82, 0.4) !important;
+    }
+    #settings-factory-reset-btn:active {
+        background: #e63946 !important;
+        transform: translateY(0) !important;
+        box-shadow: 0 2px 4px rgba(255, 82, 82, 0.2) !important;
     }
     
     #settings-view h3 {
@@ -1566,6 +1619,8 @@ async function autoMapChannels(showSummaryAlert = false, skipSave = false) {
     }
 
     const uniqueTitles = new Set();
+    const mappingsToSave = [];
+
     for (const ch of allChannels) {
         const title = ch.title || 'Unknown Channel';
         if (uniqueTitles.has(title)) continue;
@@ -1584,9 +1639,14 @@ async function autoMapChannels(showSummaryAlert = false, skipSave = false) {
 
         if (matchedEpgId) {
             channelMappings[title] = matchedEpgId;
-            await window.iptvAPI.saveMapping(title, matchedEpgId);
+            mappingsToSave.push({ title, epgId: matchedEpgId });
             mappedCount++;
         }
+    }
+
+    if (mappingsToSave.length > 0) {
+        console.log(`[MAPPING] Saving ${mappingsToSave.length} mappings in bulk...`);
+        await window.iptvAPI.saveMappingsBulk(mappingsToSave);
     }
 
     if (mappedCount > 0) {
@@ -1777,17 +1837,26 @@ function renderMappingColumns() {
         });
     }
 
-    Object.entries(channelMappings).sort((a, b) => sortAlphaNum(a[0], b[0])).forEach(([chTitle, epgId]) => {
-        if (!epgId) return;
-        if (!titleToPlaylistId[chTitle]) return; // Hide mappings for channels that no longer exist
-        
-        if (mappingSelectedPlaylist !== 'all' && !validTitlesForPlaylist.has(chTitle)) return;
+    const filteredMapped = Object.entries(channelMappings).filter(([chTitle, epgId]) => {
+        if (!epgId) return false;
+        if (!titleToPlaylistId[chTitle]) return false; // Hide mappings for channels that no longer exist
+        if (mappingSelectedPlaylist !== 'all' && !validTitlesForPlaylist.has(chTitle)) return false;
 
         const safeTitle = String(chTitle).replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const epgName = epgNameLookup[epgId] || epgId;
         const safeEpgName = String(epgName).replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-        if (mappedSearch && !safeTitle.toLowerCase().includes(mappedSearch) && !safeEpgName.toLowerCase().includes(mappedSearch)) return;
+        if (mappedSearch && !safeTitle.toLowerCase().includes(mappedSearch) && !safeEpgName.toLowerCase().includes(mappedSearch)) return false;
+        return true;
+    }).sort((a, b) => sortAlphaNum(a[0], b[0]));
+
+    const maxMappedDisplay = 300;
+    const displayMapped = filteredMapped.slice(0, maxMappedDisplay);
+
+    displayMapped.forEach(([chTitle, epgId]) => {
+        const safeTitle = String(chTitle).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const epgName = epgNameLookup[epgId] || epgId;
+        const safeEpgName = String(epgName).replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
         let sourceDomainStr = '';
         const rawSource = epgSourceLookup[epgId];
@@ -1815,7 +1884,12 @@ function renderMappingColumns() {
             </div>
         `);
     });
-    mappedListEl.innerHTML = mappedHtmlArr.length ? mappedHtmlArr.join('') : '<div style="color: #888; text-align: center; margin-top: 20px;">No mappings yet.</div>';
+    
+    let mappedHtml = mappedHtmlArr.length ? mappedHtmlArr.join('') : '<div style="color: #888; text-align: center; margin-top: 20px;">No mappings yet.</div>';
+    if (filteredMapped.length > maxMappedDisplay) {
+        mappedHtml += `<div style="color: #888; text-align: center; margin-top: 10px; font-size: 0.9em;">Showing ${maxMappedDisplay} of ${filteredMapped.length} mapped channels. Use search to find more.</div>`;
+    }
+    mappedListEl.innerHTML = mappedHtml;
 
     // Restore scroll positions synchronously
     channelListEl.scrollTop = chScrollTop;
@@ -1937,24 +2011,7 @@ async function renderSettings() {
     console.log('[UI] Rendering settings view.');
     if (!settingsView) return;
 
-    // Load TMDB config and test connection dynamically on settings load
-    const tmdbConfig = await window.iptvAPI.getTmdbConfig();
-    let tmdbStatus = 'Not Configured';
-    let tmdbStatusColor = '#888';
-    if (tmdbConfig.apiKey || tmdbConfig.apiToken) {
-        try {
-            const testResult = await window.iptvAPI.saveTmdbConfig(tmdbConfig);
-            tmdbStatus = testResult.status;
-            if (tmdbStatus === 'Connected') tmdbStatusColor = '#43CB44';
-            else if (tmdbStatus === 'Invalid Credentials') tmdbStatusColor = '#cf6679';
-            else tmdbStatusColor = '#cf6679';
-        } catch (e) {
-            console.error('Error auto-testing TMDB connection on load:', e);
-            tmdbStatus = 'Error';
-            tmdbStatusColor = '#cf6679';
-        }
-    }
-
+    let remoteSettings = {};
     savedEpgs.sort((a, b) => sortAlphaNum(getEpgName(a), getEpgName(b)));
 
     let epgListHtml = savedEpgs.map((epg, idx) => `
@@ -1985,16 +2042,7 @@ async function renderSettings() {
         </div>`;
     }).join('') : '<div style="color:#666; font-style: italic;">No upcoming reminders.</div>';
 
-    const remoteSettings = await window.iptvAPI.getRemoteSettings();
-    const ipAddress = await window.iptvAPI.getIpAddress();
-    
-    const port = remoteSettings.port || 8088;
-    const remoteUrl = `http://${ipAddress}:${port}/remote`;
-    let remoteUrlWithAuth = remoteUrl;
-    if (remoteSettings.username && remoteSettings.password) {
-        remoteUrlWithAuth = `http://${encodeURIComponent(remoteSettings.username)}:${encodeURIComponent(remoteSettings.password)}@${ipAddress}:${port}/remote`;
-    }
-
+    // Inject immediate skeleton HTML synchronously to make tab transition instantaneous
     settingsView.innerHTML = `
         <div style="display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; min-width: 0; align-items: flex-start; padding: 10px 0;">
             <!-- Left Sticky Mini-Menu -->
@@ -2072,7 +2120,9 @@ async function renderSettings() {
                                 <h3 style="color: #e0e0e0; margin: 0; font-size: 1em; padding: 6px 0; margin-bottom: 6px;">Mapped Channels</h3>
                                 <input type="text" id="mapping-mapped-search" placeholder="Search Mapped..." style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; box-sizing: border-box;">
                             </div>
-                            <div id="mapping-mapped-list" style="flex-grow: 1; overflow-y: auto; padding: 10px;"></div>
+                            <div id="mapping-mapped-list" style="flex-grow: 1; overflow-y: auto; padding: 10px;">
+                                <div style="padding: 20px; text-align: center; color: #888;">Fetching EPG Data...</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2085,40 +2135,13 @@ async function renderSettings() {
                             <p style="color: #888; font-size: 0.9em; margin: 0;">Control AIVue Player from your smartphone or tablet on the same Wi-Fi network.</p>
                         </div>
                         <label style="display: flex; align-items: center; cursor: pointer; background: #121212; padding: 8px 12px; border-radius: 6px; border: 1px solid #444;">
-                            <input type="checkbox" id="settings-remote-toggle" ${remoteSettings.enabled ? 'checked' : ''} style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
-                            <span id="settings-remote-status" style="color: ${remoteSettings.enabled ? '#43CB44' : '#cf6679'}; font-weight: bold;">${remoteSettings.enabled ? 'Enabled' : 'Disabled'}</span>
+                            <input type="checkbox" id="settings-remote-toggle" disabled style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                            <span id="settings-remote-status" style="color: #888; font-weight: bold;">Loading...</span>
                         </label>
                     </div>
                     
-                    <div id="settings-remote-config" style="display: ${remoteSettings.enabled ? 'block' : 'none'}; border-top: 1px solid #333; padding-top: 20px; margin-top: 10px;">
-                        <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
-                            <div style="flex: 1; min-width: 150px;">
-                                <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Port</label>
-                                <input type="number" id="settings-remote-port" value="${port}" placeholder="8088" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
-                            </div>
-                            <div style="flex: 2; min-width: 200px;">
-                                <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Username (min 5 chars)</label>
-                                <input type="text" id="settings-remote-user" value="${remoteSettings.username || ''}" placeholder="Username" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
-                            </div>
-                            <div style="flex: 2; min-width: 200px;">
-                                <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Password (min 5 chars)</label>
-                                <input type="password" id="settings-remote-pass" value="${remoteSettings.password || ''}" placeholder="Password" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
-                            </div>
-                            <div style="display: flex; align-items: flex-end;">
-                                <button id="settings-save-remote-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 24px; height: 39px; white-space: nowrap;">Save Credentials</button>
-                            </div>
-                        </div>
-                        
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 10px; background: #252525; border: 1px solid #444; border-radius: 4px;">
-                            <span style="color: #bbb; font-size: 0.9em;">Paired Device: <strong style="color: ${remoteSettings.activeDeviceId ? '#43CB44' : '#888'};">${remoteSettings.activeDeviceId ? 'Connected' : 'None'}</strong></span>
-                            <button id="settings-revoke-device-btn" class="playlist-btn" style="background: ${remoteSettings.activeDeviceId ? '#cf6679' : '#333'}; color: ${remoteSettings.activeDeviceId ? 'black' : '#888'}; font-weight: bold; padding: 6px 12px; border-radius: 4px;" ${!remoteSettings.activeDeviceId ? 'disabled' : ''}>Revoke Access</button>
-                        </div>
-
-                        <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Remote URL</label>
-                        <div style="display: flex; align-items: center; justify-content: space-between; background: #121212; border: 1px solid #444; border-radius: 4px; padding: 10px 15px; gap: 15px; flex-wrap: wrap;">
-                            <span style="font-family: monospace; color: #bb86fc; font-size: 1.1em; word-break: break-all; flex: 1; min-width: 200px;">${remoteUrl}</span>
-                            <button id="settings-copy-remote-btn" class="playlist-btn" data-url="${remoteUrlWithAuth}" style="background: #2a2a2a; color: #e0e0e0; padding: 8px 16px; border-radius: 4px; font-weight: bold; white-space: nowrap; flex-shrink: 0;" title="Copies a link with embedded login credentials">Copy Auto-Login URL</button>
-                        </div>
+                    <div id="settings-remote-config" style="border-top: 1px solid #333; padding-top: 20px; margin-top: 10px;">
+                        <div style="color: #888; text-align: center; padding: 20px 0;">Loading Remote Settings...</div>
                     </div>
                 </div>
 
@@ -2130,7 +2153,7 @@ async function renderSettings() {
                             <p style="color: #888; font-size: 0.9em; margin: 0;">Scrape premium poster art, cast lists, backdrops, and rich descriptions dynamically from The Movie Database.</p>
                         </div>
                         <div>
-                            <span id="settings-tmdb-status" style="background: ${tmdbStatusColor}22; color: ${tmdbStatusColor}; border: 1px solid ${tmdbStatusColor}; padding: 6px 14px; border-radius: 20px; font-size: 0.85em; font-weight: bold; transition: all 0.3s ease;">${tmdbStatus}</span>
+                            <span id="settings-tmdb-status" style="background: #88822; color: #888; border: 1px solid #888; padding: 6px 14px; border-radius: 20px; font-size: 0.85em; font-weight: bold; transition: all 0.3s ease;">Loading...</span>
                         </div>
                     </div>
                     
@@ -2138,11 +2161,11 @@ async function renderSettings() {
                         <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
                             <div style="flex: 1; min-width: 250px;">
                                 <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">TMDB API Key (v3)</label>
-                                <input type="text" id="settings-tmdb-key" value="${tmdbConfig.apiKey || ''}" placeholder="Enter v3 API Key..." style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box; font-family: monospace;">
+                                <input type="text" id="settings-tmdb-key" value="" placeholder="Loading Key..." style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box; font-family: monospace;">
                             </div>
                             <div style="flex: 2; min-width: 350px;">
                                 <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">TMDB Bearer Token (v4)</label>
-                                <input type="password" id="settings-tmdb-token" value="${tmdbConfig.apiToken || ''}" placeholder="Enter v4 Bearer Token..." style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box; font-family: monospace;">
+                                <input type="password" id="settings-tmdb-token" value="" placeholder="Loading Token..." style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box; font-family: monospace;">
                             </div>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
@@ -2153,15 +2176,16 @@ async function renderSettings() {
                 </div>
 
                 <!-- Danger Zone -->
-                <div id="card-danger" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #cf6679; min-width: 0;">
-                    <h3 style="color: #cf6679; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">Danger Zone</h3>
-                    <p style="color: #888; font-size: 0.9em; margin-bottom: 15px;">Completely wipe the database and reset the application to its default state. This action cannot be undone.</p>
-                    <button id="settings-factory-reset-btn" class="playlist-btn" style="background: #cf6679; color: black; font-weight: bold; padding: 8px 16px;">Factory Reset</button>
+                <div id="card-danger" style="background: linear-gradient(135deg, rgba(207, 102, 121, 0.08), rgba(207, 102, 121, 0.02)); padding: 25px; border-radius: 12px; border: 1px solid rgba(207, 102, 121, 0.35); box-shadow: 0 8px 32px rgba(207, 102, 121, 0.1), inset 0 0 20px rgba(207, 102, 121, 0.05); min-width: 0; transition: all 0.3s ease;">
+                    <h3 style="color: #ff6b6b; margin-top: 0; margin-bottom: 8px; font-family: 'Outfit', 'Inter', sans-serif; font-weight: bold; text-shadow: 0 0 10px rgba(255,107,107,0.2);">Danger Zone</h3>
+                    <p style="color: rgba(255, 179, 179, 0.85); font-size: 0.9em; margin-bottom: 20px; font-family: 'Inter', sans-serif;">Completely wipe the database and reset the application to its default state. This action cannot be undone.</p>
+                    <button id="settings-factory-reset-btn" class="playlist-btn" style="background: #ff5252; color: white; font-weight: bold; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(255, 82, 82, 0.3);">Factory Reset</button>
                 </div>
             </div>
         </div>
     `;
 
+    // 1. Immediately attach all static event listeners to avoid input lockups
     document.getElementById('settings-add-epg-btn').addEventListener('click', () => {
         const val = document.getElementById('settings-new-epg').value.trim();
         console.log('[SETTINGS] Add EPG button clicked. Value:', val);
@@ -2182,11 +2206,9 @@ async function renderSettings() {
             e.target.textContent = '⏳';
             e.target.disabled = true;
 
-            // 1. Wipe local file cache and Node.js memory cache for this URL
             console.log('[API] Calling clearCache for', epgSource);
             await window.iptvAPI.clearCache(epgSource);
 
-            // 2. Fetch fresh EPG list (this triggers python to download since cache is gone)
             let allEpgSources = savedEpgs.slice();
             console.log('[API] Calling getEpgChannels for all sources.');
             savedPlaylists.forEach(p => {
@@ -2197,7 +2219,6 @@ async function renderSettings() {
             const combinedEpgs = allEpgSources.join(',');
             epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
 
-            // 3. Re-render the mapping view so new EPG channels appear
             renderMappingColumns();
             
             e.target.textContent = 'Refreshed ✔️';
@@ -2216,7 +2237,6 @@ async function renderSettings() {
             if (!epgSource) return;
             
             showConfirmToast(`Are you sure you want to remove the EPG source "${epgSource}"?`, async () => {
-                // 1. Unmap all channels mapped to this EPG source
                 const epgIdsToRemove = new Set();
                 if (epgChannelsData) {
                     epgChannelsData.forEach(epg => {
@@ -2235,17 +2255,16 @@ async function renderSettings() {
 
                 if (titlesToUnmap.length > 0) {
                     console.log(`[MAPPING] Unmapping ${titlesToUnmap.length} channels associated with removed EPG.`);
+                    const mappingsToSave = [];
                     for (const title of titlesToUnmap) {
                         delete channelMappings[title];
-                        await window.iptvAPI.saveMapping(title, null);
+                        mappingsToSave.push({ title, epgId: null });
                     }
-                    updateState(true); // Update the channels without forcing a DB save of the playlist
+                    await window.iptvAPI.saveMappingsBulk(mappingsToSave);
+                    updateState(true);
                 }
 
-                // Check if this EPG is still actively used by an imported playlist
                 const isUsedByPlaylist = savedPlaylists.some(p => p.epg === epgSource);
-                
-                // Only wipe the physical cache files if it's completely unused
                 if (epgSource && !isUsedByPlaylist) {
                     await window.iptvAPI.clearCache(epgSource);
                     console.log('[API] Cache cleared for unused EPG:', epgSource);
@@ -2283,85 +2302,6 @@ async function renderSettings() {
         });
     });
 
-    document.getElementById('settings-copy-remote-btn').addEventListener('click', (e) => {
-        const url = e.target.getAttribute('data-url');
-        console.log('[SETTINGS] Copy remote URL clicked:', url);
-        window.iptvAPI.copyToClipboard(url);
-        
-        const originalText = e.target.textContent;
-        e.target.textContent = 'Copied!';
-        setTimeout(() => { e.target.textContent = originalText; }, 2000);
-    });
-
-    document.getElementById('settings-remote-toggle').addEventListener('change', async (e) => {
-        const isEnabled = e.target.checked;
-        const configDiv = document.getElementById('settings-remote-config');
-        const statusSpan = document.getElementById('settings-remote-status');
-        
-        configDiv.style.display = isEnabled ? 'block' : 'none';
-        statusSpan.textContent = isEnabled ? 'Enabled' : 'Disabled';
-        statusSpan.style.color = isEnabled ? '#43CB44' : '#cf6679';
-        
-        remoteSettings.enabled = isEnabled;
-        await window.iptvAPI.saveRemoteSettings(remoteSettings);
-        showToast(`Remote Control ${isEnabled ? 'Enabled' : 'Disabled'}`);
-    });
-
-    document.getElementById('settings-save-remote-btn').addEventListener('click', async (e) => {
-        const newPort = parseInt(document.getElementById('settings-remote-port').value) || 8088;
-        const user = document.getElementById('settings-remote-user').value.trim();
-        const pass = document.getElementById('settings-remote-pass').value.trim();
-        
-        if ((user.length > 0 || pass.length > 0) && (user.length < 5 || pass.length < 5)) {
-            showToast('Username and Password must be at least 5 characters long, or completely blank to disable password protection.');
-            document.getElementById('settings-remote-user').focus();
-            return;
-        }
-        
-        remoteSettings.port = newPort;
-        remoteSettings.username = user;
-        remoteSettings.password = pass;
-        await window.iptvAPI.saveRemoteSettings(remoteSettings);
-        
-        const originalText = e.target.textContent;
-        e.target.textContent = 'Saved ✔️';
-        setTimeout(() => { 
-            renderSettings(); // Re-render to update the Auto-Login URL securely
-        }, 1000);
-    });
-
-    const revokeBtn = document.getElementById('settings-revoke-device-btn');
-    if (revokeBtn) {
-        revokeBtn.addEventListener('click', async () => {
-            remoteSettings.activeDeviceId = null;
-            await window.iptvAPI.saveRemoteSettings(remoteSettings);
-            renderSettings();
-            showToast('Paired device revoked.');
-        });
-    }
-
-    // Extract all necessary EPG files dynamically through the Python bridge
-    const allEpgSources = savedPlaylists.map(p => p.epg).filter(e => e && e !== 'Not Configured');
-    savedEpgs.forEach(e => { if (!allEpgSources.includes(e)) allEpgSources.push(e); });
-    const combinedEpgs = allEpgSources.join(',');
-    console.log('[API] Calling getEpgChannels for settings view.');
-    
-    epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
-
-    // Populate EPG Sources Filter Dropdown
-    const epgFilter = document.getElementById('mapping-epg-filter');
-    const epgSourcesSet = new Set();
-    if (epgChannelsData) epgChannelsData.forEach(e => { if (e.source) epgSourcesSet.add(e.source); });
-    Array.from(epgSourcesSet).sort((a, b) => sortAlphaNum(getEpgName(a), getEpgName(b))).forEach(src => {
-        const opt = document.createElement('option');
-        opt.value = src;
-        opt.textContent = getEpgName(src);
-        epgFilter.appendChild(opt);
-    });
-    
-    // Once loaded, populate the mapping UI
-    renderMappingColumns();
-
     document.getElementById('mapping-auto-map-btn').addEventListener('click', async (e) => {
         const btn = e.target;
         console.log('[SETTINGS] Auto-map button clicked.');
@@ -2375,7 +2315,6 @@ async function renderSettings() {
         btn.disabled = false;
     });
 
-    // TMDB Save & Test connection event listener
     document.getElementById('settings-save-tmdb-btn').addEventListener('click', async (e) => {
         const btn = e.target;
         const apiKey = document.getElementById('settings-tmdb-key').value.trim();
@@ -2466,7 +2405,6 @@ async function renderSettings() {
             }
         }
         
-        // Failsafe: if scrolled to the absolute bottom, activate the Danger Zone button
         if (Math.abs((settingsView.scrollHeight - settingsView.scrollTop) - settingsView.clientHeight) < 10) {
             currentActive = 'card-danger';
         }
@@ -2480,13 +2418,189 @@ async function renderSettings() {
         });
     };
     
-    // De-duplicate scroll listener and attach
     settingsView.removeEventListener('scroll', window.updateSettingsActiveMenu);
     window.updateSettingsActiveMenu = updateActiveMenuButton;
     settingsView.addEventListener('scroll', window.updateSettingsActiveMenu);
-
-    // Initial highlight update
     updateActiveMenuButton();
+
+    // 2. Immediately populate local mapping channels (no-epg-data fallback loaded)
+    renderMappingColumns();
+
+    // 3. Load TMDB configuration in the background asynchronously
+    window.iptvAPI.getTmdbConfig().then(tmdbConfig => {
+        const keyInput = document.getElementById('settings-tmdb-key');
+        const tokenInput = document.getElementById('settings-tmdb-token');
+        if (keyInput) keyInput.value = tmdbConfig.apiKey || '';
+        if (tokenInput) tokenInput.value = tmdbConfig.apiToken || '';
+        
+        const statusSpan = document.getElementById('settings-tmdb-status');
+        if (statusSpan) {
+            if (tmdbConfig.apiKey || tmdbConfig.apiToken) {
+                statusSpan.textContent = 'Configured';
+                statusSpan.style.color = '#43CB44';
+                statusSpan.style.background = '#43CB4422';
+                statusSpan.style.borderColor = '#43CB44';
+            } else {
+                statusSpan.textContent = 'Not Configured';
+                statusSpan.style.color = '#888';
+                statusSpan.style.background = '#88822';
+                statusSpan.style.borderColor = '#888';
+            }
+        }
+    }).catch(e => console.error('Error auto-loading TMDB config:', e));
+
+    // 4. Load Remote settings and IP address in the background asynchronously
+    Promise.all([
+        window.iptvAPI.getRemoteSettings(),
+        window.iptvAPI.getIpAddress()
+    ]).then(([rSettings, ipAddress]) => {
+        remoteSettings = rSettings;
+        
+        const toggle = document.getElementById('settings-remote-toggle');
+        const status = document.getElementById('settings-remote-status');
+        const configDiv = document.getElementById('settings-remote-config');
+        
+        const port = remoteSettings.port || 8088;
+        const remoteUrl = `http://${ipAddress}:${port}/remote`;
+        let remoteUrlWithAuth = remoteUrl;
+        if (remoteSettings.username && remoteSettings.password) {
+            remoteUrlWithAuth = `http://${encodeURIComponent(remoteSettings.username)}:${encodeURIComponent(remoteSettings.password)}@${ipAddress}:${port}/remote`;
+        }
+
+        if (toggle) {
+            toggle.checked = !!remoteSettings.enabled;
+            toggle.disabled = false;
+        }
+        if (status) {
+            status.textContent = remoteSettings.enabled ? 'Enabled' : 'Disabled';
+            status.style.color = remoteSettings.enabled ? '#43CB44' : '#cf6679';
+        }
+        
+        if (configDiv) {
+            configDiv.style.display = remoteSettings.enabled ? 'block' : 'none';
+            configDiv.innerHTML = `
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+                    <div style="flex: 1; min-width: 150px;">
+                         <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Port</label>
+                         <input type="number" id="settings-remote-port" value="${port}" placeholder="8088" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                    </div>
+                    <div style="flex: 2; min-width: 200px;">
+                         <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Username (min 5 chars)</label>
+                         <input type="text" id="settings-remote-user" value="${remoteSettings.username || ''}" placeholder="Username" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                    </div>
+                    <div style="flex: 2; min-width: 200px;">
+                         <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Password (min 5 chars)</label>
+                         <input type="password" id="settings-remote-pass" value="${remoteSettings.password || ''}" placeholder="Password" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                    </div>
+                    <div style="display: flex; align-items: flex-end;">
+                         <button id="settings-save-remote-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 24px; height: 39px; white-space: nowrap;">Save Credentials</button>
+                    </div>
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 10px; background: #252525; border: 1px solid #444; border-radius: 4px;">
+                     <span style="color: #bbb; font-size: 0.9em;">Paired Device: <strong style="color: ${remoteSettings.activeDeviceId ? '#43CB44' : '#888'};">${remoteSettings.activeDeviceId ? 'Connected' : 'None'}</strong></span>
+                     <button id="settings-revoke-device-btn" class="playlist-btn" style="background: ${remoteSettings.activeDeviceId ? '#cf6679' : '#333'}; color: ${remoteSettings.activeDeviceId ? 'black' : '#888'}; font-weight: bold; padding: 6px 12px; border-radius: 4px;" ${!remoteSettings.activeDeviceId ? 'disabled' : ''}>Revoke Access</button>
+                </div>
+
+                <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Remote URL</label>
+                <div style="display: flex; align-items: center; justify-content: space-between; background: #121212; border: 1px solid #444; border-radius: 4px; padding: 10px 15px; gap: 15px; flex-wrap: wrap;">
+                     <span style="font-family: monospace; color: #bb86fc; font-size: 1.1em; word-break: break-all; flex: 1; min-width: 200px;">${remoteUrl}</span>
+                     <button id="settings-copy-remote-btn" class="playlist-btn" data-url="${remoteUrlWithAuth}" style="background: #2a2a2a; color: #e0e0e0; padding: 8px 16px; border-radius: 4px; font-weight: bold; white-space: nowrap; flex-shrink: 0;" title="Copies a link with embedded login credentials">Copy Auto-Login URL</button>
+                </div>
+            `;
+
+            // Dynamic Remote listeners
+            document.getElementById('settings-save-remote-btn').addEventListener('click', async (btnEvt) => {
+                 const newPort = parseInt(document.getElementById('settings-remote-port').value) || 8088;
+                 const user = document.getElementById('settings-remote-user').value.trim();
+                 const pass = document.getElementById('settings-remote-pass').value.trim();
+                 
+                 if ((user.length > 0 || pass.length > 0) && (user.length < 5 || pass.length < 5)) {
+                     showToast('Username and Password must be at least 5 characters long, or completely blank to disable password protection.');
+                     document.getElementById('settings-remote-user').focus();
+                     return;
+                 }
+                 
+                 remoteSettings.port = newPort;
+                 remoteSettings.username = user;
+                 remoteSettings.password = pass;
+                 await window.iptvAPI.saveRemoteSettings(remoteSettings);
+                 
+                 const originalText = btnEvt.target.textContent;
+                 btnEvt.target.textContent = 'Saved ✔️';
+                 setTimeout(() => { 
+                     renderSettings();
+                 }, 1000);
+            });
+
+            const revokeBtn = document.getElementById('settings-revoke-device-btn');
+            if (revokeBtn) {
+                 revokeBtn.addEventListener('click', async () => {
+                     remoteSettings.activeDeviceId = null;
+                     await window.iptvAPI.saveRemoteSettings(remoteSettings);
+                     renderSettings();
+                     showToast('Paired device revoked.');
+                 });
+            }
+
+            document.getElementById('settings-copy-remote-btn').addEventListener('click', (btnEvt) => {
+                 const url = btnEvt.target.getAttribute('data-url');
+                 window.iptvAPI.copyToClipboard(url);
+                 const originalText = btnEvt.target.textContent;
+                 btnEvt.target.textContent = 'Copied!';
+                 setTimeout(() => { btnEvt.target.textContent = originalText; }, 2000);
+            });
+        }
+
+        if (toggle) {
+            // Setup toggle listener now that settings loaded
+            toggle.addEventListener('change', async (e) => {
+                 const isEnabled = e.target.checked;
+                 const configDivEl = document.getElementById('settings-remote-config');
+                 const statusSpanEl = document.getElementById('settings-remote-status');
+                 
+                 if (configDivEl) configDivEl.style.display = isEnabled ? 'block' : 'none';
+                 if (statusSpanEl) {
+                     statusSpanEl.textContent = isEnabled ? 'Enabled' : 'Disabled';
+                     statusSpanEl.style.color = isEnabled ? '#43CB44' : '#cf6679';
+                 }
+                 
+                 remoteSettings.enabled = isEnabled;
+                 await window.iptvAPI.saveRemoteSettings(remoteSettings);
+                 showToast(`Remote Control ${isEnabled ? 'Enabled' : 'Disabled'}`);
+            });
+        }
+    }).catch(e => console.error('Error auto-loading remote settings:', e));
+
+    // 5. Load EPG channels in the background asynchronously
+    const allEpgSources = savedPlaylists.map(p => p.epg).filter(e => e && e !== 'Not Configured');
+    savedEpgs.forEach(e => { if (!allEpgSources.includes(e)) allEpgSources.push(e); });
+    const combinedEpgs = allEpgSources.join(',');
+    
+    window.iptvAPI.getEpgChannels(combinedEpgs).then(data => {
+        epgChannelsData = data;
+        
+        // Populate EPG filter list
+        const epgFilter = document.getElementById('mapping-epg-filter');
+        if (epgFilter) {
+            epgFilter.innerHTML = '<option value="all">All EPG Sources</option>';
+            const epgSourcesSet = new Set();
+            if (epgChannelsData) epgChannelsData.forEach(e => { if (e.source) epgSourcesSet.add(e.source); });
+            Array.from(epgSourcesSet).sort((a, b) => sortAlphaNum(getEpgName(a), getEpgName(b))).forEach(src => {
+                 const opt = document.createElement('option');
+                 opt.value = src;
+                 opt.textContent = getEpgName(src);
+                 epgFilter.appendChild(opt);
+            });
+        }
+        
+        // Refresh mapping lists to overlay active EPG mapping names
+        renderMappingColumns();
+    }).catch(err => {
+        console.error('Error fetching EPG channels in settings:', err);
+        const listContainer = document.getElementById('mapping-epg-list');
+        if (listContainer) listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #cf6679;">Failed to load EPG channels.</div>';
+    });
 }
 
 async function applySingleMapping(channelTitle, epgId) {
@@ -3517,9 +3631,9 @@ function renderChannels() {
                     const playlistBadge = (filterVal === 'all' && playlistName) ? ` <span style="color: #888; font-size: 0.85em; font-weight: normal; margin-left: 5px;">[${playlistName}]</span>` : '';
 
                     const activeClass = (index === currentPlayingChannelIndex) ? ' active' : '';
-                    html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}" style="display: flex; align-items: center; width: 100%; box-sizing: border-box; padding: 5px 10px 5px 20px; border-bottom: 1px solid #1e1e1e; cursor: pointer; outline: none;">
+                    html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}" style="display: flex; align-items: center; width: 100%; box-sizing: border-box; padding: 2px 6px; border-bottom: 1px solid #1e1e1e; cursor: pointer; outline: none;">
                         ${logoHtml}
-                        <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; color: #e0e0e0; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif;">${safeTitle}${playlistBadge}</span>
+                        <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; color: #e0e0e0; font-size: 0.72rem; font-weight: bold; font-family: 'Inter', sans-serif;">${safeTitle}${playlistBadge}</span>
                         ${favBtnHtml}
                     </div>`;
                 });
@@ -3948,7 +4062,7 @@ function renderEpg(programmes) {
         const reminderHtml = isFuture ? `<button class="reminder-btn-sidebar" data-prog="${title.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="background: transparent; border: none; padding: 0; font-size: 1.2em; cursor: pointer; margin-right: 5px; transition: 0.2s; ${reminderStyle}" title="Set Reminder">🔔</button>` : '';
         
         html += `
-            <div class="live-epg-item" tabindex="0" style="background: #1e1e1e; padding: 12px; border-radius: 8px; border-left: 4px solid ${isCurrent ? '#43CB44' : '#444'}; outline: none; cursor: default; transition: 0.2s;">
+            <div class="live-epg-item" tabindex="0" style="background: #1e1e1e; padding: 4px 8px; border-radius: 8px; border-left: 4px solid ${isCurrent ? '#43CB44' : '#444'}; outline: none; cursor: default; transition: 0.2s;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px;">
                     <div style="font-weight: ${isCurrent ? 'bold' : 'normal'}; color: ${color}; font-size: 1.1em; margin-bottom: 5px; display: flex; align-items: center;">${reminderHtml}<span>${title}</span></div>
                     <div style="color: #bb86fc; white-space: nowrap; font-size: 0.9em; margin-top: 2px;">${startTimeStr} - ${stopTimeStr}</div>
@@ -4025,7 +4139,7 @@ function renderVisibleEpgRows(force = false) {
     const scrollLeft = scrollContainer.scrollLeft;
     const viewportHeight = scrollContainer.clientHeight;
     const viewportWidth = scrollContainer.clientWidth;
-    const rowHeight = 60;
+    const rowHeight = 45;
     
     const timeIndicator = document.getElementById('epg-time-indicator');
     if (timeIndicator) {
@@ -4107,26 +4221,26 @@ function renderVisibleEpgRows(force = false) {
                     const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
 
                     programsHtml += `
-                    <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 60px; background: ${bg}; border-right: 1px solid #111; border-top: 2px solid ${borderCol}; border-bottom: 1px solid #2a2a2a; box-sizing: border-box; padding: 6px 10px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
+                    <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.15); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; padding: 2px 4px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
                         <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${pTitle}</div>
                         <div style="font-size: 0.75em; color: #888; margin-top: 4px;">${timeStr}</div>
                     </div>`;
                 }
             } else {
-                programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 60px; border-bottom: 1px solid #2a2a2a; box-sizing: border-box; color: #555; font-size: 0.9em; width: 100%; cursor: pointer;">No EPG Data</div>`;
+                programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 45px; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; color: #555; font-size: 0.9em; width: 100%; cursor: pointer;">No EPG Data</div>`;
             }
         } else {
-            programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 60px; border-bottom: 1px solid #2a2a2a; box-sizing: border-box; color: #888; font-size: 0.9em; width: 100%; cursor: pointer;">Loading...</div>`;
+            programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 45px; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; color: #888; font-size: 0.9em; width: 100%; cursor: pointer;">Loading...</div>`;
         }
         
         channelsHtml += `
-        <div class="epg-play-channel" tabindex="0" data-index="${globalIdx}" style="position: absolute; top: ${topPos}px; left: 0; width: 250px; height: 60px; background: #1e1e1e; border-bottom: 1px solid #2a2a2a; display: flex; align-items: center; padding: 10px; box-sizing: border-box; cursor: pointer; outline: none;">
-            <img src="${imgSrc}" data-eh="0" style="width: 40px; height: 40px; min-width: 40px; object-fit: contain; margin-right: 15px; background: #ffffff; border-radius: 4px;">
+        <div class="epg-play-channel" tabindex="0" data-index="${globalIdx}" style="position: absolute; top: ${topPos}px; left: 0; width: 250px; height: 45px; background: #1e1e1e; border-bottom: 1px solid rgba(255, 255, 255, 0.15); border-top: 1px solid rgba(255, 255, 255, 0.15); border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; padding: 4px 8px; box-sizing: border-box; cursor: pointer; outline: none;">
+            <img src="${imgSrc}" data-eh="0" style="width: 32px; height: 32px; min-width: 32px; object-fit: contain; margin-right: 10px; background: #ffffff; border-radius: 4px;">
             <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif; color: #e0e0e0;" title="${safeTitle}">${safeTitle}</span>
         </div>`;
         
         gridHtml += `
-        <div style="position: absolute; top: ${topPos}px; left: 0; width: ${totalWidth}px; height: 60px;">
+        <div style="position: absolute; top: ${topPos}px; left: 0; width: ${totalWidth}px; height: 45px;">
             ${programsHtml}
         </div>`;
     }
@@ -4204,7 +4318,7 @@ async function renderFullEpg() {
 
     if (window.epgTimeIndicatorInterval) clearInterval(window.epgTimeIndicatorInterval);
 
-    const pxPerMinute = 6;
+    const pxPerMinute = 10;
     const hourWidth = 60 * pxPerMinute;
     const now = new Date();
     
@@ -4250,7 +4364,7 @@ async function renderFullEpg() {
     <div id="epg-layout-wrapper" style="display: flex; flex-direction: column; flex-grow: 1; width: 100%; height: 100%; overflow: hidden; background: #121212; border: 1px solid #333; border-radius: 8px;">
         <!-- Header Row -->
         <div style="display: flex; width: 100%; background: #bb86fc; z-index: 20;">
-            <div style="width: 250px; min-width: 250px; background: #bb86fc; border-bottom: 2px solid #333; border-right: 2px solid rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000; box-sizing: border-box; height: 30px;">Channels</div>
+            <div style="width: 250px; min-width: 250px; background: #bb86fc; border-bottom: 2px solid #333; border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000; box-sizing: border-box; height: 30px;">Channels</div>
             <div id="epg-header-scroll" style="flex-grow: 1; overflow: hidden; position: relative; height: 30px;">
                 <div style="width: ${totalWidth}px; height: 100%; position: relative;">
                     ${headerHtml}
@@ -4263,13 +4377,13 @@ async function renderFullEpg() {
         <!-- Content Area -->
         <div style="display: flex; flex-grow: 1; overflow: hidden; width: 100%;">
             <!-- Left Pinned Channels -->
-            <div id="epg-channels-col" style="width: 250px; min-width: 250px; background: #1a1a1a; overflow: hidden; border-right: 2px solid #333; z-index: 10; position: relative;">
-                <div id="epg-channels-inner" style="position: relative; width: 100%; height: ${epgChannelsToRender.length * 60}px;"></div>
+            <div id="epg-channels-col" style="width: 250px; min-width: 250px; background: #1a1a1a; overflow: hidden; border-right: 1px solid rgba(255, 255, 255, 0.15); z-index: 10; position: relative;">
+                <div id="epg-channels-inner" style="position: relative; width: 100%; height: ${epgChannelsToRender.length * 45}px;"></div>
             </div>
             
             <!-- Right Scrolling Grid -->
             <div id="epg-scroll-container" style="flex-grow: 1; overflow-y: scroll; overflow-x: auto; position: relative; background: #121212;">
-                <div id="epg-grid-inner" style="width: ${totalWidth}px; height: ${epgChannelsToRender.length * 60}px; position: relative;">
+                <div id="epg-grid-inner" style="width: ${totalWidth}px; height: ${epgChannelsToRender.length * 45}px; position: relative;">
                     <div id="epg-rows-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
                     ${redLineHtml}
                 </div>
@@ -4928,7 +5042,7 @@ window.iptvAPI.onRemoteAction((cmd) => {
             
             exitToast = document.createElement('div');
             exitToast.id = 'remote-exit-toast';
-            exitToast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1e1e1e; border: 1px solid #cf6679; color: #fff; padding: 20px; border-radius: 12px; z-index: 2147483647; box-shadow: 0 10px 30px rgba(0,0,0,0.8); text-align: center; font-family: "Inter", sans-serif; min-width: 300px; transition: opacity 0.3s; opacity: 1;';
+            exitToast.style.cssText = 'position: ' + (window.isAppFullscreen ? 'absolute' : 'fixed') + '; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1e1e1e; border: 1px solid #cf6679; color: #fff; padding: 20px; border-radius: 12px; z-index: 2147483647; box-shadow: 0 10px 30px rgba(0,0,0,0.8); text-align: center; font-family: "Inter", sans-serif; min-width: 300px; transition: opacity 0.3s; opacity: 1;';
             exitToast.innerHTML = `
                 <div style="font-weight: bold; margin-bottom: 10px; color: #cf6679; font-size: 1.1em;">Exit Application</div>
                 <div style="margin-bottom: 20px; font-size: 0.9em; color: #ccc;">Do you want to exit?</div>
@@ -4937,7 +5051,12 @@ window.iptvAPI.onRemoteAction((cmd) => {
                     <button id="btn-remote-exit-no" class="playlist-btn" style="background: #333; color: white; font-weight: bold; padding: 10px 16px; flex: 1;">No</button>
                 </div>
             `;
-            document.body.appendChild(exitToast);
+            
+            if (window.isAppFullscreen) {
+                document.getElementById('player-container').appendChild(exitToast);
+            } else {
+                document.body.appendChild(exitToast);
+            }
             
             document.getElementById('btn-remote-exit-yes').addEventListener('click', () => {
                 window.close(); // Gracefully closes the window and terminates MPV
@@ -6855,6 +6974,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Hide the sidebar & title when the app goes fullscreen so the video takes up 100% of the monitor
 window.iptvAPI.onFullscreenChange((isFullscreen) => {
     console.log('[API RECV] onFullscreenChange, isFullscreen:', isFullscreen);
+    window.isAppFullscreen = isFullscreen;
     const navBar = document.getElementById('nav-bar');
     const sidebar = document.getElementById('sidebar');
     const channelDetails = document.getElementById('channel-details');
@@ -7108,6 +7228,22 @@ window.addEventListener('DOMContentLoaded', async () => {
             localStorage.setItem('lastBackgroundUpdate', Date.now().toString());
         }, 4 * 60 * 60 * 1000); // Check every 4 hours, actual web fetch limited to 24h by python cache
     }, 5000);
+
+    // Fast-load EPG mapping channels in the background asynchronously so settings screen loads instantly on click
+    setTimeout(() => {
+        const allEpgSources = savedPlaylists.map(p => p.epg).filter(e => e && e !== 'Not Configured');
+        savedEpgs.forEach(e => { if (!allEpgSources.includes(e)) allEpgSources.push(e); });
+        const combinedEpgs = allEpgSources.join(',');
+        if (combinedEpgs) {
+            console.log('[BACKGROUND] Prefetching EPG channels list for fast settings loading.');
+            window.iptvAPI.getEpgChannels(combinedEpgs).then(data => {
+                epgChannelsData = data;
+                console.log('[BACKGROUND] EPG channels list preloaded successfully.', data.length);
+            }).catch(err => {
+                console.error('[BACKGROUND] Failed to prefetch EPG channels:', err);
+            });
+        }
+    }, 3000);
 
     // Check for Reminders periodically
     setInterval(() => {
