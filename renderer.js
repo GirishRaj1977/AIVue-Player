@@ -1,3 +1,40 @@
+// Connect the renderer console logs directly to the main process logger
+if (window.iptvAPI && window.iptvAPI.log) {
+    const originalConsoleLog = console.log;
+    const originalConsoleWarn = console.warn;
+    const originalConsoleError = console.error;
+
+    console.log = (...args) => {
+        const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+        originalConsoleLog(...args);
+        let cat = 'app';
+        if (msg.toLowerCase().includes('epg')) cat = 'epg';
+        else if (msg.toLowerCase().includes('play') || msg.toLowerCase().includes('mpv')) cat = 'player';
+        else if (msg.toLowerCase().includes('m3u') || msg.toLowerCase().includes('stalker') || msg.toLowerCase().includes('xtream')) cat = 'portal';
+        window.iptvAPI.log(cat, 'info', `[RENDERER] ${msg}`);
+    };
+
+    console.warn = (...args) => {
+        const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+        originalConsoleWarn(...args);
+        let cat = 'app';
+        if (msg.toLowerCase().includes('epg')) cat = 'epg';
+        else if (msg.toLowerCase().includes('play') || msg.toLowerCase().includes('mpv')) cat = 'player';
+        else if (msg.toLowerCase().includes('m3u') || msg.toLowerCase().includes('stalker') || msg.toLowerCase().includes('xtream')) cat = 'portal';
+        window.iptvAPI.log(cat, 'warn', `[RENDERER] ${msg}`);
+    };
+
+    console.error = (...args) => {
+        const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+        originalConsoleError(...args);
+        let cat = 'app';
+        if (msg.toLowerCase().includes('epg')) cat = 'epg';
+        else if (msg.toLowerCase().includes('play') || msg.toLowerCase().includes('mpv')) cat = 'player';
+        else if (msg.toLowerCase().includes('m3u') || msg.toLowerCase().includes('stalker') || msg.toLowerCase().includes('xtream')) cat = 'portal';
+        window.iptvAPI.log(cat, 'error', `[RENDERER] ${msg}`);
+    };
+}
+
 // Inject Aero styles for buttons, hover text size increase, and global font colour tinge
 const aeroStyles = document.createElement('style');
 aeroStyles.textContent = `

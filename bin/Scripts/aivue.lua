@@ -498,6 +498,9 @@ local iconfont
 local function set_icon_theme()
     icons = icon_theme[user_opts.icon_theme] or icon_theme["fluent"]
     iconfont = icons.iconfont
+    -- Override fullscreen icons with exact matching vector-brackets drawings (centered 24x24 ASS graphics)
+    icons.fullscreen = "{\\p1}m -5 2 l -7 2 l -7 7 l -2 7 l -2 5 l -5 5 l -5 2 m -7 -7 l -2 -7 l -2 -5 l -5 -5 l -5 -2 l -7 -2 m 7 2 l 5 2 l 5 5 l 2 5 l 2 7 l 7 7 m 2 -7 l 2 -5 l 5 -5 l 5 -2 l 7 -2 l 7 -7{\\p0}"
+    icons.fullscreen_exit = "{\\p1}m -8 2 l -4 2 l -4 6 l -2 6 l -2 0 l -8 0 m -8 -2 l -2 -2 l -2 -8 l -4 -8 l -4 -4 l -8 -4 m 4 2 l 0 2 l 0 8 l 2 8 l 2 4 l 4 4 m 2 -6 l 2 -4 l 6 -4 l 6 0 l 8 0 l 8 -8 l 2 -8{\\p0}"
 end
 
 local locale

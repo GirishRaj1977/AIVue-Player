@@ -5,6 +5,24 @@ const net = require('net');
 const fs = require('fs');
 const crypto = require('crypto');
 
+// --- Logger Initialization & Error Handling ---
+const logger = require('./logger');
+logger.init();
+
+// Log application startup details
+console.log(`[APP] Version ${app.getVersion() || '1.0.0'} started`);
+console.log(`[APP] OS: ${process.platform} (${process.arch})`);
+console.log(`[APP] User data path: ${app.getPath('userData')}`);
+
+// Uncaught exceptions and rejections handlers (routed automatically to crash.log)
+process.on('uncaughtException', (err) => {
+    console.error(`[CRASH] Uncaught Exception: ${err.message}\nStack: ${err.stack}`);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error(`[CRASH] Unhandled Promise Rejection at: ${promise}\nReason: ${reason}`);
+});
+
 function applyRoundedCorners(hwnd) {
     if (process.platform !== 'win32') return;
     const preference = 2; // DWMWCP_ROUND = 2
@@ -458,8 +476,8 @@ ipcMain.on('focus-remote-search', (event) => {
 function createWindow() {
     // Create a frameless, transparent splash window
     splashWindow = new BrowserWindow({
-        width: 600,
-        height: 600,
+        width: 700,
+        height: 700,
         transparent: true,
         frame: false,
         alwaysOnTop: true,
@@ -1294,7 +1312,12 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+    console.log('[APP] Shutdown requested (all windows closed)');
     if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('will-quit', () => {
+    console.log('[APP] Shutdown completed');
 });
 
 function initMpv() {
