@@ -3333,11 +3333,20 @@ async function embedStream(channel) {
     
     currentPlayingChannelIndex = allChannels.findIndex(c => c.url === channel.url && c.title === channel.title);
 
+    const groupName = channel.group || 'Uncategorized';
+    if (!window.expandedGroups.has(groupName)) {
+        window.expandedGroups.add(groupName);
+        localStorage.setItem('iptv_expanded_groups', JSON.stringify(Array.from(window.expandedGroups)));
+        renderChannels();
+    }
+
     document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
     const activeEl = document.querySelector(`.channel-item[data-index="${currentPlayingChannelIndex}"]`);
     if (activeEl) {
         activeEl.classList.add('active');
-        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        setTimeout(() => {
+            activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
     }
 
     const fsBtn = document.getElementById('fullscreen-btn');
@@ -6153,4 +6162,3 @@ function updateMpvEpgPayload(title, overview, time) {
         window.pendingEpgUpdate = epgUpdatePayload;
     }
 }
-
