@@ -552,6 +552,11 @@ function renderMappingColumns() {
     const mappedListEl = document.getElementById('mapping-mapped-list');
     if (!channelListEl || !epgListEl || !mappedListEl) return;
 
+    // Save current scroll positions
+    const chScrollTop = channelListEl.scrollTop;
+    const epgScrollTop = epgListEl.scrollTop;
+    const mappedScrollTop = mappedListEl.scrollTop;
+
     const chSearch = (document.getElementById('mapping-channel-search').value || '').toLowerCase();
     const epgSearch = (document.getElementById('mapping-epg-search').value || '').toLowerCase();
     const mappedSearch = (document.getElementById('mapping-mapped-search').value || '').toLowerCase();
@@ -672,6 +677,7 @@ function renderMappingColumns() {
 
     Object.entries(channelMappings).sort((a, b) => sortAlphaNum(a[0], b[0])).forEach(([chTitle, epgId]) => {
         if (!epgId) return;
+        if (!titleToPlaylistId[chTitle]) return; // Hide mappings for channels that no longer exist
         
         if (mappingSelectedPlaylist !== 'all' && !validTitlesForPlaylist.has(chTitle)) return;
 
@@ -708,6 +714,11 @@ function renderMappingColumns() {
         `);
     });
     mappedListEl.innerHTML = mappedHtmlArr.length ? mappedHtmlArr.join('') : '<div style="color: #888; text-align: center; margin-top: 20px;">No mappings yet.</div>';
+
+    // Restore scroll positions
+    channelListEl.scrollTop = chScrollTop;
+    epgListEl.scrollTop = epgScrollTop;
+    mappedListEl.scrollTop = mappedScrollTop;
 
     // 4. Attach Event Listeners for the dynamic items
     document.querySelectorAll('.mapping-ch-item').forEach(el => {
@@ -1910,21 +1921,28 @@ function renderPlaylists() {
         let totalPrograms = 0;
         if (playlist.channels) {
             playlist.channels.forEach(ch => {
+                let isMapped = false;
+                if (ch.title && channelMappings[ch.title]) {
+                    isMapped = true;
+                }
                 if (ch.epg_programmes && ch.epg_programmes.length > 0) {
-                    mappedChannels++;
+                    isMapped = true;
                     totalPrograms += ch.epg_programmes.length;
                 }
+                if (isMapped) mappedChannels++;
             });
         }
         if (totalPrograms > 0) {
             epgInfo = ` <span style="color: #43CB44; font-size: 0.9em;">(${mappedChannels} channels mapped, ${totalPrograms} programs)</span>`;
+        } else if (mappedChannels > 0) {
+            epgInfo = ` <span style="color: #43CB44; font-size: 0.9em;">(${mappedChannels} channels mapped)</span>`;
         } else if (window.activeEpgParsing && window.activeEpgParsing.has(playlist.epg)) {
             epgInfo = ` <span style="color: #bb86fc; font-size: 0.9em;">(Parsing EPG...)</span>`;
         } else if (playlist.epg && playlist.epg !== 'Not Configured') {
             const isEpgLoaded = epgChannelsData && epgChannelsData.some(e => e.source === playlist.epg);
             if (isEpgLoaded) {
                 epgInfo = ` <span style="color: #bb86fc; font-size: 0.9em;">(0 channels mapped)</span>`;
-            } else {
+            } else if (epgChannelsData) {
                 epgInfo = ` <span style="color: #cf6679; font-size: 0.9em;">(EPG not loaded)</span>`;
             }
         }
@@ -1933,12 +1951,17 @@ function renderPlaylists() {
         let enabledChannels = 0;
         let disabledChannels = 0;
         let groups = new Set();
+        let enabledGroups = new Set();
         
         if (playlist.channels) {
             playlist.channels.forEach(ch => {
-                if (ch.disabled) disabledChannels++;
-                else enabledChannels++;
                 groups.add(ch.group || 'Uncategorized');
+                if (ch.disabled) {
+                    disabledChannels++;
+                } else {
+                    enabledChannels++;
+                    enabledGroups.add(ch.group || 'Uncategorized');
+                }
             });
         }
 
@@ -1954,6 +1977,28 @@ function renderPlaylists() {
                 if (!isNaN(parsedDate)) expStr = parsedDate.toLocaleDateString();
             }
             expInfo = `<span><strong>Expires:</strong> <span style="color: #FFD700;">${expStr}</span></span>`;
+        }
+
+        const isStalker = playlist.epg && playlist.epg.startsWith('stalker:');
+        let statsHtml = '';
+        
+        if (isStalker) {
+            const mac = playlist.epg.substring(8);
+            statsHtml = `
+                <span><strong>MAC:</strong> <span style="color: #bb86fc;">${mac}</span></span>
+                <span><strong>Total Groups:</strong> ${groups.size}</span>
+                <span><strong>Enabled Groups:</strong> <span style="color: #43CB44;">${enabledGroups.size}</span></span>
+                <span><strong>Enabled Channels:</strong> <span style="color: #43CB44;">${enabledChannels}</span></span>
+                ${expInfo}
+            `;
+        } else {
+            statsHtml = `
+                <span><strong>Total Channels:</strong> ${totalChannels}</span>
+                <span><strong>Enabled:</strong> <span style="color: #43CB44;">${enabledChannels}</span></span>
+                <span><strong>Disabled:</strong> <span style="color: #cf6679;">${disabledChannels}</span></span>
+                <span><strong>Groups:</strong> ${groups.size}</span>
+                ${expInfo}
+            `;
         }
 
         card.innerHTML = `
@@ -1977,11 +2022,7 @@ function renderPlaylists() {
             <div style="color: #888; font-size: 0.9em; word-break: break-all;"><strong>Location:</strong> ${playlist.source}</div>
             <div style="color: #aaa; font-size: 0.95em; margin-top: 5px;">
                 <div style="margin-bottom: 5px; display: flex; flex-wrap: wrap; gap: 15px;">
-                    <span><strong>Total Channels:</strong> ${totalChannels}</span>
-                    <span><strong>Enabled:</strong> <span style="color: #43CB44;">${enabledChannels}</span></span>
-                    <span><strong>Disabled:</strong> <span style="color: #cf6679;">${disabledChannels}</span></span>
-                    <span><strong>Groups:</strong> ${groups.size}</span>
-                    ${expInfo}
+                    ${statsHtml}
                 </div>
                 <div>
                     <span><strong>EPG:</strong> <span title="${playlist.epg || 'Not Configured'}">${getEpgName(playlist.epg)}</span>${epgInfo}</span>
