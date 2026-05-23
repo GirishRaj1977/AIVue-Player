@@ -500,9 +500,9 @@
     </div>
 
     <!-- Movies View -->
-    <div id="movies-view" style="display: none; flex-grow: 1; flex-direction: column; padding: 30px; background: #121212; border: 1px solid #e0e0e0; border-radius: 12px; overflow-y: auto;">
+    <div id="movies-view" style="display: none; flex-grow: 1; flex-direction: column; overflow-y: auto;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; gap: 20px;">
-            <h2 style="color: #bb86fc; margin: 0; font-family: 'Outfit', 'Inter', sans-serif;">Movies</h2>
+            <h2 style="color: #bb86fc; margin: 0; font-family: 'Inter', sans-serif !important;">Movies</h2>
             <div style="position: relative; width: 300px;">
                 <input type="text" id="movies-search" placeholder="Search movies..." style="width: 100%; padding: 10px 15px 10px 40px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 20px; outline: none; font-size: 0.95em; transition: 0.3s; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);">
                 <svg viewBox="0 0 24 24" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; fill: rgba(255,255,255,0.5);"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
@@ -517,9 +517,9 @@
     </div>
 
     <!-- VOD / Series View -->
-    <div id="vod-view" style="display: none; flex-grow: 1; flex-direction: column; padding: 30px; background: #121212; border: 1px solid #e0e0e0; border-radius: 12px; overflow-y: auto;">
+    <div id="vod-view" style="display: none; flex-grow: 1; flex-direction: column; overflow-y: auto;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; gap: 20px;">
-            <h2 style="color: #bb86fc; margin: 0; font-family: 'Outfit', 'Inter', sans-serif;">TV Series</h2>
+            <h2 style="color: #bb86fc; margin: 0; font-family: 'Inter', sans-serif !important;">TV Series</h2>
             <div style="position: relative; width: 300px;">
                 <input type="text" id="vod-search" placeholder="Search series..." style="width: 100%; padding: 10px 15px 10px 40px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 20px; outline: none; font-size: 0.95em; transition: 0.3s; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);">
                 <svg viewBox="0 0 24 24" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; fill: rgba(255,255,255,0.5);"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
@@ -534,7 +534,7 @@
     </div>
 
     <!-- TV Series Episodes Modal -->
-    <div id="episodes-modal" style="display: none; position: fixed; top: 12px; left: 88px; width: calc(100vw - 100px); height: calc(100vh - 24px); background: #121212; z-index: 1000; border: 1px solid #e0e0e0; border-radius: 12px; box-sizing: border-box; overflow: hidden;">
+    <div id="episodes-modal" style="display: none;">
         <div style="background: rgba(30,30,30,0.75); width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden;">
             <!-- Modal Header -->
             <div style="padding: 20px 25px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 20px; background: rgba(40,40,40,0.4);">
@@ -580,7 +580,7 @@
     </div>
 
     <!-- Premium Netflix-Style Movie & Series Details Modal -->
-    <div id="premium-details-modal" style="display: none; position: fixed; top: 12px; left: 88px; width: calc(100vw - 100px); height: calc(100vh - 24px); background: #121212; z-index: 1001; border: 1px solid #e0e0e0; border-radius: 12px; box-sizing: border-box; overflow: hidden;">
+    <div id="premium-details-modal" style="display: none;">
         <div style="background: #181818; width: 100%; height: 100%; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; position: relative; scrollbar-width: none;">
             
             <!-- Back Button -->

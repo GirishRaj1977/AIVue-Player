@@ -1768,43 +1768,26 @@ local function window_controls()
     }
 
     local lo
-    local controlbox_w = window_control_box_width
-    local titlebox_w = wc_geo.w - controlbox_w
-    local controlbox_left = wc_geo.w - controlbox_w
+    local controlbox_w = 60
     local titlebox_left = wc_geo.x
     local titlebox_right = wc_geo.w - controlbox_w
     local button_y = wc_geo.y - (wc_geo.h / 2)
-    local first_geo = {x = controlbox_left + 25, y = button_y, an = 5, w = 50, h = wc_geo.h}
-    local second_geo = {x = controlbox_left + 75, y = button_y, an = 5, w = 49, h = wc_geo.h}
-    local third_geo = {x = controlbox_left + 125, y = button_y, an = 5, w = 50, h = wc_geo.h}
 
-    -- Window controls
+    -- Window controls (Replaced 3 small buttons with a top-right fullscreen toggle)
     if user_opts.window_controls then
-        -- Close: 🗙
-        lo = add_layout("close")
-        lo.geometry = third_geo
+        lo = add_layout("tog_fullscreen_top")
+        local fullscreen_top_geo = {x = wc_geo.w - 35, y = button_y, an = 5, w = 50, h = wc_geo.h}
+        lo.geometry = fullscreen_top_geo
         lo.style = osc_styles.window_control
-        lo.button.hoverstyle = "{\\c&H" .. osc_color_convert(user_opts.windowcontrols_close_hover) .. "&" .. (contains(user_opts.hover_effect, "size") and string.format("\\fscx%s\\fscy%s", user_opts.hover_button_size, user_opts.hover_button_size) or "") .. "}"
+        lo.button.hoverstyle = "{\\c&H" .. osc_color_convert(user_opts.hover_effect_color) .. "&" .. (contains(user_opts.hover_effect, "size") and string.format("\\fscx%s\\fscy%s", user_opts.hover_button_size, user_opts.hover_button_size) or "") .. "}"
 
-        -- Minimize: 🗕
-        lo = add_layout("minimize")
-        lo.geometry = first_geo
-        lo.style = osc_styles.window_control
-        lo.button.hoverstyle = "{\\c&H" .. osc_color_convert(user_opts.windowcontrols_min_hover) .. "&" .. (contains(user_opts.hover_effect, "size") and string.format("\\fscx%s\\fscy%s", user_opts.hover_button_size, user_opts.hover_button_size) or "") .. "}"
-
-        -- Maximize: 🗖 /🗗
-        lo = add_layout("maximize")
-        lo.geometry = second_geo
-        lo.style = osc_styles.window_control
-        lo.button.hoverstyle = "{\\c&H" .. osc_color_convert(user_opts.windowcontrols_max_hover) .. "&" .. (contains(user_opts.hover_effect, "size") and string.format("\\fscx%s\\fscy%s", user_opts.hover_button_size, user_opts.hover_button_size) or "") .. "}"
-
-        add_area("window-controls", get_hitbox_coords(controlbox_left, wc_geo.y, wc_geo.an, controlbox_w, wc_geo.h))
+        add_area("window-controls", get_hitbox_coords(wc_geo.w - 60, wc_geo.y, wc_geo.an, 60, wc_geo.h))
     end
 
     -- Window Title
     if user_opts.show_window_title then
         lo = add_layout("windowtitle")
-        lo.geometry = {x = 20, y = button_y + 14, an = 1, w = osc_param.playresx - 50, h = wc_geo.h}
+        lo.geometry = {x = 20, y = button_y + 14, an = 1, w = osc_param.playresx - 70, h = wc_geo.h}
         lo.style = string.format("%s{\\clip(%f,%f,%f,%f)}", osc_styles.window_title, titlebox_left, wc_geo.y - wc_geo.h, titlebox_right, wc_geo.y + wc_geo.h)
 
         add_area("window-controls-title", titlebox_left, 0, titlebox_right, wc_geo.h)
@@ -3054,6 +3037,15 @@ local function osc_init()
     ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.fullscreen_mbtn_left_command)
     ne.eventresponder["mbtn_right_up"] = command_callback(user_opts.fullscreen_mbtn_right_command)
     visible_min_width = visible_min_width + (user_opts.fullscreen_button and 100 or 0)
+
+    --tog_fullscreen_top
+    ne = new_element("tog_fullscreen_top", "button")
+    ne.content = function () return state.fullscreen and icons.fullscreen_exit or icons.fullscreen end
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = function () return user_opts.tooltip_hints and (state.fullscreen and locale.exit_fullscreen or locale.fullscreen) or "" end
+    ne.visible = true
+    ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.fullscreen_mbtn_left_command)
+    ne.eventresponder["mbtn_right_up"] = command_callback(user_opts.fullscreen_mbtn_right_command)
 
     --tog_info
     ne = new_element("tog_info", "button")

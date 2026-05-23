@@ -25,9 +25,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const toast = document.getElementById('toast');
 
     function showToast(msg) {
+        if (toast.hideTimeout) clearTimeout(toast.hideTimeout);
         toast.innerText = msg;
         toast.style.opacity = '1';
-        setTimeout(() => toast.style.opacity = '0', 3000);
+        toast.style.transform = 'translateX(-50%) translateY(0)';
+        toast.hideTimeout = setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(-50%) translateY(20px)';
+        }, 3000);
     }
 
     function sortAlphaNum(a, b) {
