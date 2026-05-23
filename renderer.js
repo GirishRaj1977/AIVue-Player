@@ -2791,7 +2791,7 @@ window.iptvAPI.onMpvPropChange((name, value) => {
         
         if (window.pendingEpgUpdate) {
             const encoded = encodeURIComponent(JSON.stringify(window.pendingEpgUpdate));
-            // Broadcast to all scripts instead of modernz specifically, bypassing script naming issues
+            // Broadcast to all scripts instead of aivue specifically, bypassing script naming issues
             window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`);
             setTimeout(() => window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`), 500); // Failsafe delivery
             window.pendingEpgUpdate = null; // Only send once per playback
@@ -3980,13 +3980,13 @@ playerContainer.addEventListener('mousemove', (e) => {
         const rect = playerContainer.getBoundingClientRect();
         const x = Math.round(e.clientX - rect.left);
         const y = Math.round(e.clientY - rect.top);
-        window.iptvAPI.sendMpvCommand(`script-message-to modernz electron-mouse-move ${x} ${y}`);
+        window.iptvAPI.sendMpvCommand(`script-message-to aivue electron-mouse-move ${x} ${y}`);
     }
 });
 
 playerContainer.addEventListener('mouseleave', () => {
     console.log('[EVENT] playerContainer mouseleave');
-    window.iptvAPI.sendMpvCommand(`script-message-to modernz electron-mouse-leave`);
+    window.iptvAPI.sendMpvCommand(`script-message-to aivue electron-mouse-leave`);
 });
 
 let lastClickTime = 0;
@@ -4001,19 +4001,19 @@ playerContainer.addEventListener('mousedown', (e) => {
         lastClickTime = now;
     }
     const btn = e.button === 0 ? 'mbtn_left' : (e.button === 2 ? 'mbtn_right' : 'mbtn_mid');
-    window.iptvAPI.sendMpvCommand(`script-message-to modernz electron-mouse-click ${btn} down`);
+    window.iptvAPI.sendMpvCommand(`script-message-to aivue electron-mouse-click ${btn} down`);
 });
 
 playerContainer.addEventListener('mouseup', (e) => {
     console.log('[EVENT] playerContainer mouseup, button:', e.button);
     const btn = e.button === 0 ? 'mbtn_left' : (e.button === 2 ? 'mbtn_right' : 'mbtn_mid');
-    window.iptvAPI.sendMpvCommand(`script-message-to modernz electron-mouse-click ${btn} up`);
+    window.iptvAPI.sendMpvCommand(`script-message-to aivue electron-mouse-click ${btn} up`);
 });
 
 playerContainer.addEventListener('wheel', (e) => {
     console.log('[EVENT] playerContainer wheel, deltaY:', e.deltaY);
     const btn = e.deltaY < 0 ? 'wheel_up' : 'wheel_down';
-    window.iptvAPI.sendMpvCommand(`script-message-to modernz electron-mouse-click ${btn} press`);
+    window.iptvAPI.sendMpvCommand(`script-message-to aivue electron-mouse-click ${btn} press`);
 });
 
 // Wire up the Exit button to gracefully tear down the app

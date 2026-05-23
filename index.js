@@ -1217,7 +1217,7 @@ function initMpv() {
     const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
     const mpvPath = process.platform === 'win32' ? path.join(baseDir, 'bin', 'mpv.exe') : 'mpv';
     const binDir = path.join(baseDir, 'bin');
-    const luaScript = path.join(binDir, 'scripts', 'modernz.lua');
+    const luaScript = path.join(binDir, 'scripts', 'aivue.lua');
     
     const mpvArgs = [
         `--wid=${wid}`,
@@ -1237,7 +1237,7 @@ function initMpv() {
         `--config-dir=${binDir}`, 
         `--load-scripts=no`,    
         `--script=${luaScript}`,
-        `--script-opts=modernz-osc_on_start=yes,modernz-bottomhover=no,modernz-window_controls=yes,modernz-playlist_button=no,modernz-info_button=no,modernz-ontop_button=no,modernz-jump_buttons=no,modernz-chapter_skip_buttons=no,modernz-track_nextprev_buttons=yes`,
+        `--script-opts=aivue-osc_on_start=yes,aivue-bottomhover=no,aivue-window_controls=yes,aivue-playlist_button=no,aivue-info_button=no,aivue-ontop_button=no,aivue-jump_buttons=no,aivue-chapter_skip_buttons=no,aivue-track_nextprev_buttons=yes`,
         `--input-cursor=yes`,   
         `--input-vo-keyboard=yes`, 
         `--osc=no`,             
