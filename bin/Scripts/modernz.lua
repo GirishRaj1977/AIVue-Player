@@ -321,6 +321,7 @@ local icon_theme = {
         play = "\238\166\143",
         pause = "\238\163\140",
         replay = "\238\189\191",
+        stop = "\239\156\171",
         previous = "\239\152\167",
         next = "\239\149\168",
         rewind = "\238\168\158",
@@ -369,6 +370,7 @@ local icon_theme = {
         play = '\243\176\144\138',
         pause = '\243\176\143\164',
         replay = '\243\176\145\153',
+        stop = '\243\176\147\155',
         previous = '\243\176\146\171',
         next = '\243\176\146\172',
         rewind = '\243\176\145\159',
@@ -441,6 +443,7 @@ local language = {
         play = "Play",
         pause = "Pause",
         replay = "Replay",
+        stop = "Stop",
         jump_backward = "Jump backward",
         jump_forward = "Jump forward",
         previous_chapter = "Previous chapter",
@@ -1954,42 +1957,46 @@ layouts["modern"] = function ()
     -- buttons
     if track_nextprev_buttons then
         lo = add_layout("playlist_prev")
-        lo.geometry = {x = refX - (60 + (chapter_skip_buttons and 60 or 0)) - offset, y = refY - 35, an = 5, w = 30, h = 24}
+        lo.geometry = {x = refX - 25 - (60 + (chapter_skip_buttons and 60 or 0)) - offset, y = refY - 35, an = 5, w = 30, h = 24}
         lo.style = osc_styles.control_2
         lo.layer = 52
     end
 
     if chapter_skip_buttons then
         lo = add_layout("chapter_backward")
-        lo.geometry = {x = refX - 60 - offset, y = refY - 35, an = 5, w = 30, h = 24}
+        lo.geometry = {x = refX - 25 - 60 - offset, y = refY - 35, an = 5, w = 30, h = 24}
         lo.style = osc_styles.control_2
     end
 
     if jump_buttons then
         lo = add_layout("jump_backward")
-        lo.geometry = {x = refX - 60, y = refY - 35, an = 5, w = 30, h = 24}
+        lo.geometry = {x = refX - 25 - 60, y = refY - 35, an = 5, w = 30, h = 24}
         lo.style = (user_opts.jump_icon_number and icons.jump[user_opts.jump_amount] ~= nil) and osc_styles.control_2 or osc_styles.control_2_flip
     end
 
     lo = add_layout("play_pause")
-    lo.geometry = {x = refX, y = refY - 35, an = 5, w = 45, h = 28}
+    lo.geometry = {x = refX - 25, y = refY - 35, an = 5, w = 45, h = 28}
     lo.style = osc_styles.control_1
+
+    lo = add_layout("stop")
+    lo.geometry = {x = refX + 25, y = refY - 35, an = 5, w = 40, h = 28}
+    lo.style = osc_styles.control_2
 
     if jump_buttons then
         lo = add_layout("jump_forward")
-        lo.geometry = {x = refX + 60, y = refY - 35, an = 5, w = 30, h = 24}
+        lo.geometry = {x = refX + 25 + 60, y = refY - 35, an = 5, w = 30, h = 24}
         lo.style = osc_styles.control_2
     end
 
     if chapter_skip_buttons then
         lo = add_layout("chapter_forward")
-        lo.geometry = {x = refX + 60 + offset, y = refY - 35, an = 5, w = 30, h = 24}
+        lo.geometry = {x = refX + 25 + 60 + offset, y = refY - 35, an = 5, w = 30, h = 24}
         lo.style = osc_styles.control_2
     end
 
     if track_nextprev_buttons then
         lo = add_layout("playlist_next")
-        lo.geometry = {x = refX + (60 + (chapter_skip_buttons and 60 or 0)) + offset, y = refY - 35, an = 5, w = 30, h = 24}
+        lo.geometry = {x = refX + 25 + (60 + (chapter_skip_buttons and 60 or 0)) + offset, y = refY - 35, an = 5, w = 30, h = 24}
         lo.style = osc_styles.control_2
         lo.layer = 52
     end
@@ -2270,6 +2277,11 @@ layouts["modern-compact"] = function ()
     local start_x = 50
 
     lo = add_layout("play_pause")
+    lo.geometry = {x = start_x, y = refY - 35, an = 5, w = 24, h = 24}
+    lo.style = osc_styles.control_2
+    start_x = start_x + 55
+
+    lo = add_layout("stop")
     lo.geometry = {x = start_x, y = refY - 35, an = 5, w = 24, h = 24}
     lo.style = osc_styles.control_2
     start_x = start_x + 55
@@ -2814,6 +2826,17 @@ local function osc_init()
             state.playlist_loop = not state.playlist_loop
             mp.set_property_native("loop-playlist", (state.playlist_loop and "inf" or "no"))
         end
+    end
+
+    --stop
+    ne = new_element("stop", "button")
+    ne.content = function ()
+        return icons.stop
+    end
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = user_opts.tooltip_hints and locale.stop or ""
+    ne.eventresponder["mbtn_left_up"] = function ()
+        mp.command("stop")
     end
 
     local jump_amount = user_opts.jump_amount
