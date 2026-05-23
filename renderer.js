@@ -410,7 +410,7 @@ aeroStyles.textContent = `
         display: flex !important;
         flex-direction: column !important;
         justify-content: flex-start !important;
-        padding-top: 20px !important;
+        padding-top: 65px !important;
         gap: 10px !important;
     }
     .nav-btn {
