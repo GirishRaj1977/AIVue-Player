@@ -2087,6 +2087,7 @@ function renderPlaylists() {
         let totalPrograms = 0;
         if (playlist.channels) {
             playlist.channels.forEach(ch => {
+                if (ch.type !== 'live') return;
                 let isMapped = false;
                 if (ch.title && channelMappings[ch.title]) {
                     isMapped = true;
@@ -2113,7 +2114,7 @@ function renderPlaylists() {
             }
         }
 
-        let totalChannels = playlist.channels ? playlist.channels.length : 0;
+        let totalChannels = 0;
         let enabledChannels = 0;
         let disabledChannels = 0;
         let groups = new Set();
@@ -2121,6 +2122,8 @@ function renderPlaylists() {
         
         if (playlist.channels) {
             playlist.channels.forEach(ch => {
+                if (ch.type !== 'live') return;
+                totalChannels++;
                 groups.add(ch.group || 'Uncategorized');
                 if (ch.disabled) {
                     disabledChannels++;

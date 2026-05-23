@@ -843,7 +843,7 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             let channels = [];
             playlists.forEach(p => {
                 if (p.channels && !p.disabled) {
-                    channels.push(...p.channels.filter(c => !c.disabled).map(c => ({...c, playlistId: p.id, playlistName: p.name})));
+                    channels.push(...p.channels.filter(c => !c.disabled && c.type === 'live').map(c => ({...c, playlistId: p.id, playlistName: p.name})));
                 }
             });
             res.json(channels);

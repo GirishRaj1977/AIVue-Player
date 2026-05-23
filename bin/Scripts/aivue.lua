@@ -1,14 +1,3 @@
--- ModernZ v0.3.0 (https://github.com/Samillion/ModernZ)
---
--- This script is a derivative of the original mpv-osc-modern by maoiscat
--- and subsequent forks:
---   * cyl0/ModernX
---   * dexeonify/ModernX
---
--- It is based on the official osc.lua from mpv, licensed under the
--- GNU Lesser General Public License v2.1 (LGPLv2.1).
--- Full license: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
-
 local assdraw = require "mp.assdraw"
 local msg = require "mp.msg"
 local opt = require "mp.options"
@@ -321,7 +310,7 @@ local icon_theme = {
         play = "\238\166\143",
         pause = "\238\163\140",
         replay = "\238\189\191",
-        stop = "\239\156\171",
+        stop = "\239\156\170",
         previous = "\239\152\167",
         next = "\239\149\168",
         rewind = "\238\168\158",
