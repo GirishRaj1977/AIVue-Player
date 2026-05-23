@@ -6154,21 +6154,3 @@ function updateMpvEpgPayload(title, overview, time) {
     }
 }
 
-// Global scroll/focus debug instrumentation
-window.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        const settingsView = document.getElementById('settings-view');
-        if (settingsView) {
-            settingsView.addEventListener('scroll', (e) => {
-                if (settingsView.style.display !== 'none') {
-                    window.iptvAPI.logDebug(`settings-view scrolled to: ${settingsView.scrollTop}`);
-                }
-            });
-        }
-        document.addEventListener('focusin', (e) => {
-            if (settingsView && settingsView.style.display !== 'none') {
-                window.iptvAPI.logDebug(`Element focused: ${e.target.id || e.target.className || e.target.tagName} (activeElement: ${document.activeElement ? (document.activeElement.id || document.activeElement.className || document.activeElement.tagName) : 'null'})`);
-            }
-        });
-    }, 1500);
-});

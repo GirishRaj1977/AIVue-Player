@@ -48,6 +48,5 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     saveTmdbConfig: (config) => ipcRenderer.invoke('save-tmdb-config', config),
     fetchTmdbByTitle: (params) => ipcRenderer.invoke('fetch-tmdb-by-title', params),
     fetchTmdbById: (params) => ipcRenderer.invoke('fetch-tmdb-by-id', params),
-    fetchTmdbSeasonEpisodes: (params) => ipcRenderer.invoke('fetch-tmdb-season-episodes', params),
-    logDebug: (msg) => ipcRenderer.send('log-debug', msg)
+    fetchTmdbSeasonEpisodes: (params) => ipcRenderer.invoke('fetch-tmdb-season-episodes', params)
 });

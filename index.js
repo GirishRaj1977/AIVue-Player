@@ -1537,10 +1537,6 @@ ipcMain.on('copy-to-clipboard', (event, text) => {
     clipboard.writeText(text);
 });
 
-ipcMain.on('log-debug', (event, msg) => {
-    console.log('[RENDERER DEBUG]', msg);
-});
-
 // M3U Parsing backend wrapper
 ipcMain.handle('parse-m3u', async (event, source, epgSource, mappings, forceRefresh) => {
     console.log('[IPC HANDLE] parse-m3u START', { source, epgSource, mappings, forceRefresh });
@@ -2888,17 +2884,7 @@ ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, is
             console.log(`[PERF] Fallback Page Fetch Phase completed in ${fallbackDuration}ms. Items returned: ${itemList.length}`);
         }
         
-        if (itemList.length > 0) {
-            console.log(`[PERF DEBUG] First raw item keys:`, Object.keys(itemList[0] || {}));
-            console.log(`[PERF DEBUG] First raw item full:`, JSON.stringify(itemList[0], null, 2));
-            console.log(`[SERIES OBJECT DEBUG]`);
-            console.log(`[ID FIELD]`, itemList[0].id);
-            console.log(`[MOVIE_ID FIELD]`, itemList[0].movie_id);
-            console.log(`[VIDEO_ID FIELD]`, itemList[0].video_id);
-            console.log(`[SERIES FIELD]`, itemList[0].series);
-        } else {
-            console.log(`[PERF WARNING] Portal returned 0 raw items for this category!`);
-        }
+
 
         const parseStart = Date.now();
         let result = [];
