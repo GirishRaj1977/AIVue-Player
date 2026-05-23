@@ -3797,6 +3797,13 @@ let previousTabId = 'playlist';
 
 function switchTab(tabId, clickedBtn) {
     console.log('[UI] Switching tab to:', tabId);
+    
+    // Close any open overlay modals when navigating away
+    const detailsModal = document.getElementById('premium-details-modal');
+    if (detailsModal) detailsModal.style.display = 'none';
+    const episodesModal = document.getElementById('episodes-modal');
+    if (episodesModal) episodesModal.style.display = 'none';
+
     if (currentTabId !== tabId) {
         previousTabId = currentTabId;
         currentTabId = tabId;
@@ -4210,6 +4217,12 @@ async function openMovieDetailsModal(streamInfo) {
     }
     
     if (tmdbData) {
+        if (tmdbData.logo_path) {
+            document.getElementById('details-title').innerHTML = `<img src="${tmdbData.logo_path}" alt="${(tmdbData.title || streamInfo.title).replace(/"/g, '&quot;')}" style="max-height: 120px; max-width: 100%; object-fit: contain; filter: drop-shadow(0 4px 15px rgba(0,0,0,0.8));">`;
+        } else if (tmdbData.title) {
+            document.getElementById('details-title').textContent = tmdbData.title;
+        }
+
         if (tmdbData.backdrop_path) {
             document.getElementById('details-backdrop-banner').style.backgroundImage = `linear-gradient(to top, #181818, rgba(24, 24, 24, 0.7) 40%, rgba(24, 24, 24, 0) 80%), url(${tmdbData.backdrop_path})`;
         }

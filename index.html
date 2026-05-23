@@ -538,14 +538,15 @@
     <div id="episodes-modal" style="display: none; position: fixed; top: 12px; left: 88px; width: calc(100vw - 100px); height: calc(100vh - 24px); background: #121212; z-index: 1000; border: 1px solid #e0e0e0; border-radius: 12px; box-sizing: border-box; overflow: hidden;">
         <div style="background: rgba(30,30,30,0.75); width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden;">
             <!-- Modal Header -->
-            <div style="padding: 20px 25px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center; background: rgba(40,40,40,0.4);">
+            <div style="padding: 20px 25px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 20px; background: rgba(40,40,40,0.4);">
+                <button id="episodes-modal-close" class="playlist-btn" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 16px; transition: 0.2s; font-weight: 500;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    Back
+                </button>
                 <div>
                     <h2 id="episodes-modal-title" style="margin: 0; color: #bb86fc; font-family: 'Outfit', 'Inter', sans-serif;">Series Title</h2>
                     <p id="episodes-modal-subtitle" style="margin: 5px 0 0 0; color: #888; font-size: 0.9em;">Select a season and episode to play</p>
                 </div>
-                <button id="episodes-modal-close" style="background: rgba(255,255,255,0.05); border: none; width: 36px; height: 36px; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s;">
-                    <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: currentColor;"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-                </button>
             </div>
             
             <!-- Modal Body (Two column layout: Seasons Sidebar Frame left, Episodes Main View Frame right) -->
@@ -583,9 +584,10 @@
     <div id="premium-details-modal" style="display: none; position: fixed; top: 12px; left: 88px; width: calc(100vw - 100px); height: calc(100vh - 24px); background: #121212; z-index: 1001; border: 1px solid #e0e0e0; border-radius: 12px; box-sizing: border-box; overflow: hidden;">
         <div style="background: #181818; width: 100%; height: 100%; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; position: relative; scrollbar-width: none;">
             
-            <!-- Close Button -->
-            <button id="premium-details-close" style="position: absolute; top: 20px; right: 20px; z-index: 10; background: rgba(0, 0, 0, 0.5); border: none; width: 40px; height: 40px; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; border: 1px solid rgba(255,255,255,0.1);">
-                <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: currentColor;"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            <!-- Back Button -->
+            <button id="premium-details-close" class="playlist-btn" style="position: absolute; top: 20px; left: 20px; z-index: 10; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 16px; transition: all 0.2s ease; font-weight: 500; font-size: 1em; backdrop-filter: blur(4px);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Back
             </button>
 
             <!-- Backdrop Banner Section -->

@@ -170,7 +170,7 @@ async function cleanTitleForSearch(title) {
 }
 
 async function fetchDetails(tmdbId, tmdbType, headers) {
-    let url = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?append_to_response=credits,recommendations`;
+    let url = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?append_to_response=credits,recommendations,images&include_image_language=en,null`;
     if (tmdbConfig.apiToken) {
         // Bearer auth in headers
     } else if (tmdbConfig.apiKey) {
@@ -196,12 +196,20 @@ async function fetchDetails(tmdbId, tmdbType, headers) {
             }
         }
         
+        let logo_path = '';
+        if (data.images && data.images.logos && data.images.logos.length > 0) {
+            const enLogo = data.images.logos.find(l => l.iso_639_1 === 'en');
+            const bestLogo = enLogo || data.images.logos[0];
+            logo_path = `https://image.tmdb.org/t/p/w500${bestLogo.file_path}`;
+        }
+        
         return {
             tmdbId: String(data.id),
             title: data.title || data.name || 'Unknown Title',
             overview: data.overview || 'No description available.',
             backdrop_path: data.backdrop_path ? `https://image.tmdb.org/t/p/original${data.backdrop_path}` : '',
             poster_path: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : '',
+            logo_path,
             vote_average: data.vote_average ? data.vote_average.toFixed(1) : 'N/A',
             release_date: data.release_date || data.first_air_date || 'N/A',
             genres: data.genres || [],
@@ -542,7 +550,7 @@ function createWindow() {
 
 function syncPlayerWindow() {
     console.log('[SYNC] Syncing player window bounds');
-    if (playerWindow && mainWindow && !mainWindow.isDestroyed() && currentDOMBounds) {
+    if (playerWindow && !playerWindow.isDestroyed() && mainWindow && !mainWindow.isDestroyed() && currentDOMBounds) {
         if (!isMpvReady || currentDOMBounds.width === 0 || currentDOMBounds.height === 0 || !mainWindow.isVisible()) {
             playerWindow.setOpacity(0); // Make completely invisible (Bypasses OS bounds clamping)
             playerWindow.setBounds({ x: -10000, y: -10000, width: 10, height: 10 });
@@ -1269,6 +1277,7 @@ function initMpv() {
         if (playerWindow && !playerWindow.isDestroyed()) {
             playerWindow.destroy();
         }
+        playerWindow = null;
         mpvProcess = null;
     });
 }
