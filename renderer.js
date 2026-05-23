@@ -6971,6 +6971,24 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+function updateHeaderTime() {
+    const el = document.getElementById('header-time-date');
+    if (!el) return;
+    const now = new Date();
+    
+    const weekday = now.toLocaleDateString('en-US', { weekday: 'short' });
+    const month = now.toLocaleDateString('en-US', { month: 'short' });
+    const day = now.getDate();
+    
+    let hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    
+    el.textContent = `${weekday} • ${month} ${day} • ${hours}:${minutes} ${ampm}`;
+}
+
 // Hide the sidebar & title when the app goes fullscreen so the video takes up 100% of the monitor
 window.iptvAPI.onFullscreenChange((isFullscreen) => {
     console.log('[API RECV] onFullscreenChange, isFullscreen:', isFullscreen);
@@ -6981,11 +6999,13 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
     const liveBottomHalf = document.getElementById('live-bottom-half');
     const liveTopHalf = document.getElementById('live-top-half');
     const playerWrapper = document.getElementById('player-wrapper');
+    const topHeader = document.getElementById('top-header');
     
     const isLiveViewActive = document.getElementById('btn-live-tv').classList.contains('active');
 
     if (sidebar) sidebar.style.setProperty('display', (isFullscreen || !isLiveViewActive) ? 'none' : 'flex', 'important');
     if (navBar) navBar.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
+    if (topHeader) topHeader.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
     
     if (channelDetails) channelDetails.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
     if (liveBottomHalf) liveBottomHalf.style.setProperty('display', isFullscreen ? 'none' : 'block', 'important');
@@ -7004,7 +7024,7 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
             playerWrapper.style.setProperty('padding', '1px', 'important');
             playerWrapper.style.setProperty('background-color', '#333', 'important');
             playerWrapper.style.setProperty('border-radius', '0', 'important');
-            document.body.style.setProperty('padding', '12px', 'important');
+            document.body.style.setProperty('padding', '32px 12px 12px 12px', 'important');
             document.body.style.setProperty('gap', '12px', 'important');
             if (liveTopHalf) liveTopHalf.style.setProperty('gap', '12px', 'important');
         }
@@ -7094,6 +7114,10 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize premium details modal events
     initDetailsModalEvents();
+
+    // Initialize premium top header clock
+    updateHeaderTime();
+    setInterval(updateHeaderTime, 1000);
 
     // Hide all main view containers initially to prevent UI flash before data loads
     ['sidebar', 'main-view', 'playlist-view', 'epg-view', 'settings-view'].forEach(id => {
