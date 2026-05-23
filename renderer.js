@@ -7024,7 +7024,7 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
             playerWrapper.style.setProperty('padding', '1px', 'important');
             playerWrapper.style.setProperty('background-color', '#333', 'important');
             playerWrapper.style.setProperty('border-radius', '0', 'important');
-            document.body.style.setProperty('padding', '32px 12px 12px 12px', 'important');
+            document.body.style.setProperty('padding', '60px 12px 12px 12px', 'important');
             document.body.style.setProperty('gap', '12px', 'important');
             if (liveTopHalf) liveTopHalf.style.setProperty('gap', '12px', 'important');
         }
