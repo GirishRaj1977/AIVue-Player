@@ -449,20 +449,20 @@ aeroStyles.textContent = `
         min-width: 0 !important;
         min-height: 0 !important;
         overflow: hidden !important;
-        gap: 16px !important;
+        gap: 6px !important;
         padding: 0 12px 12px 0 !important; /* Visual padding wrapper around panels */
     }
     #live-top-half {
         display: flex !important;
         flex-direction: row !important;
-        height: 50% !important;
+        height: 65% !important;
         width: 100% !important;
-        gap: 16px !important;
+        gap: 12px !important;
         min-width: 0 !important;
         min-height: 0 !important;
     }
     #live-bottom-half {
-        height: 50% !important;
+        height: 35% !important;
         width: 100% !important;
         min-width: 0 !important;
         min-height: 0 !important;
@@ -7010,7 +7010,7 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
     if (channelDetails) channelDetails.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
     if (liveBottomHalf) liveBottomHalf.style.setProperty('display', isFullscreen ? 'none' : 'block', 'important');
     
-    if (liveTopHalf) liveTopHalf.style.setProperty('height', isFullscreen ? '100%' : '50%', 'important');
+    if (liveTopHalf) liveTopHalf.style.setProperty('height', isFullscreen ? '100%' : '65%', 'important');
     
     if (playerWrapper) {
         if (isFullscreen) {
@@ -7024,7 +7024,7 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
             playerWrapper.style.setProperty('padding', '1px', 'important');
             playerWrapper.style.setProperty('background-color', '#333', 'important');
             playerWrapper.style.setProperty('border-radius', '0', 'important');
-            document.body.style.setProperty('padding', '60px 12px 12px 12px', 'important');
+            document.body.style.setProperty('padding', '108px 12px 12px 12px', 'important');
             document.body.style.setProperty('gap', '12px', 'important');
             if (liveTopHalf) liveTopHalf.style.setProperty('gap', '12px', 'important');
         }
