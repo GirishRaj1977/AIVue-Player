@@ -1537,6 +1537,10 @@ ipcMain.on('copy-to-clipboard', (event, text) => {
     clipboard.writeText(text);
 });
 
+ipcMain.on('log-debug', (event, msg) => {
+    console.log('[RENDERER DEBUG]', msg);
+});
+
 // M3U Parsing backend wrapper
 ipcMain.handle('parse-m3u', async (event, source, epgSource, mappings, forceRefresh) => {
     console.log('[IPC HANDLE] parse-m3u START', { source, epgSource, mappings, forceRefresh });
@@ -2678,6 +2682,33 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
     }
 });
 
+const COUNTRY_CODES = new Set([
+    "US", "USA", "UK", "GBR", "CA", "CAN", "FR", "FRA", "DE", "DEU", "ES", "ESP", "IT", "ITA", 
+    "AR", "ARG", "MX", "MEX", "IN", "IND", "BR", "BRA", "PT", "PRT", "TR", "TUR", "RU", "RUS", 
+    "NL", "NLD", "PL", "POL", "BE", "BEL", "SE", "SWE", "NO", "NOR", "DK", "DNK", "FI", "FIN", 
+    "PK", "PAK", "AU", "AUS", "NZ", "NZL", "ZA", "ZAF", "CH", "CHE", "AT", "AUT", "IE", "IRL", 
+    "GR", "GRC", "CN", "CHN", "JP", "JPN", "KR", "KOR", "EN", "ENG", "LAT", "SPA", "GER", 
+    "POR", "ARA", "ARAB", "HE", "ISR", "IT", "RO", "ROM", "BG", "BGR", "HU", "HUN", "CZ", "CZE", 
+    "SK", "SVK", "HR", "HRV", "RS", "SRB", "SI", "SVN", "UA", "UKR", "KZ", "KAZ", "UZ", "UZB", 
+    "AL", "ALB", "MK", "MKD", "TH", "THA", "VN", "VNM", "PH", "PHL", "MY", "MYS", "ID", "IDN", 
+    "SG", "SGP", "HK", "HKG", "TW", "TWN"
+]);
+
+const countryCodesSorted = Array.from(COUNTRY_CODES).sort((a, b) => b.length - a.length);
+const countryPatternStr = countryCodesSorted.join('|');
+const countryPrefixRegex = new RegExp(`^(?:\\[(?:${countryPatternStr})\\]|\\((?:${countryPatternStr})\\)|(?:${countryPatternStr})\\s*[:|#\\- ]\\s*)\\s*`, 'i');
+
+function trimCountryPrefix(text) {
+    if (!text || typeof text !== 'string') return text;
+    let prev = "";
+    let current = text.trim();
+    while (prev !== current) {
+        prev = current;
+        current = current.replace(countryPrefixRegex, '').trim();
+    }
+    return current;
+}
+
 ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
     try {
         console.log('[STALKER IPC] Starting Stalker parsing for url:', url, 'mac:', mac);
@@ -2703,7 +2734,7 @@ ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
         try {
             const catRes = await stalkerRequest(url, mac, 'get_genres', { type: 'itv' });
             const catData = catRes.js?.data || (Array.isArray(catRes.js) ? catRes.js : []);
-            itvCategories = catData.map(c => ({ id: c.id, name: c.title || c.name || 'Live TV' }));
+            itvCategories = catData.map(c => ({ id: c.id, name: trimCountryPrefix(c.title || c.name || 'Live TV') }));
             
             itvCategories.forEach(c => {
                 allParsed.push({
@@ -2737,8 +2768,9 @@ ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
             const catData = catRes.js?.data || (Array.isArray(catRes.js) ? catRes.js : []);
             
             catData.forEach(cat => {
-                const name = cat.title || cat.name || cat.category_name || 'VOD';
-                const isSeries = name.toLowerCase().match(/(tv|series|show)/);
+                const rawName = cat.title || cat.name || cat.category_name || 'VOD';
+                const name = trimCountryPrefix(rawName);
+                const isSeries = rawName.toLowerCase().match(/(tv|series|show)/);
                 if (isSeries) {
                     allParsed.push({
                         tvg_id: cat.id,
@@ -2772,7 +2804,7 @@ ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
             const seriesCatData = seriesCatRes.js?.data || (Array.isArray(seriesCatRes.js) ? seriesCatRes.js : []);
             
             seriesCatData.forEach(cat => {
-                const name = cat.title || cat.name || cat.category_name || 'Series';
+                const name = trimCountryPrefix(cat.title || cat.name || cat.category_name || 'Series');
                 allParsed.push({
                     tvg_id: cat.id,
                     tvg_name: name,
@@ -2874,10 +2906,10 @@ ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, is
         if (categoryType === 'itv') {
             result = itemList.map(c => ({
                 tvg_id: String(c.id || c.ch_id || c.tvg_id || ''),
-                tvg_name: c.name || '',
-                title: c.name || 'Unknown Channel',
+                tvg_name: trimCountryPrefix(c.name || ''),
+                title: trimCountryPrefix(c.name || 'Unknown Channel'),
                 logo: c.logo ? (c.logo.startsWith('http') ? c.logo : `${url.substring(0, url.lastIndexOf('/'))}/${c.logo}`) : '',
-                group: categoryName || 'Live TV',
+                group: trimCountryPrefix(categoryName || 'Live TV'),
                 url: `stalker-cmd:itv|${c.cmd || ''}`,
                 type: 'live'
             }));
@@ -2888,20 +2920,20 @@ ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, is
                 return isSeries ? isItemSeries : !isItemSeries;
             }).map(m => {
                 if (isSeries || params.type === 'series') {
-                // Fix: m.series can be an empty array []. In JS, [] is truthy.
-                // Prioritize m.id per Stalker standard, ignoring empty arrays.
-                let seriesId = m.id || m.video_id || m.series_id || m.movie_id || '';
-                if (m.series && !Array.isArray(m.series) && typeof m.series !== 'object') {
-                    seriesId = m.series;
-                }
+                    // Fix: m.series can be an empty array []. In JS, [] is truthy.
+                    // Prioritize m.id per Stalker standard, ignoring empty arrays.
+                    let seriesId = m.id || m.video_id || m.series_id || m.movie_id || '';
+                    if (m.series && !Array.isArray(m.series) && typeof m.series !== 'object') {
+                        seriesId = m.series;
+                    }
                     return {
                         id: seriesId,
                         tvg_id: seriesId,
-                        name: m.name || 'Unknown Series',
+                        name: trimCountryPrefix(m.name || 'Unknown Series'),
                         logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
                         url: `stalker-series:${seriesId}`,
                         type: 'series',
-                        group: categoryName || 'Series',
+                        group: trimCountryPrefix(categoryName || 'Series'),
                         tmdb_id: m.tmdb_id || m.tmdbId || m.tmdb || ''
                     };
                 } else {
@@ -2909,11 +2941,11 @@ ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, is
                     return {
                         id: movieId,
                         tvg_id: movieId,
-                        name: m.name || 'Unknown Movie',
+                        name: trimCountryPrefix(m.name || 'Unknown Movie'),
                         logo: m.logo ? (m.logo.startsWith('http') ? m.logo : `${url.substring(0, url.lastIndexOf('/'))}/${m.logo}`) : '',
                         url: `stalker-cmd:vod|${m.cmd || ''}`,
                         type: 'movie',
-                        group: categoryName || 'Movies',
+                        group: trimCountryPrefix(categoryName || 'Movies'),
                         tmdb_id: m.tmdb_id || m.tmdbId || m.tmdb || ''
                     };
                 }

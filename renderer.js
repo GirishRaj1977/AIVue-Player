@@ -275,6 +275,33 @@ aeroStyles.textContent = `
         min-width: 100px;
         white-space: nowrap;
     }
+
+    .settings-menu-btn {
+        background: transparent;
+        border: none;
+        color: #888;
+        padding: 10px 15px;
+        text-align: left;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 0.95em;
+        font-family: 'Outfit', 'Inter', sans-serif;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .settings-menu-btn:hover {
+        color: #bb86fc;
+        background: rgba(187, 134, 252, 0.08);
+    }
+    .settings-menu-btn.active {
+        color: #000 !important;
+        background: #bb86fc !important;
+        font-weight: bold !important;
+    }
 `;
 document.head.appendChild(aeroStyles);
 
@@ -552,7 +579,21 @@ function renderMappingColumns() {
     const mappedListEl = document.getElementById('mapping-mapped-list');
     if (!channelListEl || !epgListEl || !mappedListEl) return;
 
-    // Save current scroll positions
+    // Blur active element inside mapping columns to prevent focus-loss scroll resetting
+    if (document.activeElement && (
+        channelListEl.contains(document.activeElement) ||
+        epgListEl.contains(document.activeElement) ||
+        mappedListEl.contains(document.activeElement)
+    )) {
+        document.activeElement.blur();
+    }
+
+    // Save outer settings scroll container position to prevent screen scroll jumping/resetting to top
+    const settingsView = document.getElementById('settings-view');
+    const settingsScrollTop = settingsView ? settingsView.scrollTop : 0;
+    const docScrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+
+    // Save current column scroll positions
     const chScrollTop = channelListEl.scrollTop;
     const epgScrollTop = epgListEl.scrollTop;
     const mappedScrollTop = mappedListEl.scrollTop;
@@ -715,15 +756,67 @@ function renderMappingColumns() {
     });
     mappedListEl.innerHTML = mappedHtmlArr.length ? mappedHtmlArr.join('') : '<div style="color: #888; text-align: center; margin-top: 20px;">No mappings yet.</div>';
 
-    // Restore scroll positions
+    // Restore scroll positions synchronously
     channelListEl.scrollTop = chScrollTop;
     epgListEl.scrollTop = epgScrollTop;
     mappedListEl.scrollTop = mappedScrollTop;
 
+    // Restore outer settings scroll position
+    if (settingsView) {
+        settingsView.scrollTop = settingsScrollTop;
+    }
+    document.documentElement.scrollTop = docScrollTop;
+    document.body.scrollTop = docScrollTop;
+
+    // Restore focus to a stable EPG mapping element to prevent global focus-recovery timer from resetting scroll
+    const restoreEpgMappingFocus = () => {
+        if (mappingSelectedChannel) {
+            const safeTitle = mappingSelectedChannel.replace(/"/g, '&quot;');
+            const targetEl = channelListEl.querySelector(`.mapping-ch-item[data-title="${safeTitle}"]`);
+            if (targetEl) {
+                targetEl.focus();
+                return;
+            }
+        }
+        if (mappingSelectedEpg) {
+            const safeId = mappingSelectedEpg.replace(/"/g, '&quot;');
+            const targetEl = epgListEl.querySelector(`.mapping-epg-item[data-id="${safeId}"]`);
+            if (targetEl) {
+                targetEl.focus();
+                return;
+            }
+        }
+        // Fallback: focus mapping search inputs so activeElement is never body
+        const chSearchEl = document.getElementById('mapping-channel-search');
+        if (chSearchEl && (document.activeElement === document.body || !document.activeElement)) {
+            chSearchEl.focus();
+        }
+    };
+
+    restoreEpgMappingFocus();
+
+    // Failsafe: Restore scroll positions in the next tick to override any async browser scroll-to-top on focus shift
+    setTimeout(() => {
+        channelListEl.scrollTop = chScrollTop;
+        epgListEl.scrollTop = epgScrollTop;
+        mappedListEl.scrollTop = mappedScrollTop;
+        if (settingsView) {
+            settingsView.scrollTop = settingsScrollTop;
+        }
+        document.documentElement.scrollTop = docScrollTop;
+        document.body.scrollTop = docScrollTop;
+        restoreEpgMappingFocus();
+    }, 0);
+
     // 4. Attach Event Listeners for the dynamic items
     document.querySelectorAll('.mapping-ch-item').forEach(el => {
         el.addEventListener('click', (e) => {
-            mappingSelectedChannel = el.getAttribute('data-title');
+            const title = el.getAttribute('data-title');
+            if (mappingSelectedChannel === title) {
+                mappingSelectedChannel = null;
+            } else {
+                mappingSelectedChannel = title;
+            }
             renderMappingColumns();
         });
     });
@@ -731,7 +824,12 @@ function renderMappingColumns() {
     document.querySelectorAll('.mapping-epg-item').forEach(el => {
         el.addEventListener('click', (e) => {
             if (e.target.closest('.mapping-confirm-btn')) return;
-            mappingSelectedEpg = el.getAttribute('data-id');
+            const id = el.getAttribute('data-id');
+            if (mappingSelectedEpg === id) {
+                mappingSelectedEpg = null;
+            } else {
+                mappingSelectedEpg = id;
+            }
             renderMappingColumns();
         });
     });
@@ -837,155 +935,168 @@ async function renderSettings() {
     }
 
     settingsView.innerHTML = `
-        <div style="padding: 20px; width: 100%; max-width: 1000px; margin: 0 auto; box-sizing: border-box; overflow-y: auto; overflow-x: hidden; min-width: 0;">
-            <h2 style="color: #bb86fc; border-bottom: 1px solid #333; padding-bottom: 15px; margin-top: 0;">Settings</h2>
+        <div style="display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; min-width: 0; align-items: flex-start; padding: 10px 0;">
+            <!-- Left Sticky Mini-Menu -->
+            <div style="width: 200px; flex-shrink: 0; position: sticky; top: 10px; background: rgba(30, 30, 30, 0.75); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid #333; border-radius: 12px; padding: 15px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); z-index: 10;">
+                <h3 style="color: #bb86fc; margin: 0 0 10px 0; font-size: 1.25em; font-family: 'Outfit', 'Inter', sans-serif; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">Settings</h3>
+                <button class="settings-menu-btn active" data-target="card-epg">EPG Sources</button>
+                <button class="settings-menu-btn" data-target="card-reminders">Reminders</button>
+                <button class="settings-menu-btn" data-target="card-mapping">Channel Mapping</button>
+                <button class="settings-menu-btn" data-target="card-remote">Remote Control</button>
+                <button class="settings-menu-btn" data-target="card-tmdb">TMDB Integration</button>
+                <button class="settings-menu-btn" data-target="card-danger">Danger Zone</button>
+            </div>
             
-            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
-                <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px;">External EPG Sources</h3>
-                <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Add multiple XMLTV EPG URLs to load automatically for your playlists. (Requires refreshing your playlist to take effect).</p>
-                <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
-                    <input type="text" id="settings-new-epg" placeholder="http://.../epg.xml" style="flex: 1; min-width: 250px; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
-                    <button id="settings-add-epg-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 20px; white-space: nowrap;">Add EPG</button>
+            <!-- Right Column Cards -->
+            <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 30px;">
+                <!-- External EPG Sources Card -->
+                <div id="card-epg" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                    <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">External EPG Sources</h3>
+                    <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Add multiple XMLTV EPG URLs to load automatically for your playlists. (Requires refreshing your playlist to take effect).</p>
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                        <input type="text" id="settings-new-epg" placeholder="http://.../epg.xml" style="flex: 1; min-width: 250px; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                        <button id="settings-add-epg-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 20px; white-space: nowrap;">Add EPG</button>
+                    </div>
+                    <div id="settings-epg-list">${epgListHtml || '<div style="color:#666; font-style: italic;">No external EPGs added.</div>'}</div>
                 </div>
-                <div id="settings-epg-list">${epgListHtml || '<div style="color:#666; font-style: italic;">No external EPGs added.</div>'}</div>
-            </div>
 
-            <!-- Reminders Card -->
-            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
-                <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px;">Upcoming Reminders</h3>
-                <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Manage your scheduled program notifications.</p>
-                <div id="settings-reminders-list" style="max-height: 300px; overflow-y: auto;">
-                    ${remindersHtml}
+                <!-- Reminders Card -->
+                <div id="card-reminders" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                    <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">Upcoming Reminders</h3>
+                    <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Manage your scheduled program notifications.</p>
+                    <div id="settings-reminders-list" style="max-height: 300px; overflow-y: auto;">
+                        ${remindersHtml}
+                    </div>
                 </div>
-            </div>
 
-            <!-- 3-Column Channel Mapping UI -->
-            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; height: 600px; min-width: 0;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
-                    <div style="flex: 1; min-width: 250px;">
-                        <h3 style="color: #e0e0e0; margin: 0;">Channel Mapping</h3>
-                        <p style="color: #888; font-size: 0.9em; margin: 5px 0 15px 0;">Select a channel on the left and an EPG on the right. Instant apply updates Live TV/Guide immediately.</p>
-                    </div>
-                    <button id="mapping-auto-map-btn" class="playlist-btn" style="background: #43CB44; color: black; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 0.9em; cursor: pointer; white-space: nowrap;">Auto Map</button>
-                </div>
-                
-                <div style="display: flex; gap: 15px; flex-grow: 1; min-height: 0; min-width: 0;">
-                    <!-- Left Column: Playlist Channels -->
-                    <div style="flex: 28; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; border-radius: 6px; overflow: hidden; min-width: 0;">
-                        <div style="padding: 10px; background: #252525; border-bottom: 1px solid #444;">
-                            <select id="mapping-playlist-filter" style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; margin-bottom: 8px;">
-                                <option value="all">All Playlists</option>
-                                ${savedPlaylists.map(p => `<option value="${p.id}" ${mappingSelectedPlaylist === String(p.id) ? 'selected' : ''}>${p.name}</option>`).join('')}
-                            </select>
-                            <input type="text" id="mapping-channel-search" placeholder="Search Channels..." style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; box-sizing: border-box;">
-                        </div>
-                        <div id="mapping-channel-list" style="flex-grow: 1; overflow-y: auto; padding: 10px;"></div>
-                    </div>
-                    
-                    <!-- Right Column: Available EPG Channels -->
-                    <div style="flex: 28; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; border-radius: 6px; overflow: hidden; min-width: 0;">
-                        <div style="padding: 10px; background: #252525; border-bottom: 1px solid #444;">
-                            <select id="mapping-epg-filter" style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; margin-bottom: 8px;">
-                                <option value="all">All EPG Sources</option>
-                            </select>
-                            <input type="text" id="mapping-epg-search" placeholder="Search EPG..." style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; box-sizing: border-box;">
-                        </div>
-                        <div id="mapping-epg-list" style="flex-grow: 1; overflow-y: auto; padding: 10px;">
-                            <div style="padding: 20px; text-align: center; color: #888;">Fetching EPG Data...</div>
-                        </div>
-                    </div>
-
-                    <!-- Right Column: Mapped List -->
-                    <div style="flex: 44; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; border-radius: 6px; overflow: hidden; min-width: 0;">
-                        <div style="padding: 10px; background: #252525; border-bottom: 1px solid #444;">
-                            <h3 style="color: #e0e0e0; margin: 0; font-size: 1em; padding: 6px 0; margin-bottom: 6px;">Mapped Channels</h3>
-                            <input type="text" id="mapping-mapped-search" placeholder="Search Mapped..." style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; box-sizing: border-box;">
-                        </div>
-                        <div id="mapping-mapped-list" style="flex-grow: 1; overflow-y: auto; padding: 10px;"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Remote Control -->
-            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
-                    <div>
-                        <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px;">Remote Control</h3>
-                        <p style="color: #888; font-size: 0.9em; margin: 0;">Control AIVue Player from your smartphone or tablet on the same Wi-Fi network.</p>
-                    </div>
-                    <label style="display: flex; align-items: center; cursor: pointer; background: #121212; padding: 8px 12px; border-radius: 6px; border: 1px solid #444;">
-                        <input type="checkbox" id="settings-remote-toggle" ${remoteSettings.enabled ? 'checked' : ''} style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
-                        <span id="settings-remote-status" style="color: ${remoteSettings.enabled ? '#43CB44' : '#cf6679'}; font-weight: bold;">${remoteSettings.enabled ? 'Enabled' : 'Disabled'}</span>
-                    </label>
-                </div>
-                
-                <div id="settings-remote-config" style="display: ${remoteSettings.enabled ? 'block' : 'none'}; border-top: 1px solid #333; padding-top: 20px; margin-top: 10px;">
-                    <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
-                        <div style="flex: 1; min-width: 150px;">
-                            <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Port</label>
-                            <input type="number" id="settings-remote-port" value="${port}" placeholder="8088" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
-                        </div>
-                        <div style="flex: 2; min-width: 200px;">
-                            <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Username (min 5 chars)</label>
-                            <input type="text" id="settings-remote-user" value="${remoteSettings.username || ''}" placeholder="Username" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
-                        </div>
-                        <div style="flex: 2; min-width: 200px;">
-                            <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Password (min 5 chars)</label>
-                            <input type="password" id="settings-remote-pass" value="${remoteSettings.password || ''}" placeholder="Password" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
-                        </div>
-                        <div style="display: flex; align-items: flex-end;">
-                            <button id="settings-save-remote-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 24px; height: 39px; white-space: nowrap;">Save Credentials</button>
-                        </div>
-                    </div>
-                    
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 10px; background: #252525; border: 1px solid #444; border-radius: 4px;">
-                        <span style="color: #bbb; font-size: 0.9em;">Paired Device: <strong style="color: ${remoteSettings.activeDeviceId ? '#43CB44' : '#888'};">${remoteSettings.activeDeviceId ? 'Connected' : 'None'}</strong></span>
-                        <button id="settings-revoke-device-btn" class="playlist-btn" style="background: ${remoteSettings.activeDeviceId ? '#cf6679' : '#333'}; color: ${remoteSettings.activeDeviceId ? 'black' : '#888'}; font-weight: bold; padding: 6px 12px; border-radius: 4px;" ${!remoteSettings.activeDeviceId ? 'disabled' : ''}>Revoke Access</button>
-                    </div>
-
-                    <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Remote URL</label>
-                    <div style="display: flex; align-items: center; justify-content: space-between; background: #121212; border: 1px solid #444; border-radius: 4px; padding: 10px 15px; gap: 15px; flex-wrap: wrap;">
-                        <span style="font-family: monospace; color: #bb86fc; font-size: 1.1em; word-break: break-all; flex: 1; min-width: 200px;">${remoteUrl}</span>
-                        <button id="settings-copy-remote-btn" class="playlist-btn" data-url="${remoteUrlWithAuth}" style="background: #2a2a2a; color: #e0e0e0; padding: 8px 16px; border-radius: 4px; font-weight: bold; white-space: nowrap; flex-shrink: 0;" title="Copies a link with embedded login credentials">Copy Auto-Login URL</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TMDB Integration -->
-            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
-                    <div>
-                        <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px;">TMDB API Integration</h3>
-                        <p style="color: #888; font-size: 0.9em; margin: 0;">Scrape premium poster art, cast lists, backdrops, and rich descriptions dynamically from The Movie Database.</p>
-                    </div>
-                    <div>
-                        <span id="settings-tmdb-status" style="background: ${tmdbStatusColor}22; color: ${tmdbStatusColor}; border: 1px solid ${tmdbStatusColor}; padding: 6px 14px; border-radius: 20px; font-size: 0.85em; font-weight: bold; transition: all 0.3s ease;">${tmdbStatus}</span>
-                    </div>
-                </div>
-                
-                <div style="border-top: 1px solid #333; padding-top: 20px; margin-top: 10px;">
-                    <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
+                <!-- 3-Column Channel Mapping UI -->
+                <div id="card-mapping" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; height: 600px; min-width: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
                         <div style="flex: 1; min-width: 250px;">
-                            <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">TMDB API Key (v3)</label>
-                            <input type="text" id="settings-tmdb-key" value="${tmdbConfig.apiKey || ''}" placeholder="Enter v3 API Key..." style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box; font-family: monospace;">
+                            <h3 style="color: #e0e0e0; margin: 0; font-family: 'Outfit', 'Inter', sans-serif;">Channel Mapping</h3>
+                            <p style="color: #888; font-size: 0.9em; margin: 5px 0 15px 0;">Select a channel on the left and an EPG on the right. Instant apply updates Live TV/Guide immediately.</p>
                         </div>
-                        <div style="flex: 2; min-width: 350px;">
-                            <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">TMDB Bearer Token (v4)</label>
-                            <input type="password" id="settings-tmdb-token" value="${tmdbConfig.apiToken || ''}" placeholder="Enter v4 Bearer Token..." style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box; font-family: monospace;">
-                        </div>
+                        <button id="mapping-auto-map-btn" class="playlist-btn" style="background: #43CB44; color: black; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 0.9em; cursor: pointer; white-space: nowrap;">Auto Map</button>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                        <span style="color: #666; font-size: 0.85em;">Need a key? Register on <a href="https://www.themoviedb.org/" target="_blank" style="color: #bb86fc; text-decoration: none;">themoviedb.org</a> and generate an API key in settings.</span>
-                        <button id="settings-save-tmdb-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 24px; border-radius: 4px; white-space: nowrap;">Save & Test Connection</button>
+                    
+                    <div style="display: flex; gap: 15px; flex-grow: 1; min-height: 0; min-width: 0;">
+                        <!-- Left Column: Playlist Channels -->
+                        <div style="flex: 28; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; border-radius: 6px; overflow: hidden; min-width: 0;">
+                            <div style="padding: 10px; background: #252525; border-bottom: 1px solid #444;">
+                                <select id="mapping-playlist-filter" style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; margin-bottom: 8px;">
+                                    <option value="all">All Playlists</option>
+                                    ${savedPlaylists.map(p => `<option value="${p.id}" ${mappingSelectedPlaylist === String(p.id) ? 'selected' : ''}>${p.name}</option>`).join('')}
+                                </select>
+                                <input type="text" id="mapping-channel-search" placeholder="Search Channels..." style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                            </div>
+                            <div id="mapping-channel-list" style="flex-grow: 1; overflow-y: auto; padding: 10px;"></div>
+                        </div>
+                        
+                        <!-- Right Column: Available EPG Channels -->
+                        <div style="flex: 28; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; border-radius: 6px; overflow: hidden; min-width: 0;">
+                            <div style="padding: 10px; background: #252525; border-bottom: 1px solid #444;">
+                                <select id="mapping-epg-filter" style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; margin-bottom: 8px;">
+                                    <option value="all">All EPG Sources</option>
+                                </select>
+                                <input type="text" id="mapping-epg-search" placeholder="Search EPG..." style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                            </div>
+                            <div id="mapping-epg-list" style="flex-grow: 1; overflow-y: auto; padding: 10px;">
+                                <div style="padding: 20px; text-align: center; color: #888;">Fetching EPG Data...</div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Mapped List -->
+                        <div style="flex: 44; display: flex; flex-direction: column; background: #121212; border: 1px solid #444; border-radius: 6px; overflow: hidden; min-width: 0;">
+                            <div style="padding: 10px; background: #252525; border-bottom: 1px solid #444;">
+                                <h3 style="color: #e0e0e0; margin: 0; font-size: 1em; padding: 6px 0; margin-bottom: 6px;">Mapped Channels</h3>
+                                <input type="text" id="mapping-mapped-search" placeholder="Search Mapped..." style="width: 100%; background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                            </div>
+                            <div id="mapping-mapped-list" style="flex-grow: 1; overflow-y: auto; padding: 10px;"></div>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Danger Zone -->
-            <div style="margin-top: 30px; background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #cf6679; min-width: 0;">
-                <h3 style="color: #cf6679; margin-top: 0; margin-bottom: 5px;">Danger Zone</h3>
-                <p style="color: #888; font-size: 0.9em; margin-bottom: 15px;">Completely wipe the database and reset the application to its default state. This action cannot be undone.</p>
-                <button id="settings-factory-reset-btn" class="playlist-btn" style="background: #cf6679; color: black; font-weight: bold; padding: 8px 16px;">Factory Reset</button>
+                <!-- Remote Control -->
+                <div id="card-remote" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">Remote Control</h3>
+                            <p style="color: #888; font-size: 0.9em; margin: 0;">Control AIVue Player from your smartphone or tablet on the same Wi-Fi network.</p>
+                        </div>
+                        <label style="display: flex; align-items: center; cursor: pointer; background: #121212; padding: 8px 12px; border-radius: 6px; border: 1px solid #444;">
+                            <input type="checkbox" id="settings-remote-toggle" ${remoteSettings.enabled ? 'checked' : ''} style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                            <span id="settings-remote-status" style="color: ${remoteSettings.enabled ? '#43CB44' : '#cf6679'}; font-weight: bold;">${remoteSettings.enabled ? 'Enabled' : 'Disabled'}</span>
+                        </label>
+                    </div>
+                    
+                    <div id="settings-remote-config" style="display: ${remoteSettings.enabled ? 'block' : 'none'}; border-top: 1px solid #333; padding-top: 20px; margin-top: 10px;">
+                        <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+                            <div style="flex: 1; min-width: 150px;">
+                                <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Port</label>
+                                <input type="number" id="settings-remote-port" value="${port}" placeholder="8088" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                            </div>
+                            <div style="flex: 2; min-width: 200px;">
+                                <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Username (min 5 chars)</label>
+                                <input type="text" id="settings-remote-user" value="${remoteSettings.username || ''}" placeholder="Username" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                            </div>
+                            <div style="flex: 2; min-width: 200px;">
+                                <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Password (min 5 chars)</label>
+                                <input type="password" id="settings-remote-pass" value="${remoteSettings.password || ''}" placeholder="Password" style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                            </div>
+                            <div style="display: flex; align-items: flex-end;">
+                                <button id="settings-save-remote-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 24px; height: 39px; white-space: nowrap;">Save Credentials</button>
+                            </div>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 10px; background: #252525; border: 1px solid #444; border-radius: 4px;">
+                            <span style="color: #bbb; font-size: 0.9em;">Paired Device: <strong style="color: ${remoteSettings.activeDeviceId ? '#43CB44' : '#888'};">${remoteSettings.activeDeviceId ? 'Connected' : 'None'}</strong></span>
+                            <button id="settings-revoke-device-btn" class="playlist-btn" style="background: ${remoteSettings.activeDeviceId ? '#cf6679' : '#333'}; color: ${remoteSettings.activeDeviceId ? 'black' : '#888'}; font-weight: bold; padding: 6px 12px; border-radius: 4px;" ${!remoteSettings.activeDeviceId ? 'disabled' : ''}>Revoke Access</button>
+                        </div>
+
+                        <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">Remote URL</label>
+                        <div style="display: flex; align-items: center; justify-content: space-between; background: #121212; border: 1px solid #444; border-radius: 4px; padding: 10px 15px; gap: 15px; flex-wrap: wrap;">
+                            <span style="font-family: monospace; color: #bb86fc; font-size: 1.1em; word-break: break-all; flex: 1; min-width: 200px;">${remoteUrl}</span>
+                            <button id="settings-copy-remote-btn" class="playlist-btn" data-url="${remoteUrlWithAuth}" style="background: #2a2a2a; color: #e0e0e0; padding: 8px 16px; border-radius: 4px; font-weight: bold; white-space: nowrap; flex-shrink: 0;" title="Copies a link with embedded login credentials">Copy Auto-Login URL</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TMDB Integration -->
+                <div id="card-tmdb" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">TMDB API Integration</h3>
+                            <p style="color: #888; font-size: 0.9em; margin: 0;">Scrape premium poster art, cast lists, backdrops, and rich descriptions dynamically from The Movie Database.</p>
+                        </div>
+                        <div>
+                            <span id="settings-tmdb-status" style="background: ${tmdbStatusColor}22; color: ${tmdbStatusColor}; border: 1px solid ${tmdbStatusColor}; padding: 6px 14px; border-radius: 20px; font-size: 0.85em; font-weight: bold; transition: all 0.3s ease;">${tmdbStatus}</span>
+                        </div>
+                    </div>
+                    
+                    <div style="border-top: 1px solid #333; padding-top: 20px; margin-top: 10px;">
+                        <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
+                            <div style="flex: 1; min-width: 250px;">
+                                <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">TMDB API Key (v3)</label>
+                                <input type="text" id="settings-tmdb-key" value="${tmdbConfig.apiKey || ''}" placeholder="Enter v3 API Key..." style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box; font-family: monospace;">
+                            </div>
+                            <div style="flex: 2; min-width: 350px;">
+                                <label style="color: #bbb; font-size: 0.9em; display: block; margin-bottom: 5px;">TMDB Bearer Token (v4)</label>
+                                <input type="password" id="settings-tmdb-token" value="${tmdbConfig.apiToken || ''}" placeholder="Enter v4 Bearer Token..." style="width: 100%; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box; font-family: monospace;">
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <span style="color: #666; font-size: 0.85em;">Need a key? Register on <a href="https://www.themoviedb.org/" target="_blank" style="color: #bb86fc; text-decoration: none;">themoviedb.org</a> and generate an API key in settings.</span>
+                            <button id="settings-save-tmdb-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 24px; border-radius: 4px; white-space: nowrap;">Save & Test Connection</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Danger Zone -->
+                <div id="card-danger" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #cf6679; min-width: 0;">
+                    <h3 style="color: #cf6679; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">Danger Zone</h3>
+                    <p style="color: #888; font-size: 0.9em; margin-bottom: 15px;">Completely wipe the database and reset the application to its default state. This action cannot be undone.</p>
+                    <button id="settings-factory-reset-btn" class="playlist-btn" style="background: #cf6679; color: black; font-weight: bold; padding: 8px 16px;">Factory Reset</button>
+                </div>
             </div>
         </div>
     `;
@@ -1260,6 +1371,61 @@ async function renderSettings() {
     document.getElementById('mapping-epg-filter').addEventListener('change', renderMappingColumns);
     document.getElementById('mapping-epg-search').addEventListener('input', debouncedRenderMappingColumns);
     document.getElementById('mapping-mapped-search').addEventListener('input', debouncedRenderMappingColumns);
+
+    // Left mini-menu smooth scrolling click handlers
+    document.querySelectorAll('.settings-menu-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target');
+            const targetEl = document.getElementById(targetId);
+            if (targetEl && settingsView) {
+                const containerRect = settingsView.getBoundingClientRect();
+                const targetRect = targetEl.getBoundingClientRect();
+                const relativeTop = targetRect.top - containerRect.top + settingsView.scrollTop;
+                const targetScrollTop = Math.max(0, relativeTop - 30);
+                settingsView.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+            }
+        });
+    });
+
+    // Real-time active menu item highlight scroll listener
+    const updateActiveMenuButton = () => {
+        if (settingsView.style.display === 'none') return;
+        const containerRect = settingsView.getBoundingClientRect();
+        const cards = ['card-epg', 'card-reminders', 'card-mapping', 'card-remote', 'card-tmdb', 'card-danger'];
+        let currentActive = 'card-epg';
+        
+        for (const cardId of cards) {
+            const el = document.getElementById(cardId);
+            if (el) {
+                const elRect = el.getBoundingClientRect();
+                const triggerPoint = containerRect.top + 150;
+                if (elRect.top <= triggerPoint) {
+                    currentActive = cardId;
+                }
+            }
+        }
+        
+        // Failsafe: if scrolled to the absolute bottom, activate the Danger Zone button
+        if (Math.abs((settingsView.scrollHeight - settingsView.scrollTop) - settingsView.clientHeight) < 10) {
+            currentActive = 'card-danger';
+        }
+        
+        document.querySelectorAll('.settings-menu-btn').forEach(btn => {
+            if (btn.getAttribute('data-target') === currentActive) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    };
+    
+    // De-duplicate scroll listener and attach
+    settingsView.removeEventListener('scroll', window.updateSettingsActiveMenu);
+    window.updateSettingsActiveMenu = updateActiveMenuButton;
+    settingsView.addEventListener('scroll', window.updateSettingsActiveMenu);
+
+    // Initial highlight update
+    updateActiveMenuButton();
 }
 
 async function applySingleMapping(channelTitle, epgId) {
@@ -2238,11 +2404,18 @@ function renderChannels() {
         const rawTitle = channel.title || 'Unknown Channel';
         if (searchVal && !rawTitle.toLowerCase().includes(searchVal)) return;
         
-        const channelGroup = channel.group || 'Uncategorized';
-        if (!groupedChannels[channelGroup]) {
-            groupedChannels[channelGroup] = [];
+        const rawGroup = channel.group || 'Uncategorized';
+        const channelGroup = rawGroup.trim();
+        let groupKey = channelGroup;
+        // Case-insensitive check to club groups from different playlists
+        const existingKey = Object.keys(groupedChannels).find(k => k.toLowerCase() === channelGroup.toLowerCase());
+        if (existingKey) {
+            groupKey = existingKey;
         }
-        groupedChannels[channelGroup].push({ channel, index });
+        if (!groupedChannels[groupKey]) {
+            groupedChannels[groupKey] = [];
+        }
+        groupedChannels[groupKey].push({ channel, index });
     });
 
     const sortedGroups = Object.keys(groupedChannels).sort(sortAlphaNum);
@@ -2275,10 +2448,14 @@ function renderChannels() {
                     const favClass = channel.favourite ? 'fav-btn active' : 'fav-btn';
                     const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
 
+                    const playlist = savedPlaylists.find(p => String(p.id) === String(channel.playlistId));
+                    const playlistName = playlist ? playlist.name : '';
+                    const playlistBadge = (filterVal === 'all' && playlistName) ? ` <span style="color: #888; font-size: 0.85em; font-weight: normal; margin-left: 5px;">[${playlistName}]</span>` : '';
+
                     const activeClass = (index === currentPlayingChannelIndex) ? ' active' : '';
                     html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}" style="display: flex; align-items: center; width: 100%; box-sizing: border-box; padding: 5px 10px 5px 20px; border-bottom: 1px solid #1e1e1e; cursor: pointer; outline: none;">
                         ${logoHtml}
-                        <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; color: #e0e0e0; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif;">${safeTitle}</span>
+                        <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; color: #e0e0e0; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif;">${safeTitle}${playlistBadge}</span>
                         ${favBtnHtml}
                     </div>`;
                 });
@@ -2328,6 +2505,7 @@ channelList.addEventListener('click', (e) => {
         if (window.expandedGroups.has(groupName)) {
             window.expandedGroups.delete(groupName);
         } else {
+            window.expandedGroups.clear(); // Collapse all other groups
             window.expandedGroups.add(groupName);
         }
         localStorage.setItem('iptv_expanded_groups', JSON.stringify(Array.from(window.expandedGroups)));
@@ -3269,47 +3447,63 @@ async function embedStream(channel) {
         }
     }
     
-    const mappedId = channelMappings[channel.title];
-    const epgIds = [mappedId, channel.tvg_id, channel.tvg_name].filter(Boolean);
-    console.log('[API] Calling getEpg for current stream.');
-    const epgData = await window.iptvAPI.getEpg(epgIds, null, null);
-    
-    let programmes = [];
-    for (const id of epgIds) {
-        if (epgData[id] && epgData[id].length > 0) { programmes = epgData[id]; break; }
-    }
-    
-    const detailProgram = document.getElementById('detail-program');
-    const currentProg = getCurrentProgram(programmes);
-    if (detailProgram) {
+    const parsedSeries = parseM3uSeriesName(channel.title);
+    const hasSeriesPattern = channel.title && (
+        /s\d+\s*e\d+/i.test(channel.title) || 
+        /season\s*\d+\s*episode\s*\d+/i.test(channel.title) ||
+        /\d+x\d+/i.test(channel.title)
+    );
+    const isMovieOrEpisode = channel.type === 'movie' || 
+                             channel.type === 'series' || 
+                             channel.type === 'episode' || 
+                             hasSeriesPattern ||
+                             (channel.url && (channel.url.startsWith('stalker-series') || channel.url.startsWith('stalker-cmd:vod')));
+
+    if (isMovieOrEpisode) {
+        loadAndRenderTmdbSynopsis(channel);
+    } else {
+        const mappedId = channelMappings[channel.title];
+        const epgIds = [mappedId, channel.tvg_id, channel.tvg_name].filter(Boolean);
+        console.log('[API] Calling getEpg for current stream.');
+        const epgData = await window.iptvAPI.getEpg(epgIds, null, null);
+        
+        let programmes = [];
+        for (const id of epgIds) {
+            if (epgData[id] && epgData[id].length > 0) { programmes = epgData[id]; break; }
+        }
+        
+        const detailProgram = document.getElementById('detail-program');
+        const currentProg = getCurrentProgram(programmes);
+        if (detailProgram) {
+            if (currentProg) {
+                const pStart = parseEpgTime(currentProg.start);
+                const pEnd = parseEpgTime(currentProg.stop);
+                const timeStr = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                detailProgram.innerHTML = `${currentProg.title} <span style="font-size: 0.9em; color: #bb86fc; margin-left: 8px;">(${timeStr})</span>`;
+            } else {
+                detailProgram.textContent = '--';
+            }
+        }
+        
+        renderEpg(programmes);
+        
+        // Setup pending EPG payload to send to MPV Lua script
+        let progTitle = '', progDesc = '', progTime = '';
         if (currentProg) {
+            progTitle = currentProg.title || '';
+            progDesc = currentProg.desc || '';
             const pStart = parseEpgTime(currentProg.start);
             const pEnd = parseEpgTime(currentProg.stop);
-            const timeStr = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-            detailProgram.innerHTML = `${currentProg.title} <span style="font-size: 0.9em; color: #bb86fc; margin-left: 8px;">(${timeStr})</span>`;
-        } else {
-            detailProgram.textContent = '--';
+            progTime = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
         }
+        
+        window.pendingEpgUpdate = {
+            title: channel.title || '',
+            progTitle: progTitle,
+            progDesc: progDesc,
+            progTime: progTime
+        };
     }
-    
-    renderEpg(programmes);
-    
-    // Setup pending EPG payload to send to MPV Lua script
-    let progTitle = '', progDesc = '', progTime = '';
-    if (currentProg) {
-        progTitle = currentProg.title || '';
-        progDesc = currentProg.desc || '';
-        const pStart = parseEpgTime(currentProg.start);
-        const pEnd = parseEpgTime(currentProg.stop);
-        progTime = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-    }
-    
-    window.pendingEpgUpdate = {
-        title: channel.title || '',
-        progTitle: progTitle,
-        progDesc: progDesc,
-        progTime: progTime
-    };
 
     const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const playerOverlay = document.getElementById('player-overlay');
@@ -4411,7 +4605,13 @@ async function openMovieDetailsModal(streamInfo) {
                         title: `${streamInfo.title} - S${firstSeason}E${firstEp.episodeNum} - ${firstEpDisplayName}`,
                         url: firstEp.url,
                         logo: streamInfo.logo,
-                        playlistId: streamInfo.playlistId
+                        playlistId: streamInfo.playlistId,
+                        type: 'episode',
+                        tmdbId: streamInfo.tmdbId,
+                        seriesTitle: streamInfo.title,
+                        season: firstSeason,
+                        episodeNum: firstEp.episodeNum,
+                        tmdbData: tmdbData
                     });
                 });
             } else {
@@ -4468,7 +4668,13 @@ async function openMovieDetailsModal(streamInfo) {
                             title: `${streamInfo.title} - S${seasonNum}E${ep.episodeNum} - ${epDisplayName}`,
                             url: ep.url,
                             logo: streamInfo.logo,
-                            playlistId: streamInfo.playlistId
+                            playlistId: streamInfo.playlistId,
+                            type: 'episode',
+                            tmdbId: streamInfo.tmdbId,
+                            seriesTitle: streamInfo.title,
+                            season: seasonNum,
+                            episodeNum: ep.episodeNum,
+                            tmdbData: tmdbData
                         });
                     });
                     
@@ -5543,4 +5749,426 @@ window.addEventListener('DOMContentLoaded', async () => {
             }
         }, 500);
     }, 1000);
+});
+
+function injectTmdbEpgStyles() {
+    if (document.getElementById('tmdb-epg-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'tmdb-epg-styles';
+    style.innerHTML = `
+        .tmdb-epg-container {
+            display: flex;
+            gap: 20px;
+            background: rgba(30, 30, 30, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
+            animation: fadeIn 0.4s ease-out;
+            font-family: 'Outfit', 'Inter', sans-serif;
+        }
+        .tmdb-epg-poster-wrapper {
+            width: 130px;
+            flex-shrink: 0;
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.6);
+            aspect-ratio: 2/3;
+            background: #1a1a1a;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .tmdb-epg-poster {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .tmdb-epg-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .tmdb-epg-header {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .tmdb-epg-title {
+            margin: 0;
+            font-size: 1.6em;
+            font-weight: 800;
+            color: #fff;
+            line-height: 1.2;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .tmdb-epg-subtitle {
+            margin: 0;
+            font-size: 1.15em;
+            font-weight: 600;
+            color: #bb86fc;
+            line-height: 1.2;
+        }
+        .tmdb-epg-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            font-size: 0.85em;
+            color: #aaa;
+            margin-top: 4px;
+        }
+        .tmdb-epg-rating {
+            background: rgba(255, 193, 7, 0.15);
+            color: #ffc107;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .tmdb-epg-badge {
+            background: rgba(187, 134, 252, 0.15);
+            color: #bb86fc;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(187, 134, 252, 0.25);
+            text-transform: uppercase;
+            font-size: 0.8em;
+        }
+        .tmdb-epg-overview {
+            margin: 0;
+            color: #ccc;
+            font-size: 0.95em;
+            line-height: 1.6;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        }
+        .tmdb-epg-footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 12px;
+            margin-top: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 0.85em;
+            color: #999;
+        }
+        .tmdb-epg-footer-item {
+            display: flex;
+            gap: 8px;
+        }
+        .tmdb-epg-footer-label {
+            color: #bb86fc;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.8em;
+            width: 100px;
+            flex-shrink: 0;
+            letter-spacing: 0.5px;
+        }
+        .tmdb-epg-footer-value {
+            color: #e0e0e0;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @media (max-width: 600px) {
+            .tmdb-epg-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            .tmdb-epg-poster-wrapper {
+                width: 120px;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+async function loadAndRenderTmdbSynopsis(channel) {
+    console.log('[TMDB EPG] Loading TMDB synopsis for channel:', channel.title);
+    const container = document.getElementById('epg-container');
+    if (!container) return;
+    
+    // Inject the CSS styles
+    injectTmdbEpgStyles();
+    
+    // Show premium loader
+    container.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; color: #bb86fc; font-family: 'Outfit', 'Inter', sans-serif;">
+            <div class="loader-spinner" style="margin-bottom: 15px; width: 36px; height: 36px;"></div>
+            <span style="font-weight: 500; font-size: 1.1em; letter-spacing: 0.5px;">Fetching Synopsis from TMDB...</span>
+        </div>
+    `;
+    
+    const parsed = parseM3uSeriesName(channel.title);
+    const hasSeriesPattern = channel.title && (
+        /s\d+\s*e\d+/i.test(channel.title) || 
+        /season\s*\d+\s*episode\s*\d+/i.test(channel.title) ||
+        /\d+x\d+/i.test(channel.title)
+    );
+    const isEpisode = channel.type === 'episode' || channel.type === 'series' || hasSeriesPattern;
+    
+    let tmdbData = channel.tmdbData || null;
+    let episodeData = null;
+    let seriesTitle = channel.seriesTitle || parsed.seriesTitle;
+    let seasonNum = channel.season || parsed.season || 1;
+    let episodeNum = channel.episodeNum || parsed.episode || 1;
+    
+    try {
+        if (isEpisode) {
+            // Load TV Series TMDB Details
+            if (!tmdbData) {
+                let res;
+                if (channel.tmdbId) {
+                    res = await window.iptvAPI.fetchTmdbById({ tmdbId: channel.tmdbId, type: 'tv' });
+                } else {
+                    res = await window.iptvAPI.fetchTmdbByTitle({ title: seriesTitle, type: 'tv' });
+                }
+                if (res && !res.error) {
+                    tmdbData = res;
+                }
+            }
+            
+            // Load Episode Specific Details from Season Details
+            const tvId = tmdbData ? (tmdbData.tmdbId || tmdbData.id) : null;
+            if (tvId) {
+                console.log(`[TMDB EPG] Fetching Season ${seasonNum} episodes for TV ID: ${tvId}`);
+                const tmdbSeason = await window.iptvAPI.fetchTmdbSeasonEpisodes({
+                    tmdbId: tvId,
+                    seasonNumber: seasonNum
+                });
+                if (tmdbSeason && tmdbSeason.episodes && !tmdbSeason.error) {
+                    episodeData = tmdbSeason.episodes.find(e => e.episode_number === parseInt(episodeNum));
+                }
+            }
+            
+            renderTmdbEpisodeCard(channel, tmdbData, episodeData, seriesTitle, seasonNum, episodeNum);
+        } else {
+            // Load Movie TMDB Details
+            if (!tmdbData) {
+                let res;
+                if (channel.tmdbId) {
+                    res = await window.iptvAPI.fetchTmdbById({ tmdbId: channel.tmdbId, type: 'movie' });
+                } else {
+                    res = await window.iptvAPI.fetchTmdbByTitle({ title: channel.title, type: 'movie' });
+                }
+                if (res && !res.error) {
+                    tmdbData = res;
+                }
+            }
+            
+            renderTmdbMovieCard(channel, tmdbData);
+        }
+    } catch (e) {
+        console.error('[TMDB EPG ERR] Failed to load TMDB details:', e);
+        renderTmdbFallbackCard(channel);
+    }
+}
+
+function renderTmdbMovieCard(channel, tmdbData) {
+    const container = document.getElementById('epg-container');
+    if (!container) return;
+    
+    if (!tmdbData || tmdbData.error) {
+        renderTmdbFallbackCard(channel);
+        return;
+    }
+    
+    const title = tmdbData.title || channel.title;
+    const poster = tmdbData.poster_path || channel.logo || 'assets/logo.ico';
+    const rating = tmdbData.vote_average && tmdbData.vote_average !== 'N/A' ? `★ ${parseFloat(tmdbData.vote_average).toFixed(1)}` : '';
+    const releaseDate = tmdbData.release_date || '';
+    const year = releaseDate && releaseDate !== 'N/A' ? new Date(releaseDate).getFullYear() : '';
+    const runtime = tmdbData.runtime && tmdbData.runtime !== 'N/A' ? `${tmdbData.runtime}m` : '';
+    const genres = tmdbData.genres && tmdbData.genres.length > 0 ? tmdbData.genres.map(g => g.name).join(', ') : '';
+    const overview = tmdbData.overview || 'No synopsis available.';
+    
+    let director = tmdbData.director || '';
+    let cast = tmdbData.cast && tmdbData.cast.length > 0 ? tmdbData.cast.join(', ') : '';
+    
+    if (!director && tmdbData.credits && tmdbData.credits.crew) {
+        const dirObj = tmdbData.credits.crew.find(c => c.job === 'Director');
+        if (dirObj) director = dirObj.name;
+    }
+    if (!cast && tmdbData.credits && tmdbData.credits.cast) {
+        cast = tmdbData.credits.cast.slice(0, 5).map(c => c.name).join(', ');
+    }
+    
+    let metaHtml = '';
+    if (rating) metaHtml += `<span class="tmdb-epg-rating">${rating}</span>`;
+    if (year) metaHtml += `<span>${year}</span>`;
+    if (runtime) metaHtml += `<span>${runtime}</span>`;
+    metaHtml += `<span class="tmdb-epg-badge">Movie</span>`;
+    
+    let footerHtml = '';
+    if (genres) footerHtml += `<div class="tmdb-epg-footer-item"><span class="tmdb-epg-footer-label">Genres</span><span class="tmdb-epg-footer-value">${genres}</span></div>`;
+    if (director && director !== 'N/A') footerHtml += `<div class="tmdb-epg-footer-item"><span class="tmdb-epg-footer-label">Director</span><span class="tmdb-epg-footer-value">${director}</span></div>`;
+    if (cast) footerHtml += `<div class="tmdb-epg-footer-item"><span class="tmdb-epg-footer-label">Cast</span><span class="tmdb-epg-footer-value">${cast}</span></div>`;
+    
+    container.innerHTML = `
+        <div class="tmdb-epg-container">
+            <div class="tmdb-epg-poster-wrapper">
+                <img class="tmdb-epg-poster" src="${poster}" alt="${title.replace(/"/g, '&quot;')}" onerror="this.onerror=null; this.src='assets/logo.ico';">
+            </div>
+            <div class="tmdb-epg-content">
+                <div class="tmdb-epg-header">
+                    <h3 class="tmdb-epg-title">${title}</h3>
+                    <div class="tmdb-epg-meta">${metaHtml}</div>
+                </div>
+                <p class="tmdb-epg-overview">${overview}</p>
+                ${footerHtml ? `<div class="tmdb-epg-footer">${footerHtml}</div>` : ''}
+            </div>
+        </div>
+    `;
+    
+    // Update Now Playing EPG program info in Left Details Panel
+    const detailProgram = document.getElementById('detail-program');
+    if (detailProgram) {
+        detailProgram.innerHTML = `<span style="font-weight: bold; color: #43CB44;">Playing Movie</span><br><span style="font-size: 0.95em; color: #bb86fc; margin-top: 4px; display: inline-block; font-weight: 500;">${title}${year ? ` (${year})` : ''}</span>`;
+    }
+    
+    // Update pending EPG payload
+    updateMpvEpgPayload(title, overview, runtime);
+}
+
+function renderTmdbEpisodeCard(channel, tmdbData, episodeData, seriesTitle, seasonNum, episodeNum) {
+    const container = document.getElementById('epg-container');
+    if (!container) return;
+    
+    if (!tmdbData || tmdbData.error) {
+        renderTmdbFallbackCard(channel);
+        return;
+    }
+    
+    const showTitle = tmdbData.title || tmdbData.name || seriesTitle;
+    const epTitle = episodeData && episodeData.name ? episodeData.name : `Episode ${episodeNum}`;
+    
+    // Use episode thumbnail still_path if available, otherwise series poster
+    const poster = (episodeData && episodeData.still_path) || tmdbData.poster_path || channel.logo || 'assets/logo.ico';
+    const rating = episodeData && episodeData.vote_average ? `★ ${parseFloat(episodeData.vote_average).toFixed(1)}` : (tmdbData.vote_average && tmdbData.vote_average !== 'N/A' ? `★ ${parseFloat(tmdbData.vote_average).toFixed(1)}` : '');
+    const releaseDate = episodeData && episodeData.air_date ? episodeData.air_date : (tmdbData.release_date || '');
+    const year = releaseDate && releaseDate !== 'N/A' ? new Date(releaseDate).getFullYear() : '';
+    const genres = tmdbData.genres && tmdbData.genres.length > 0 ? tmdbData.genres.map(g => g.name).join(', ') : '';
+    const overview = (episodeData && episodeData.overview && episodeData.overview !== 'No description available.') ? episodeData.overview : (tmdbData.overview || 'No synopsis available.');
+    
+    let cast = tmdbData.cast && tmdbData.cast.length > 0 ? tmdbData.cast.join(', ') : '';
+    if (!cast && tmdbData.credits && tmdbData.credits.cast) {
+        cast = tmdbData.credits.cast.slice(0, 5).map(c => c.name).join(', ');
+    }
+    
+    let metaHtml = '';
+    if (rating) metaHtml += `<span class="tmdb-epg-rating">${rating}</span>`;
+    if (year) metaHtml += `<span>${year}</span>`;
+    metaHtml += `<span class="tmdb-epg-badge">S${seasonNum}E${episodeNum}</span>`;
+    metaHtml += `<span class="tmdb-epg-badge" style="background: rgba(43, 203, 68, 0.15); color: #43CB44; border-color: rgba(43, 203, 68, 0.25);">TV Show</span>`;
+    
+    let footerHtml = '';
+    if (genres) footerHtml += `<div class="tmdb-epg-footer-item"><span class="tmdb-epg-footer-label">Genres</span><span class="tmdb-epg-footer-value">${genres}</span></div>`;
+    if (cast) footerHtml += `<div class="tmdb-epg-footer-item"><span class="tmdb-epg-footer-label">Cast</span><span class="tmdb-epg-footer-value">${cast}</span></div>`;
+    
+    container.innerHTML = `
+        <div class="tmdb-epg-container">
+            <div class="tmdb-epg-poster-wrapper" style="${episodeData && episodeData.still_path ? 'aspect-ratio: 16/10; width: 180px;' : 'aspect-ratio: 2/3; width: 130px;'}">
+                <img class="tmdb-epg-poster" src="${poster}" alt="${epTitle.replace(/"/g, '&quot;')}" onerror="this.onerror=null; this.src='assets/logo.ico';">
+            </div>
+            <div class="tmdb-epg-content">
+                <div class="tmdb-epg-header">
+                    <h3 class="tmdb-epg-title" style="font-size: 1.3em; color: #aaa; font-weight: 500; margin-bottom: 2px;">${showTitle}</h3>
+                    <h4 class="tmdb-epg-subtitle" style="font-size: 1.6em; color: #fff; font-weight: 800;">${epTitle}</h4>
+                    <div class="tmdb-epg-meta">${metaHtml}</div>
+                </div>
+                <p class="tmdb-epg-overview">${overview}</p>
+                ${footerHtml ? `<div class="tmdb-epg-footer">${footerHtml}</div>` : ''}
+            </div>
+        </div>
+    `;
+    
+    // Update Now Playing EPG program info in Left Details Panel
+    const detailProgram = document.getElementById('detail-program');
+    if (detailProgram) {
+        detailProgram.innerHTML = `<span style="font-weight: bold; color: #43CB44;">Playing Episode</span><br><span style="font-size: 0.95em; color: #bb86fc; margin-top: 4px; display: inline-block; font-weight: 500;">S${seasonNum}E${episodeNum} - ${epTitle}</span>`;
+    }
+    
+    // Update pending EPG payload
+    updateMpvEpgPayload(`${showTitle} - S${seasonNum}E${episodeNum} - ${epTitle}`, overview, `S${seasonNum}E${episodeNum}`);
+}
+
+function renderTmdbFallbackCard(channel) {
+    const container = document.getElementById('epg-container');
+    if (!container) return;
+    
+    const parsed = parseM3uSeriesName(channel.title);
+    const hasSeriesPattern = channel.title && (
+        /s\d+\s*e\d+/i.test(channel.title) || 
+        /season\s*\d+\s*episode\s*\d+/i.test(channel.title) ||
+        /\d+x\d+/i.test(channel.title)
+    );
+    const isEpisode = channel.type === 'episode' || channel.type === 'series' || hasSeriesPattern;
+    
+    const title = channel.title || 'Unknown Stream';
+    const poster = channel.logo || 'assets/logo.ico';
+    
+    container.innerHTML = `
+        <div class="tmdb-epg-container">
+            <div class="tmdb-epg-poster-wrapper">
+                <img class="tmdb-epg-poster" src="${poster}" alt="${title.replace(/"/g, '&quot;')}" onerror="this.onerror=null; this.src='assets/logo.ico';">
+            </div>
+            <div class="tmdb-epg-content">
+                <div class="tmdb-epg-header">
+                    <h3 class="tmdb-epg-title">${title}</h3>
+                    <div class="tmdb-epg-meta">
+                        <span class="tmdb-epg-badge" style="background: rgba(255,255,255,0.05); color: #fff; border-color: rgba(255,255,255,0.1);">${isEpisode ? 'Episode' : 'Movie'}</span>
+                    </div>
+                </div>
+                <p class="tmdb-epg-overview" style="color: #888; font-style: italic;">No synopsis available on TMDB. Please check if your TMDB API configuration is valid in Settings.</p>
+            </div>
+        </div>
+    `;
+    
+    // Update Now Playing EPG program info in Left Details Panel
+    const detailProgram = document.getElementById('detail-program');
+    if (detailProgram) {
+        detailProgram.innerHTML = `<span style="font-weight: bold; color: #888;">Playing Stream</span><br><span style="font-size: 0.95em; color: #e0e0e0; margin-top: 4px; display: inline-block; font-weight: 500;">${title}</span>`;
+    }
+}
+
+function updateMpvEpgPayload(title, overview, time) {
+    const epgUpdatePayload = {
+        title: title || '',
+        progTitle: title || '',
+        progDesc: overview || '',
+        progTime: time || ''
+    };
+    
+    if (window.hasStartedPlayback) {
+        const encoded = encodeURIComponent(JSON.stringify(epgUpdatePayload));
+        window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`);
+    } else {
+        window.pendingEpgUpdate = epgUpdatePayload;
+    }
+}
+
+// Global scroll/focus debug instrumentation
+window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        const settingsView = document.getElementById('settings-view');
+        if (settingsView) {
+            settingsView.addEventListener('scroll', (e) => {
+                if (settingsView.style.display !== 'none') {
+                    window.iptvAPI.logDebug(`settings-view scrolled to: ${settingsView.scrollTop}`);
+                }
+            });
+        }
+        document.addEventListener('focusin', (e) => {
+            if (settingsView && settingsView.style.display !== 'none') {
+                window.iptvAPI.logDebug(`Element focused: ${e.target.id || e.target.className || e.target.tagName} (activeElement: ${document.activeElement ? (document.activeElement.id || document.activeElement.className || document.activeElement.tagName) : 'null'})`);
+            }
+        });
+    }, 1500);
 });

@@ -83,6 +83,31 @@ def parse_epg(content, epg_data=None, filter_ids=None):
         pass
     return epg_data
 
+COUNTRY_CODES = {
+    "US", "USA", "UK", "GBR", "CA", "CAN", "FR", "FRA", "DE", "DEU", "ES", "ESP", "IT", "ITA", 
+    "AR", "ARG", "MX", "MEX", "IN", "IND", "BR", "BRA", "PT", "PRT", "TR", "TUR", "RU", "RUS", 
+    "NL", "NLD", "PL", "POL", "BE", "BEL", "SE", "SWE", "NO", "NOR", "DK", "DNK", "FI", "FIN", 
+    "PK", "PAK", "AU", "AUS", "NZ", "NZL", "ZA", "ZAF", "CH", "CHE", "AT", "AUT", "IE", "IRL", 
+    "GR", "GRC", "CN", "CHN", "JP", "JPN", "KR", "KOR", "EN", "ENG", "LAT", "SPA", "GER", 
+    "POR", "ARA", "ARAB", "HE", "ISR", "IT", "RO", "ROM", "BG", "BGR", "HU", "HUN", "CZ", "CZE", 
+    "SK", "SVK", "HR", "HRV", "RS", "SRB", "SI", "SVN", "UA", "UKR", "KZ", "KAZ", "UZ", "UZB", 
+    "AL", "ALB", "MK", "MKD", "TH", "THA", "VN", "VNM", "PH", "PHL", "MY", "MYS", "ID", "IDN", 
+    "SG", "SGP", "HK", "HKG", "TW", "TWN"
+}
+
+country_pattern = "|".join(sorted(list(COUNTRY_CODES), key=len, reverse=True))
+country_prefix_regex = re.compile(rf'^(?:\[(?:{country_pattern})\]|\((?:{country_pattern})\)|(?:{country_pattern})\s*[:|#-]\s*)\s*', re.IGNORECASE)
+
+def trim_country_prefix(text):
+    if not text:
+        return text
+    prev = ""
+    current = text.strip()
+    while prev != current:
+        prev = current
+        current = country_prefix_regex.sub('', current).strip()
+    return current
+
 def parse_m3u(content, source=""):
     # If the URL returned the Proxy's HTML Web UI, flag it
     if content.strip().lower().startswith('<!doctype html>') or '<html' in content[:100].lower() or '<body' in content[:100].lower():
@@ -148,11 +173,11 @@ def parse_m3u(content, source=""):
                 current_channel['ignore'] = True
                 continue
                 
-            current_channel['title'] = raw_title if raw_title else "Unknown Channel"
+            current_channel['title'] = trim_country_prefix(raw_title) if raw_title else "Unknown Channel"
             current_channel['logo'] = attrs.get('tvg-logo', '')
             current_channel['tvg_id'] = attrs.get('tvg-id', '')
             current_channel['tvg_name'] = attrs.get('tvg-name', '')
-            current_channel['group'] = attrs.get('group-title', 'Uncategorized')
+            current_channel['group'] = trim_country_prefix(attrs.get('group-title', 'Uncategorized'))
             current_channel['tmdb_id'] = attrs.get('tmdb-id') or attrs.get('tmdb_id') or attrs.get('tmdbid') or ''
             
         elif line_upper.startswith('#EXT-X-STREAM-INF'):
@@ -161,7 +186,7 @@ def parse_m3u(content, source=""):
             if 'title' not in current_channel:
                 name_match = re.search(r'NAME=["\']([^"\']+)["\']', line)
                 if name_match:
-                    current_channel['title'] = name_match.group(1)
+                    current_channel['title'] = trim_country_prefix(name_match.group(1))
                 else:
                     res_match = re.search(r'RESOLUTION=([^,]+)', line)
                     if res_match:
@@ -170,7 +195,7 @@ def parse_m3u(content, source=""):
                 current_channel['logo'] = ""
                 
         elif line_upper.startswith('#EXTGRP:'):
-            current_channel['group'] = line[8:].strip()
+            current_channel['group'] = trim_country_prefix(line[8:].strip())
             
         elif not line_upper.startswith('#'):
             if current_channel.pop('ignore', False):
