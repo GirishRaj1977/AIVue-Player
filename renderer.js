@@ -3907,6 +3907,9 @@ window.iptvAPI.onRemoteAction((cmd) => {
         case 'playlist':
             switchTab('playlist', document.getElementById('btn-playlist'));
             break;
+        case 'vod':
+            switchTab('vod', document.getElementById('btn-vod'));
+            break;
         case 'settings':
             switchTab('settings', document.getElementById('btn-settings'));
             break;

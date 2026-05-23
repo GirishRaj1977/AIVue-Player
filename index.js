@@ -880,6 +880,80 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             res.send('OK');
         });
 
+        app.get('/api/movies', (req, res) => {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+            const playlists = loadChannelsFromDb();
+            let movies = [];
+            playlists.forEach(p => {
+                if (p.channels && !p.disabled) {
+                    movies.push(...p.channels.filter(c => !c.disabled && (c.type === 'movie' || c.type === 'movie_category')).map(c => ({...c, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg})));
+                }
+            });
+            res.json(movies);
+        });
+
+        app.post('/api/load-stalker-category', async (req, res) => {
+            try {
+                const data = await executeLoadStalkerCategory(req.body);
+                res.json(data);
+            } catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        });
+
+        app.get('/movies', (req, res) => {
+            res.send(`
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                    <title>Movies - AIVue Remote</title>
+                    <style>
+                        body { background:#121212; color:white; font-family:Arial,sans-serif; margin:0; }
+                        #movies-view { display: flex; flex-direction: column; height: 100vh; }
+                        .top-bar { padding: 10px; background: #1e1e1e; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #333; flex-wrap: wrap; }
+                        .top-bar select, .top-bar input, .top-bar button { background: #2a2a2a; color: white; border: 1px solid #444; padding: 8px; border-radius: 6px; outline: none; }
+                        .top-bar input { flex-grow: 1; min-width: 150px; }
+                        #movies-content-area { flex-grow: 1; overflow-y: auto; padding: 10px; position: relative; }
+                        
+                        .movies-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px; }
+                        .movie-card { background: #1e1e1e; border: 1px solid #333; border-radius: 8px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; }
+                        .movie-poster-wrapper { position: relative; width: 100%; padding-top: 150%; background: #1a1a1a; }
+                        .movie-poster { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.3s; }
+                        .movie-info { padding: 10px; }
+                        .movie-title { font-size: 0.9em; font-weight: bold; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
+                        
+                        .folder-card { background: #1e1e1e; border: 1px solid #333; border-radius: 8px; padding: 20px 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; aspect-ratio: 1; }
+                        .folder-icon { font-size: 2.5em; color: #bb86fc; }
+                        .folder-title { font-size: 0.9em; font-weight: bold; margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+                        
+                        .loader { text-align: center; padding: 50px; color: #888; }
+                        
+                        #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #bb86fc; color: #000; padding: 10px 20px; border-radius: 20px; font-weight: bold; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 2000; }
+                    </style>
+                </head>
+                <body>
+                    <div id="movies-view">
+                        <div class="top-bar">
+                            <a href="/remote" style="background: #334155; color: white; padding: 8px 12px; border-radius: 6px; text-decoration: none; font-weight: bold;">&larr; Back</a>
+                            <input type="text" id="movies-search" placeholder="Search Movies...">
+                        </div>
+                        <div id="movies-content-area">
+                            <div id="movies-grid" class="movies-grid loader">Loading Movies...</div>
+                        </div>
+                    </div>
+                    
+                    <div id="toast"></div>
+    
+                    <script src="/movies.js"></script>
+                </body>
+                </html>
+            `);
+        });
+
         app.get('/epg', (req, res) => {
             res.send(`
                 <!DOCTYPE html>
@@ -968,6 +1042,15 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             }
         });
 
+        app.get('/movies.js', (req, res) => {
+            res.setHeader('Content-Type', 'application/javascript');
+            try {
+                res.send(fs.readFileSync(path.join(__dirname, 'remote_movies.js'), 'utf8'));
+            } catch(e) {
+                res.status(404).send('console.error("remote_movies.js not found");');
+            }
+        });
+
         // ------------------ Unified Command API ------------------
         app.get('/cmd/:command', (req, res) => {
             const cmd = req.params.command;
@@ -989,7 +1072,7 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                     break;
                 case 'power': case 'home': case 'back': case 'guide': case 'favorites':
                 case 'up': case 'down': case 'left': case 'right': case 'ok': case 'search':
-                case 'livetv': case 'playlist': case 'settings': case 'fullscreen':
+                case 'livetv': case 'playlist': case 'settings': case 'fullscreen': case 'vod':
                     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-action', cmd);
                     break;
             }
@@ -1075,8 +1158,8 @@ button:active, a.top-btn:active { transform:scale(.95); }
         <button class="top-btn" data-cmd="livetv" style="background:#ef4444; display:flex; align-items:center; justify-content:center;">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M21,3H3C1.89,3 1,3.89 1,5V17A2,2 0 0,0 3,19H8V21H16V19H21A2,2 0 0,0 23,17V5C23,3.89 22.1,3 21,3M21,17H3V5H21V17Z"/></svg>
         </button>
-        <button class="top-btn" data-cmd="playlist" style="background:#22c55e; display:flex; align-items:center; justify-content:center;">
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2 14H8V16H2M2 10H12V12H2M2 6H14V8H2M16 14V8H18V14H22V16H16V14Z"/></svg>
+        <button class="top-btn" onclick="window.location.href='/movies'" style="background:#22c55e; display:flex; align-items:center; justify-content:center;" title="Movies">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M18 4v1h-2V4c0-.55-.45-1-1-1H9c-.55 0-1 .45-1 1v1H6V4c0-.55-.45-1-1-1s-1 .45-1 1v16c0 .55.45 1 1 1s1-.45 1-1v-1h2v1c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-1h2v1c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1s-1 .45-1 1zM8 17H6v-2h2v2zm0-4H6v-2h2v2zm0-4H6V7h2v2zm10 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z"/></svg>
         </button>
         <button class="top-btn" onclick="window.location.href='/epg'" style="background:#eab308; display:flex; align-items:center; justify-content:center;">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19,4H18V2H16V4H8V2H6V4H5C3.89,4 3.01,4.9 3.01,6L3,20A2,2 0 0,0 5,22H19A2,2 0 0,0 21,20V6A2,2 0 0,0 19,4M19,20H5V10H19V20M9,14H7V12H9V14M13,14H11V12H13V14M17,14H15V12H17V14M9,18H7V16H9V18M13,18H11V16H13V18M17,18H15V16H17V18Z"/></svg>
@@ -2841,7 +2924,7 @@ ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
     }
 });
 
-ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, isSeries, categoryType, categoryName }) => {
+async function executeLoadStalkerCategory({ url, mac, categoryId, isSeries, categoryType, categoryName }) {
     const startTime = Date.now();
     const isSeriesFolder = categoryType === 'series' || isSeries;
     const typeLabel = isSeriesFolder ? 'Series' : 'Movies';
@@ -2953,6 +3036,10 @@ ipcMain.handle('load-stalker-category', async (event, { url, mac, categoryId, is
         console.error(`[PERF FAILURE] Error loading stalker category:`, e);
         return [];
     }
+}
+
+ipcMain.handle('load-stalker-category', async (event, params) => {
+    return await executeLoadStalkerCategory(params);
 });
 
 ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => {
