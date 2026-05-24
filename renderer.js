@@ -867,7 +867,7 @@ aeroStyles.textContent = `
     #epg-view {
         background: transparent !important;
         border: none !important;
-        padding: 24px !important;
+        padding: 2px 24px 24px 24px !important;
     }
 
     #epg-playlist-filter, #epg-group-filter {
@@ -4411,7 +4411,7 @@ async function renderFullEpg() {
     });
 
     const topBarHtml = `
-        <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
             <div style="display: flex; gap: 10px;">
                 <select id="epg-playlist-filter" style="background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none;">
                     ${playlistOptionsHtml}
