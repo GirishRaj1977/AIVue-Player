@@ -162,11 +162,7 @@ aeroStyles.textContent = `
 
     /* Left Menu Bar glass styling */
     #nav-bar {
-        background: rgba(15, 15, 20, 0.6) !important;
-        backdrop-filter: blur(24px) !important;
-        -webkit-backdrop-filter: blur(24px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.05) !important;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4) !important;
+        display: none !important;
     }
 
     /* Modern sleek style for side menu buttons */
@@ -444,11 +440,7 @@ aeroStyles.textContent = `
 
     /* Layout settings */
     #nav-bar {
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: flex-start !important;
-        padding-top: 65px !important;
-        gap: 10px !important;
+        display: none !important;
     }
     .nav-btn {
         margin-bottom: 0 !important;
@@ -7316,19 +7308,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     fsBtn.addEventListener('click', () => {
         window.iptvAPI.toggleFullscreen();
     });
-
-    // Increase side menu (nav-bar) width by 25%
-    const navBar = document.getElementById('nav-bar');
-    if (navBar) {
-        const currentWidth = parseFloat(window.getComputedStyle(navBar).width);
-        if (!isNaN(currentWidth) && currentWidth > 0) {
-            const newWidth = currentWidth * 1.25;
-            navBar.style.width = newWidth + 'px';
-            navBar.style.minWidth = newWidth + 'px';
-            navBar.style.maxWidth = newWidth + 'px';
-            navBar.style.flex = `0 0 ${newWidth}px`;
-        }
-    }
 
     // Rename the EPG button dynamically on load
     const epgBtn = document.getElementById('btn-epg');
