@@ -1893,12 +1893,12 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
                         
                         try {
                             // Try get_short_epg first
-                            let epgRes = await stalkerRequest(baseUrl, mac, 'get_short_epg', { type: 'itv', ch_id: chId, size: '10' });
+                            let epgRes = await stalkerRequest(baseUrl, mac, 'get_short_epg', { type: 'itv', ch_id: chId, size: '48', limit: 100, period: 72 });
                             let events = extractStalkerEpgItems(epgRes);
                             
                             // If empty, try get_epg_info fallback
                             if (!events || events.length === 0) {
-                                epgRes = await stalkerRequest(baseUrl, mac, 'get_epg_info', { type: 'itv', ch_id: chId });
+                                epgRes = await stalkerRequest(baseUrl, mac, 'get_epg_info', { type: 'itv', ch_id: chId, period: 72 });
                                 events = extractStalkerEpgItems(epgRes);
                             }
                             
@@ -1994,10 +1994,11 @@ function getEpgDataFromDb(channelIds, startLimit, endLimit) {
     if (!db || !channelIds || channelIds.length === 0) return {};
     try {
         const result = {};
+        const safeChannelIds = channelIds.filter(id => id !== null && id !== undefined).map(id => String(id));
         // SQLite has a limit on bind variables, process array elements in safe chunks
         const chunkSize = 900;
-        for (let i = 0; i < channelIds.length; i += chunkSize) {
-            const chunk = channelIds.slice(i, i + chunkSize);
+        for (let i = 0; i < safeChannelIds.length; i += chunkSize) {
+            const chunk = safeChannelIds.slice(i, i + chunkSize);
             const placeholders = chunk.map(() => '?').join(',');
             
             let query, params;

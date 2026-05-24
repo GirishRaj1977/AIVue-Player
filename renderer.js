@@ -1942,6 +1942,11 @@ function renderMappingColumns() {
 
     // Restore focus to a stable EPG mapping element to prevent global focus-recovery timer from resetting scroll
     const restoreEpgMappingFocus = () => {
+        const activeTagName = document.activeElement ? document.activeElement.tagName : '';
+        if (activeTagName === 'INPUT' || activeTagName === 'SELECT') {
+            return;
+        }
+
         if (mappingSelectedChannel) {
             const safeTitle = mappingSelectedChannel.replace(/"/g, '&quot;');
             const targetEl = channelListEl.querySelector(`.mapping-ch-item[data-title="${safeTitle}"]`);
