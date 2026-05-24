@@ -4405,11 +4405,23 @@ async function renderFullEpg() {
                     ${groupOptionsHtml}
                 </select>
             </div>
-            <button id="epg-now-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 8px 16px; border-radius: 4px;">Now</button>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <button id="epg-now-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 8px 16px; border-radius: 4px;">Now</button>
+                <button id="btn-playlist-epg-temp" class="header-action-btn" title="Playlist" style="width: 32px !important; height: 32px !important; border-radius: 50% !important; display: flex !important; align-items: center; justify-content: center; background: rgba(187,134,252,0.12) !important; border: 1px solid rgba(187,134,252,0.3) !important; color: #bb86fc !important; box-shadow: 0 0 10px rgba(187,134,252,0.15) !important;">
+                    <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: currentColor;"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+                </button>
+            </div>
         </div>
     `;
     
     epgView.innerHTML = topBarHtml + '<div id="epg-content-area" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;"><div style="color: #888; text-align: center; margin-top: 50px;">Loading Guide Data...</div></div>';
+    
+    const tempPlaylistBtn = document.getElementById('btn-playlist-epg-temp');
+    if (tempPlaylistBtn) {
+        tempPlaylistBtn.addEventListener('click', () => {
+            switchTab('playlist', document.getElementById('btn-playlist'));
+        });
+    }
     
     document.getElementById('epg-playlist-filter').addEventListener('change', (e) => {
         epgSelectedPlaylist = e.target.value;
@@ -5425,9 +5437,14 @@ function switchTab(tabId, clickedBtn) {
     }
 
     setTimeout(() => {
-        const focusables = getFocusableElements();
-        if (focusables.length > 0) {
-            focusables[0].focus();
+        const targetBtn = clickedBtn || document.getElementById('btn-' + tabId);
+        if (targetBtn) {
+            targetBtn.focus();
+        } else {
+            const focusables = getFocusableElements();
+            if (focusables.length > 0) {
+                focusables[0].focus();
+            }
         }
     }, 100);
 }
@@ -7099,6 +7116,7 @@ function updateHeaderTime() {
 window.iptvAPI.onFullscreenChange((isFullscreen) => {
     console.log('[API RECV] onFullscreenChange, isFullscreen:', isFullscreen);
     window.isAppFullscreen = isFullscreen;
+    document.body.classList.toggle('fullscreen-active', isFullscreen);
     const navBar = document.getElementById('nav-bar');
     const sidebar = document.getElementById('sidebar');
     const channelDetails = document.getElementById('channel-details');
@@ -7110,7 +7128,7 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
     const isLiveViewActive = document.getElementById('btn-live-tv').classList.contains('active');
 
     if (sidebar) sidebar.style.setProperty('display', (isFullscreen || !isLiveViewActive) ? 'none' : 'flex', 'important');
-    if (navBar) navBar.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
+    if (navBar) navBar.style.setProperty('display', 'none', 'important');
     if (topHeader) topHeader.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
     
     if (channelDetails) channelDetails.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
