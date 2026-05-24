@@ -465,6 +465,42 @@ aeroStyles.textContent = `
         box-shadow: 0 4px 12px rgba(207, 102, 121, 0.15) !important;
     }
 
+    /* Header Round Action Buttons */
+    .header-round-btn {
+        width: 36px !important;
+        height: 36px !important;
+        min-width: 36px !important;
+        border-radius: 50% !important;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: #a1a1aa !important;
+        cursor: pointer !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        margin: 0 !important;
+        pointer-events: auto !important;
+    }
+    .header-round-btn:hover, .header-round-btn:focus {
+        color: #ffffff !important;
+        background: rgba(255, 255, 255, 0.1) !important;
+        transform: scale(1.1) !important;
+    }
+    .header-round-btn.active {
+        color: var(--primary-accent) !important;
+        background: rgba(187, 134, 252, 0.15) !important;
+        box-shadow: 0 0 10px rgba(187, 134, 252, 0.2) !important;
+    }
+    #btn-exit.header-round-btn:hover, #btn-exit.header-round-btn:focus {
+        color: #cf6679 !important;
+        background: rgba(207, 102, 121, 0.15) !important;
+        box-shadow: none !important;
+        border: none !important;
+    }
+
     #player-overlay {
         pointer-events: none !important;
     }
@@ -7205,6 +7241,45 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Initialize premium top header clock
     updateHeaderTime();
     setInterval(updateHeaderTime, 1000);
+
+    // Shift Settings and Power button to header
+    const topHeader = document.getElementById('top-header');
+    const settingsBtn = document.getElementById('btn-settings');
+    const exitBtn = document.getElementById('btn-exit');
+    const headerTimeDate = document.getElementById('header-time-date');
+
+    if (topHeader && settingsBtn && exitBtn && headerTimeDate) {
+        let rightContainer = document.getElementById('header-right-container');
+        if (!rightContainer) {
+            rightContainer = document.createElement('div');
+            rightContainer.id = 'header-right-container';
+            rightContainer.style.cssText = 'display: flex; flex-direction: column; align-items: flex-end; pointer-events: auto; align-self: flex-start; margin-top: 14px;';
+            headerTimeDate.parentNode.insertBefore(rightContainer, headerTimeDate);
+            rightContainer.appendChild(headerTimeDate);
+        }
+
+        let actionContainer = document.getElementById('header-actions');
+        if (!actionContainer) {
+            actionContainer = document.createElement('div');
+            actionContainer.id = 'header-actions';
+            actionContainer.style.cssText = 'display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px;';
+            rightContainer.appendChild(actionContainer);
+        }
+        
+        actionContainer.appendChild(settingsBtn);
+        actionContainer.appendChild(exitBtn);
+        
+        settingsBtn.classList.remove('nav-btn');
+        settingsBtn.classList.add('header-round-btn');
+        exitBtn.classList.remove('nav-btn');
+        exitBtn.classList.add('header-round-btn');
+        
+        settingsBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
+        exitBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>';
+        
+        settingsBtn.title = "Settings";
+        exitBtn.title = "Exit App";
+    }
 
     // Hide all main view containers initially to prevent UI flash before data loads
     ['sidebar', 'main-view', 'playlist-view', 'epg-view', 'settings-view'].forEach(id => {
