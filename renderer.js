@@ -2787,16 +2787,26 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
             showToast(`Failed to import.\nReason: Received invalid data from source.`);
             return false;
         } else {
-            const channels = Array.isArray(result) ? result : result.channels;
+            let channels = Array.isArray(result) ? result : result.channels;
             let finalEpgSource = epgSource || 'Not Configured';
             
             if (!isStalker && (!epgSource || epgSource === 'Not Configured') && result.epg_url) {
                 finalEpgSource = result.epg_url;
             }
 
+            if (isStalker && editIndex >= 0 && savedPlaylists[editIndex] && savedPlaylists[editIndex].channels) {
+                const existingLive = savedPlaylists[editIndex].channels.filter(c => 
+                    c.type !== 'itv_category' && 
+                    c.type !== 'vod_category' && 
+                    c.type !== 'movie_category' && 
+                    c.type !== 'series_category'
+                );
+                channels = [...channels, ...existingLive];
+            }
+
             if (editIndex >= 0 && savedPlaylists[editIndex] && savedPlaylists[editIndex].channels) {
                 const oldMap = new Map();
-            let newCount = 0;
+                let newCount = 0;
                 savedPlaylists[editIndex].channels.forEach(c => oldMap.set(c.title, c));
                 channels.forEach(newCh => {
                     const old = oldMap.get(newCh.title);
@@ -2813,7 +2823,7 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                         }
                     }
                 });
-            if (newCount > 0) showToast(`Update complete: Found ${newCount} new channels.`);
+                if (newCount > 0) showToast(`Update complete: Found ${newCount} new channels.`);
             } else {
                 channels.forEach(newCh => {
                     const isVod = newCh.type === 'movie' || newCh.type === 'series' || newCh.type === 'movie_category' || newCh.type === 'vod_category' || newCh.type === 'series_category';
@@ -3499,8 +3509,18 @@ function renderPlaylists() {
                 }
                 
                 if (result && !result.error && (Array.isArray(result) || result.channels)) {
-                    const channels = Array.isArray(result) ? result : result.channels;
+                    let channels = Array.isArray(result) ? result : result.channels;
                     
+                    if (isStalker && targetPlaylist.channels) {
+                        const existingLive = targetPlaylist.channels.filter(c => 
+                            c.type !== 'itv_category' && 
+                            c.type !== 'vod_category' && 
+                            c.type !== 'movie_category' && 
+                            c.type !== 'series_category'
+                        );
+                        channels = [...channels, ...existingLive];
+                    }
+
                     const oldMap = new Map();
                     if (targetPlaylist.channels) {
                         targetPlaylist.channels.forEach(c => oldMap.set(c.title, c));
@@ -3544,7 +3564,12 @@ function renderPlaylists() {
                         exp_date: result.exp_date || targetPlaylist.exp_date || null
                     };
                     
-                    openManageChannelsModal(-1, tempPlaylist);
+                    if (newCount > 0) {
+                        openManageChannelsModal(-1, tempPlaylist);
+                    } else {
+                        savedPlaylists[idx] = tempPlaylist;
+                        updateState();
+                    }
                 } else {
                     showToast('Failed to refresh playlist: ' + (result ? result.error : 'Unknown error'));
                 }
@@ -7090,7 +7115,16 @@ async function backgroundAutoUpdate() {
         }
 
         if (result && !result.error && (Array.isArray(result) || result.channels)) {
-            const channels = Array.isArray(result) ? result : result.channels;
+            let channels = Array.isArray(result) ? result : result.channels;
+            if (isStalker && p.channels) {
+                const existingLive = p.channels.filter(c => 
+                    c.type !== 'itv_category' && 
+                    c.type !== 'vod_category' && 
+                    c.type !== 'movie_category' && 
+                    c.type !== 'series_category'
+                );
+                channels = [...channels, ...existingLive];
+            }
             const oldMap = new Map();
             if (p.channels) p.channels.forEach(c => oldMap.set(c.title, c));
 
