@@ -243,6 +243,7 @@ aeroStyles.textContent = `
         border-radius: 16px !important;
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
         padding: 8px 0 !important;
+        padding: 2px 0 !important;
     }
 
     /* Channel List selection styles */
@@ -476,6 +477,11 @@ aeroStyles.textContent = `
         margin: 0 !important;
         pointer-events: auto !important;
     }
+    
+    #top-header {
+        top: 2px !important;
+        margin-bottom: 2px !important;
+    }
     .header-round-btn:hover, .header-round-btn:focus {
         color: #ffffff !important;
         background: rgba(255, 255, 255, 0.1) !important;
@@ -498,15 +504,6 @@ aeroStyles.textContent = `
     }
 
     /* Live TV Screen Split Layout */
-    #sidebar {
-        flex: 0 0 22.5% !important;
-        max-width: 22.5% !important;
-        width: 22.5% !important;
-        min-width: 0 !important;
-        min-height: 0 !important;
-        overflow: hidden !important;
-        box-sizing: border-box !important;
-    }
     #main-view {
         flex: 1 !important;
         display: flex !important;
@@ -516,6 +513,8 @@ aeroStyles.textContent = `
         overflow: hidden !important;
         gap: 6px !important;
         padding: 0 12px 12px 0 !important; /* Visual padding wrapper around panels */
+        gap: 4px !important;
+        padding: 0 4px 4px 0 !important; /* Visual padding wrapper around panels */
     }
     #live-top-half {
         display: flex !important;
@@ -523,6 +522,7 @@ aeroStyles.textContent = `
         height: 50% !important;
         width: 100% !important;
         gap: 12px !important;
+        gap: 4px !important;
         min-width: 0 !important;
         min-height: 0 !important;
     }
@@ -549,6 +549,7 @@ aeroStyles.textContent = `
         width: auto !important;
         order: 1 !important;
         margin-left: 24px !important;
+        margin-left: 0 !important;
         background-color: #050507 !important;
         padding: 1px !important;
         box-sizing: border-box !important;
@@ -1821,7 +1822,7 @@ function renderMappingColumns() {
 
     displayChannels.forEach(c => {
         const title = c.title || 'Unknown Channel';
-        const safeTitle = title.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const safeTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
         let bg = 'transparent';
         let color = '#e0e0e0';
@@ -1872,8 +1873,8 @@ function renderMappingColumns() {
         let color = isSelected ? '#43CB44' : '#e0e0e0';
         let border = isSelected ? '1px solid #43CB44' : '1px solid #333';
 
-        const safeName = (epg.name || epg.id).replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const safeId = epg.id.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const safeName = (epg.name || epg.id).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const safeId = epg.id.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const sourceDomain = epgSourceFilter === 'all' && epg.source ? `<span style="color: #888; font-size: 0.8em; margin-left: 8px;">(${getEpgName(epg.source)})</span>` : '';
 
         epgHtmlArr.push(`
@@ -1922,9 +1923,9 @@ function renderMappingColumns() {
     const displayMapped = filteredMapped.slice(0, maxMappedDisplay);
 
     displayMapped.forEach(([chTitle, epgId]) => {
-        const safeTitle = String(chTitle).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const safeTitle = String(chTitle).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const epgName = epgNameLookup[epgId] || epgId;
-        const safeEpgName = String(epgName).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const safeEpgName = String(epgName).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
         let sourceDomainStr = '';
         const rawSource = epgSourceLookup[epgId];
@@ -2259,12 +2260,31 @@ async function renderSettings() {
     `;
 
     // 1. Immediately attach all static event listeners to avoid input lockups
-    document.getElementById('settings-add-epg-btn').addEventListener('click', () => {
+    document.getElementById('settings-add-epg-btn').addEventListener('click', async () => {
         const val = document.getElementById('settings-new-epg').value.trim();
         console.log('[SETTINGS] Add EPG button clicked. Value:', val);
         if (val && !savedEpgs.includes(val)) {
+            const btn = document.getElementById('settings-add-epg-btn');
+            const originalText = btn.textContent;
+            btn.textContent = '⏳';
+            btn.disabled = true;
+
             savedEpgs.push(val);
-            window.iptvAPI.addExternalEpg(val);
+            await window.iptvAPI.addExternalEpg(val);
+
+            let allEpgSources = savedEpgs.slice();
+            savedPlaylists.forEach(p => {
+                if (p.epg && p.epg !== 'Not Configured' && !allEpgSources.includes(p.epg)) {
+                    allEpgSources.push(p.epg);
+                }
+            });
+            const combinedEpgs = allEpgSources.join(',');
+
+            await window.iptvAPI.updateEpg(combinedEpgs, null, true);
+            epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
+
+            btn.textContent = originalText;
+            btn.disabled = false;
             renderSettings();
         }
     });
@@ -2290,6 +2310,9 @@ async function renderSettings() {
                 }
             });
             const combinedEpgs = allEpgSources.join(',');
+
+            console.log('[API] Calling updateEpg to repopulate database.');
+            await window.iptvAPI.updateEpg(combinedEpgs, null, true);
             epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
 
             renderMappingColumns();
@@ -7151,6 +7174,10 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
             document.body.style.setProperty('padding', '60px 12px 12px 12px', 'important');
             document.body.style.setProperty('gap', '12px', 'important');
             if (liveTopHalf) liveTopHalf.style.setProperty('gap', '12px', 'important');
+            playerWrapper.style.setProperty('margin-left', '0', 'important');
+            document.body.style.setProperty('padding', '38px 4px 4px 4px', 'important');
+            document.body.style.setProperty('gap', '4px', 'important');
+            if (liveTopHalf) liveTopHalf.style.setProperty('gap', '4px', 'important');
         }
     }
 });
@@ -7264,6 +7291,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             rightContainer = document.createElement('div');
             rightContainer.id = 'header-right-container';
             rightContainer.style.cssText = 'display: flex; flex-direction: column; align-items: flex-end; pointer-events: auto; align-self: flex-start; margin-top: 14px;';
+            rightContainer.style.cssText = 'display: flex; flex-direction: column; align-items: flex-end; pointer-events: auto; align-self: flex-start; margin-top: 4px;';
             headerTimeDate.parentNode.insertBefore(rightContainer, headerTimeDate);
             rightContainer.appendChild(headerTimeDate);
         }
@@ -7273,6 +7301,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             actionContainer = document.createElement('div');
             actionContainer.id = 'header-actions';
             actionContainer.style.cssText = 'display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px;';
+            actionContainer.style.cssText = 'display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px;';
             rightContainer.appendChild(actionContainer);
         }
         

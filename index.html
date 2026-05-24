@@ -348,6 +348,7 @@
             line-height: 1.45;
             display: -webkit-box;
             -webkit-line-clamp: 3;
+            line-clamp: 3;
             -webkit-box-orient: vertical;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -429,16 +430,13 @@
             min-width: 200px !important;
         }
         .header-left img {
-            height: 180px !important; /* 3x logo size bleed */
+            height: 100% !important;
             width: auto !important;
             object-fit: contain !important;
             filter: drop-shadow(0 4px 15px rgba(187, 134, 252, 0.35)) !important;
             transition: transform 0.3s ease !important;
-            position: absolute !important;
-            top: 4px !important;
-            left: 24px !important;
             z-index: 1001 !important; /* Make sure it bleeds over other elements beautifully */
-            transform-origin: top left !important;
+            transform-origin: center left !important;
         }
         .header-left img:hover {
             transform: scale(1.03) !important;
@@ -587,7 +585,7 @@
 
         /* Adjust main body structure to prevent overlap with the new taller header */
         body {
-            padding-top: 92px !important;
+            padding-top: 82px !important;
         }
 
         /* Hide the old vertical navbar */
@@ -599,14 +597,14 @@
         #episodes-modal, #premium-details-modal {
             left: 12px !important;
             width: calc(100vw - 24px) !important;
-            top: 92px !important; /* Below the 80px top-header + 12px padding */
-            height: calc(100vh - 104px) !important;
+            top: 82px !important; /* Below the 80px top-header + minimal padding */
+            height: calc(100vh - 94px) !important;
         }
 
         /* Re-style sidebar to sit on the left right below the bleeding logo */
         #sidebar {
             position: fixed !important;
-            top: 196px !important; /* 180px bleeding logo + 16px gap */
+            top: 82px !important;
             left: 24px !important;
             width: 340px !important;
             bottom: 24px !important;
@@ -625,7 +623,7 @@
 
         /* Premium sidebar header panel styling */
         #sidebar div[style*="padding: 10px"] {
-            padding: 16px !important;
+            padding: 8px 16px !important;
             background: rgba(0, 0, 0, 0.15) !important;
             border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
             box-sizing: border-box !important;
@@ -652,7 +650,7 @@
 
         /* Push main-view to the right to clear the fixed sidebar */
         #main-view {
-            margin-left: 364px !important; /* 340px width + 24px gap */
+            margin-left: 356px !important; /* 368px (sidebar right edge + 4px gap) - 12px body padding */
             transition: margin-left 0.2s ease !important;
         }
 
@@ -667,7 +665,7 @@
     <!-- Premium Top Header -->
     <div id="top-header">
         <div class="header-left">
-            <img src="assets/Player.png" alt="AIVue Player Logo">
+            <img src="assets/Player1.png" alt="AIVue Player Logo">
         </div>
         
         <div class="header-center">
