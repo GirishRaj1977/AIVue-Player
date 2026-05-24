@@ -492,14 +492,14 @@ aeroStyles.textContent = `
     #live-top-half {
         display: flex !important;
         flex-direction: row !important;
-        height: 65% !important;
+        height: 50% !important;
         width: 100% !important;
         gap: 12px !important;
         min-width: 0 !important;
         min-height: 0 !important;
     }
     #live-bottom-half {
-        height: 35% !important;
+        height: 50% !important;
         width: 100% !important;
         min-width: 0 !important;
         min-height: 0 !important;
@@ -515,7 +515,10 @@ aeroStyles.textContent = `
     }
     
     #player-wrapper {
-        flex: 5 !important;
+        flex: none !important;
+        aspect-ratio: 16 / 9 !important;
+        height: 100% !important;
+        width: auto !important;
         order: 1 !important;
         margin-left: 24px !important;
         background-color: #050507 !important;
@@ -543,7 +546,7 @@ aeroStyles.textContent = `
 
     /* Channel details premium info widget styling */
     #channel-details {
-        flex: 2 !important;
+        flex: 1 !important;
         order: 2 !important;
         overflow-y: auto !important;
         min-width: 0 !important;
@@ -7077,20 +7080,28 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
     if (channelDetails) channelDetails.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
     if (liveBottomHalf) liveBottomHalf.style.setProperty('display', isFullscreen ? 'none' : 'block', 'important');
     
-    if (liveTopHalf) liveTopHalf.style.setProperty('height', isFullscreen ? '100%' : '65%', 'important');
+    if (liveTopHalf) liveTopHalf.style.setProperty('height', isFullscreen ? '100%' : '50%', 'important');
     
     if (playerWrapper) {
         if (isFullscreen) {
             playerWrapper.style.setProperty('padding', '0', 'important');
             playerWrapper.style.setProperty('background-color', 'transparent', 'important');
             playerWrapper.style.setProperty('border-radius', '0', 'important');
+            playerWrapper.style.setProperty('flex', '1', 'important');
+            playerWrapper.style.setProperty('aspect-ratio', 'auto', 'important');
+            playerWrapper.style.setProperty('width', '100%', 'important');
+            playerWrapper.style.setProperty('margin-left', '0', 'important');
             document.body.style.setProperty('padding', '0', 'important');
             document.body.style.setProperty('gap', '0', 'important');
             if (liveTopHalf) liveTopHalf.style.setProperty('gap', '0', 'important');
         } else {
             playerWrapper.style.setProperty('padding', '1px', 'important');
-            playerWrapper.style.setProperty('background-color', '#333', 'important');
-            playerWrapper.style.setProperty('border-radius', '0', 'important');
+            playerWrapper.style.setProperty('background-color', '#050507', 'important');
+            playerWrapper.style.setProperty('border-radius', '24px', 'important');
+            playerWrapper.style.setProperty('flex', 'none', 'important');
+            playerWrapper.style.setProperty('aspect-ratio', '16 / 9', 'important');
+            playerWrapper.style.setProperty('width', 'auto', 'important');
+            playerWrapper.style.setProperty('margin-left', '24px', 'important');
             document.body.style.setProperty('padding', '60px 12px 12px 12px', 'important');
             document.body.style.setProperty('gap', '12px', 'important');
             if (liveTopHalf) liveTopHalf.style.setProperty('gap', '12px', 'important');
