@@ -4014,7 +4014,7 @@ async function checkScheduledRecordings() {
     
     try {
         // 1. Start pending recordings whose time has arrived
-        const pending = db.prepare("SELECT * FROM dvr_schedule WHERE status = 'pending' AND start_time <= ?").all();
+        const pending = db.prepare("SELECT * FROM dvr_schedule WHERE status = 'pending' AND start_time <= ?").all(nowIso);
         for (const row of pending) {
             let meta = { channelName: 'Scheduled', programName: 'Program', headers: [] };
             try {
@@ -4116,7 +4116,7 @@ async function checkScheduledRecordings() {
         }
         
         // 2. Stop ongoing scheduled recordings whose end time has arrived
-        const active = db.prepare("SELECT * FROM dvr_schedule WHERE status = 'recording' AND end_time <= ?").all();
+        const active = db.prepare("SELECT * FROM dvr_schedule WHERE status = 'recording' AND end_time <= ?").all(nowIso);
         for (const row of active) {
             console.log(`[DVR SCHEDULER] Ending scheduled recording id ${row.id}`);
             const recordingId = activeScheduleRecordings.get(row.id);
