@@ -5704,7 +5704,7 @@ async function embedStream(channel) {
         }
     });
 
-    // Start a 12-second loading timeout. If no playback-time is received, fail gracefully.
+    // Start a 30-second loading timeout. If no playback-time is received, fail gracefully.
     window.playbackTimeout = setTimeout(() => {
         if (!window.hasStartedPlayback && streamActive) {
             console.warn('[STREAM] Playback timeout. Stream failed to load.');
@@ -5728,7 +5728,7 @@ async function embedStream(channel) {
             const fsBtn = document.getElementById('fullscreen-btn');
             if (fsBtn) fsBtn.style.display = 'none';
         }
-    }, 12000);
+    }, 30000);
 }
 
 // Hook Stalker query / header fallback retries when MPV triggers unrecognized format error
@@ -5813,7 +5813,7 @@ window.iptvAPI.onStreamFailedRetry(() => {
             console.warn('[STREAM TIMEOUT] Fallback timeout.');
             window.isSwitchingStream = false;
         }
-    }, 12000);
+    }, 30000);
 });
 
 window.iptvAPI.onMpvExit((code) => {
