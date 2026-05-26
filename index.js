@@ -27,15 +27,9 @@ function applyRoundedCorners(hwnd) {
     if (process.platform !== 'win32') return;
     const preference = 2; // DWMWCP_ROUND = 2
     const psCommand = `
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public class Dwm {
-    [DllImport(\\"dwmapi.dll\\")]
-    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
-}
-"@
-[Dwm]::DwmSetWindowAttribute([IntPtr]${hwnd}, 33, [ref]${preference}, 4)
+$code = 'using System; using System.Runtime.InteropServices; public class Dwm { [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size); }';
+Add-Type -TypeDefinition $code;
+[Dwm]::DwmSetWindowAttribute([IntPtr]${hwnd}, 33, [ref]${preference}, 4);
 `;
     exec(`powershell -NoProfile -Command "${psCommand.replace(/\n/g, ' ').replace(/"/g, '\\"')}"`, (err) => {
         if (err) console.error('[DWM] Failed to set rounded corners:', err);

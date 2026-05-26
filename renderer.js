@@ -535,11 +535,11 @@ aeroStyles.textContent = `
         backdrop-filter: blur(20px) !important;
         -webkit-backdrop-filter: blur(20px) !important;
         border: 1px solid rgba(255, 255, 255, 0.05) !important;
-        border-radius: 16px !important;
+        border-radius: 0 !important;
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
-        padding: 24px !important;
+        padding: 0 !important;
         box-sizing: border-box !important;
-        overflow-y: auto !important;
+        overflow: hidden !important;
     }
     
     #player-wrapper {
@@ -1641,6 +1641,9 @@ let epgChannelsData = null;
 
 let epgSelectedPlaylist = 'all';
 let epgSelectedGroup = 'all';
+
+let playerEpgSelectedPlaylist = 'all';
+let playerEpgSelectedGroup = 'all';
 
 // Global variables for virtualized EPG Guide
 let epgGridState = null;
@@ -4128,73 +4131,426 @@ function getCurrentProgram(programmes) {
     return programmes[0]; // fallback to first if none match
 }
 
-function renderEpg(programmes) {
-    console.log('[UI] Rendering sidebar EPG.');
+let liveEpgGridState = null;
+let liveEpgChannelsToRender = [];
+let liveEpgLastStartIndex = -1;
+let liveEpgLastEndIndex = -1;
+let liveEpgLastScrollLeft = -1;
+let liveEpgScrollTicking = false;
+
+function onLiveEpgScroll() {
+    if (!liveEpgScrollTicking) {
+        window.requestAnimationFrame(() => {
+            const scrollContainer = document.getElementById('live-epg-scroll-container');
+            const headerScroll = document.getElementById('live-epg-header-scroll');
+            const channelsCol = document.getElementById('live-epg-channels-col');
+            
+            if (scrollContainer && headerScroll && channelsCol) {
+                headerScroll.scrollLeft = scrollContainer.scrollLeft;
+                channelsCol.scrollTop = scrollContainer.scrollTop;
+            }
+            
+            renderVisibleLiveEpgRows();
+            liveEpgScrollTicking = false;
+        });
+        liveEpgScrollTicking = true;
+    }
+}
+
+function renderVisibleLiveEpgRows(force = false) {
+    const scrollContainer = document.getElementById('live-epg-scroll-container');
+    const rowsLayer = document.getElementById('live-epg-rows-layer');
+    const channelsInner = document.getElementById('live-epg-channels-inner');
+    if (!scrollContainer || !rowsLayer || !channelsInner || !liveEpgGridState) return;
+    
+    const scrollTop = scrollContainer.scrollTop;
+    const scrollLeft = scrollContainer.scrollLeft;
+    const viewportHeight = scrollContainer.clientHeight;
+    const viewportWidth = scrollContainer.clientWidth;
+    const rowHeight = 45;
+    
+    const timeIndicator = document.getElementById('live-epg-time-indicator');
+    if (timeIndicator) {
+        timeIndicator.style.top = `${scrollTop}px`;
+        timeIndicator.style.height = `${viewportHeight}px`;
+    }
+
+    const overscan = 5; 
+    let startIndex = Math.floor(scrollTop / rowHeight) - overscan;
+    let endIndex = Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan;
+    
+    startIndex = Math.max(0, startIndex);
+    endIndex = Math.min(liveEpgChannelsToRender.length - 1, endIndex);
+    
+    if (!force && startIndex === liveEpgLastStartIndex && endIndex === liveEpgLastEndIndex && Math.abs(scrollLeft - liveEpgLastScrollLeft) < (viewportWidth / 2)) {
+        return; 
+    }
+    
+    liveEpgLastStartIndex = startIndex;
+    liveEpgLastEndIndex = endIndex;
+    liveEpgLastScrollLeft = scrollLeft;
+    
+    const { gridStart, totalWidth, pxPerMinute, now } = liveEpgGridState;
+    let gridHtml = '';
+    let channelsHtml = '';
+    const channelsToFetch = [];
+    
+    const horizontalOverscanPx = viewportWidth; 
+    const viewStartPx = scrollLeft - horizontalOverscanPx;
+    const viewEndPx = scrollLeft + viewportWidth + horizontalOverscanPx;
+
+    for (let i = startIndex; i <= endIndex; i++) {
+        const channel = liveEpgChannelsToRender[i];
+        if (!channel) continue;
+
+        const globalIdx = allChannels.findIndex(c => c.url === channel.url && c.title === channel.title);
+        const topPos = i * rowHeight;
+        const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.png';
+        
+        let programsHtml = '';
+        const mappedId = channelMappings[channel.title];
+        const epgId = mappedId || channel.tvg_id || channel.tvg_name;
+        
+        let programmes = null;
+        if (epgId) {
+            if (epgCache[epgId]) {
+                programmes = epgCache[epgId];
+            } else {
+                channelsToFetch.push(channel);
+            }
+        }
+
+        if (programmes) {
+            if (programmes.length > 0) {
+                for (const prog of programmes) {
+                    const pStart = parseEpgTime(prog.start);
+                    const pEnd = parseEpgTime(prog.stop);
+                    
+                    let startMin = (pStart.getTime() - gridStart.getTime()) / 60000;
+                    let endMin = (pEnd.getTime() - gridStart.getTime()) / 60000;
+                    
+                    let left = Math.max(0, startMin * pxPerMinute);
+                    let right = Math.min(totalWidth, endMin * pxPerMinute);
+                    let width = right - left;
+
+                    if (right < viewStartPx || left > viewEndPx) {
+                        continue;
+                    }
+
+                    const isCurrent = (now >= pStart && now <= pEnd);
+                    const isFuture = pStart > now;
+                    const bg = isCurrent ? '#2c2c2c' : '#1e1e1e';
+                    const borderCol = isCurrent ? '#bb86fc' : '#444';
+                    const pTitle = (prog.title || 'Unknown').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    const timeStr = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                    const isReminderSet = savedReminders.some(r => r.progTitle === prog.title && r.startTime === prog.start && r.channelTitle === channel.title);
+                    const reminderStyle = isReminderSet ? 'opacity: 1; filter: drop-shadow(0 0 4px #bb86fc);' : 'opacity: 0.3; filter: grayscale(100%);';
+                    const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
+
+                    programsHtml += `
+                    <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.15); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; padding: 2px 4px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
+                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${pTitle}</div>
+                        <div style="font-size: 0.75em; color: #888; margin-top: 4px;">${timeStr}</div>
+                    </div>`;
+                }
+            } else {
+                programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 45px; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; color: #555; font-size: 0.9em; width: 100%; cursor: pointer;">No EPG Data</div>`;
+            }
+        } else {
+            programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 45px; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; color: #888; font-size: 0.9em; width: 100%; cursor: pointer;">Loading...</div>`;
+        }
+        
+        channelsHtml += `
+        <div class="epg-play-channel" tabindex="0" data-index="${globalIdx}" style="position: absolute; top: ${topPos}px; left: 0; width: 250px; height: 45px; background: #1e1e1e; border-bottom: 1px solid rgba(255, 255, 255, 0.15); border-top: 1px solid rgba(255, 255, 255, 0.15); border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; padding: 4px 8px; box-sizing: border-box; cursor: pointer; outline: none;">
+            <img src="${imgSrc}" data-eh="0" style="width: 32px; height: 32px; min-width: 32px; object-fit: contain; margin-right: 10px; background: #ffffff; border-radius: 4px;">
+            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif; color: #e0e0e0;" title="${safeTitle}">${safeTitle}</span>
+        </div>`;
+        
+        gridHtml += `
+        <div style="position: absolute; top: ${topPos}px; left: 0; width: ${totalWidth}px; height: 45px;">
+            ${programsHtml}
+        </div>`;
+    }
+    
+    channelsInner.innerHTML = channelsHtml;
+    rowsLayer.innerHTML = gridHtml;
+
+    channelsInner.querySelectorAll('img[data-eh="0"]').forEach(img => {
+        img.setAttribute('data-eh', '1');
+        img.onerror = function() {
+            this.onerror = null;
+            this.src = 'assets/logo.ico';
+        };
+    });
+
+    if (channelsToFetch.length > 0) {
+        fetchEpgDataForChannels(channelsToFetch);
+    }
+}
+
+async function renderLiveEpgGrid() {
     const container = document.getElementById('epg-container');
     if (!container) return;
-    
-    if (!programmes || programmes.length === 0) {
-        container.innerHTML = '<div style="color: #cf6679;">No EPG data available for this channel.</div>';
+
+    if (allChannels.length === 0) {
+        container.innerHTML = '<div style="color: #888; text-align: center; margin-top: 50px;">No channels available.</div>';
         return;
     }
 
+    if (window.liveEpgTimeIndicatorInterval) clearInterval(window.liveEpgTimeIndicatorInterval);
+
+    const pxPerMinute = 5;
+    const hourWidth = 60 * pxPerMinute;
     const now = new Date();
-    // Sort by start time so we can linearly find the current/next programs
-    const sortedProgs = [...programmes].sort((a, b) => parseEpgTime(a.start) - parseEpgTime(b.start));
     
-    let currentIdx = -1;
-    for (let i = 0; i < sortedProgs.length; i++) {
-        const start = parseEpgTime(sortedProgs[i].start);
-        const stop = parseEpgTime(sortedProgs[i].stop);
-        if (now >= start && now < stop) {
-            currentIdx = i;
-            break;
-        } else if (start >= now && currentIdx === -1) {
-            currentIdx = i; // Fallback to next upcoming program if exact current is missed
-            break;
-        }
-    }
-
-    if (currentIdx === -1) {
-        container.innerHTML = '<div style="color: #cf6679;">No upcoming EPG data available for this channel.</div>';
-        return;
-    }
-
-    let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+    const gridStart = new Date(now.getTime());
+    gridStart.setMinutes(0, 0, 0);
+    gridStart.setHours(gridStart.getHours() - 1); // -1 hour
     
-    for (let i = currentIdx; i < Math.min(currentIdx + 11, sortedProgs.length); i++) {
-        const prog = sortedProgs[i];
-        const start = parseEpgTime(prog.start);
-        const stop = parseEpgTime(prog.stop);
-        
-        const startTimeStr = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const stopTimeStr = stop.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        const isCurrent = i === currentIdx;
-        const isFuture = start > now;
-        const color = isCurrent ? '#43CB44' : '#e0e0e0';
-        
-        const title = (prog.title || 'Unknown Program').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const desc = (prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        
-        const channelTitle = document.getElementById('detail-name') ? document.getElementById('detail-name').textContent : '';
-        const isReminderSet = typeof savedReminders !== 'undefined' && savedReminders.some(r => r.progTitle === prog.title && r.startTime === prog.start && r.channelTitle === channelTitle);
-        const reminderStyle = isReminderSet ? 'opacity: 1; filter: drop-shadow(0 0 4px #bb86fc);' : 'opacity: 0.3; filter: grayscale(100%);';
-        const reminderHtml = isFuture ? `<button class="reminder-btn-sidebar" data-prog="${title.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="background: transparent; border: none; padding: 0; font-size: 1.2em; cursor: pointer; margin-right: 5px; transition: 0.2s; ${reminderStyle}" title="Set Reminder">🔔</button>` : '';
-        
-        html += `
-            <div class="live-epg-item" tabindex="0" style="background: #1e1e1e; padding: 4px 8px; border-radius: 8px; border-left: 4px solid ${isCurrent ? '#43CB44' : '#444'}; outline: none; cursor: default; transition: 0.2s;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px;">
-                    <div style="font-weight: ${isCurrent ? 'bold' : 'normal'}; color: ${color}; font-size: 1.1em; margin-bottom: 5px; display: flex; align-items: center;">${reminderHtml}<span>${title}</span></div>
-                    <div style="color: #bb86fc; white-space: nowrap; font-size: 0.9em; margin-top: 2px;">${startTimeStr} - ${stopTimeStr}</div>
-                </div>
-                ${desc ? `<div style="color: #888; font-size: 0.9em; margin-top: 5px; line-height: 1.4;">${desc}</div>` : ''}
+    const gridEnd = new Date(gridStart.getTime() + 9 * 60 * 60 * 1000); // +8 hours from now (9 hours total duration)
+    const totalWidth = 9 * hourWidth;
+
+    let playlistOptionsHtml = `<option value="all">All Playlists</option><option value="favs" ${playerEpgSelectedPlaylist === 'favs' ? 'selected' : ''}>Favourites</option>`;
+    savedPlaylists.forEach(p => {
+        playlistOptionsHtml += `<option value="${p.id}" ${playerEpgSelectedPlaylist === String(p.id) ? 'selected' : ''}>${p.name}</option>`;
+    });
+
+    let epgGroupOptions = new Set();
+    allChannels.forEach(c => {
+        if (playerEpgSelectedPlaylist === 'favs' && !c.favourite) return;
+        if (playerEpgSelectedPlaylist !== 'all' && playerEpgSelectedPlaylist !== 'favs' && String(c.playlistId) !== String(playerEpgSelectedPlaylist)) return;
+        epgGroupOptions.add(c.group || 'Uncategorized');
+    });
+    const sortedEpgGroups = Array.from(epgGroupOptions).sort(sortAlphaNum);
+    
+    let groupOptionsHtml = `<option value="all">All Groups</option>`;
+    sortedEpgGroups.forEach(g => {
+        groupOptionsHtml += `<option value="${g.replace(/"/g, '&quot;')}" ${playerEpgSelectedGroup === g ? 'selected' : ''}>${g.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</option>`;
+    });
+
+    const topBarHtml = `
+        <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 6px 10px 4px 10px; box-sizing: border-box; flex-shrink: 0;">
+            <div style="display: flex; gap: 10px;">
+                <select id="player-epg-playlist-filter" style="background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; cursor: pointer;">
+                    ${playlistOptionsHtml}
+                </select>
+                <select id="player-epg-group-filter" style="background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; cursor: pointer;">
+                    ${groupOptionsHtml}
+                </select>
             </div>
-        `;
+            <div style="display: flex; gap: 8px;">
+                <button id="player-epg-now-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 8px 16px; border-radius: 4px; cursor: pointer; border: none;">Now</button>
+                <button id="player-epg-full-btn" class="playlist-btn" style="background: #333; color: white; font-weight: bold; padding: 8px 16px; border-radius: 8px; cursor: pointer; border: 1px solid #555;">Full EPG</button>
+            </div>
+        </div>
+    `;
+
+    liveEpgChannelsToRender = allChannels.filter(channel => {
+        if (playerEpgSelectedPlaylist === 'favs' && !channel.favourite) return false;
+        if (playerEpgSelectedPlaylist !== 'all' && playerEpgSelectedPlaylist !== 'favs' && String(channel.playlistId) !== String(playerEpgSelectedPlaylist)) return false;
+        const channelGroup = channel.group || 'Uncategorized';
+        if (playerEpgSelectedGroup !== 'all' && channelGroup !== playerEpgSelectedGroup) return false;
+        return true;
+    });
+
+    liveEpgChannelsToRender.sort((a, b) => sortAlphaNum(a.title, b.title));
+
+    liveEpgGridState = { gridStart, gridEnd, totalWidth, pxPerMinute, now };
+    liveEpgLastStartIndex = -1;
+    liveEpgLastEndIndex = -1;
+    liveEpgLastScrollLeft = -1;
+
+    let headerHtml = '';
+    for (let i = 0; i < 9; i++) {
+        const headerTime = new Date(gridStart.getTime() + i * 60 * 60 * 1000);
+        const timeStr = headerTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        headerHtml += `<div style="position: absolute; left: ${i * hourWidth}px; width: ${hourWidth}px; height: 100%; border-right: 1px solid rgba(255,255,255,0.1); border-bottom: 2px solid #333; display: flex; align-items: center; padding-left: 10px; color: #fff; font-weight: normal; font-size: 0.9em; box-sizing: border-box;">${timeStr}</div>`;
     }
+
+    const minutesSinceStart = (now.getTime() - gridStart.getTime()) / 60000;
+    const nowPx = minutesSinceStart * pxPerMinute;
+    let redLineHtml = '';
+    if (nowPx > 0 && nowPx < totalWidth) {
+        redLineHtml = `<div id="live-epg-time-indicator" style="position: absolute; left: ${nowPx}px; top: 0; height: 100%; width: 2px; background: #cf6679; z-index: 15; pointer-events: none;"></div>`;
+    }
+
+    let html = `
+    <div id="live-epg-layout-wrapper" style="display: flex; flex-direction: column; flex-grow: 1; width: 100%; height: 100%; overflow: hidden; background: #121212; border: none; border-radius: 0;">
+        <!-- Header Row -->
+        <div style="display: flex; width: 100%; background: #121212; z-index: 20;">
+            <div style="width: 250px; min-width: 250px; background: #121212; border-bottom: 2px solid #333; border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; justify-content: center; font-weight: normal; font-size: 0.9em; color: #fff; box-sizing: border-box; height: 30px;">Channels</div>
+            <div id="live-epg-header-scroll" style="flex-grow: 1; overflow: hidden; position: relative; height: 30px;">
+                <div style="width: ${totalWidth}px; height: 100%; position: relative;">
+                    ${headerHtml}
+                </div>
+            </div>
+            <!-- Scrollbar Spacer -->
+            <div id="live-epg-header-spacer" style="width: 14px; min-width: 14px; background: #121212; border-bottom: 2px solid #333; flex-shrink: 0; box-sizing: border-box;"></div>
+        </div>
+        
+        <!-- Content Area -->
+        <div style="display: flex; flex-grow: 1; overflow: hidden; width: 100%;">
+            <!-- Left Pinned Channels -->
+            <div id="live-epg-channels-col" style="width: 250px; min-width: 250px; background: #1a1a1a; overflow: hidden; border-right: 1px solid rgba(255, 255, 255, 0.15); z-index: 10; position: relative;">
+                <div id="live-epg-channels-inner" style="position: relative; width: 100%; height: ${liveEpgChannelsToRender.length * 45}px;"></div>
+            </div>
+            
+            <!-- Right Scrolling Grid -->
+            <div id="live-epg-scroll-container" style="flex-grow: 1; overflow-y: scroll; overflow-x: auto; position: relative; background: #121212;">
+                <div id="live-epg-grid-inner" style="width: ${totalWidth}px; height: ${liveEpgChannelsToRender.length * 45}px; position: relative;">
+                    <div id="live-epg-rows-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
+                    ${redLineHtml}
+                </div>
+            </div>
+        </div>
+    </div>`;
+
+    container.innerHTML = topBarHtml + html;
+
+    const channelsContainer = document.getElementById('live-epg-channels-col');
+    const gridContainer = document.getElementById('live-epg-scroll-container');
     
-    html += '</div>';
-    container.innerHTML = html;
+    const handleEpgClick = (e) => {
+            const reminderBtn = e.target.closest('.reminder-btn-full');
+            if (reminderBtn) {
+                e.stopPropagation();
+                const channelTitle = reminderBtn.getAttribute('data-channel');
+                const progTitle = reminderBtn.getAttribute('data-prog');
+                const start = reminderBtn.getAttribute('data-start');
+                const stop = reminderBtn.getAttribute('data-stop');
+                toggleReminder(channelTitle, progTitle, start, stop);
+                const isSet = savedReminders.some(r => r.progTitle === progTitle && r.startTime === start && r.channelTitle === channelTitle);
+                if (isSet) {
+                    reminderBtn.style.opacity = '1';
+                    reminderBtn.style.filter = 'drop-shadow(0 0 4px #bb86fc)';
+                    showToast('Reminder Set: ' + progTitle);
+                } else {
+                    reminderBtn.style.opacity = '0.3';
+                    reminderBtn.style.filter = 'grayscale(100%)';
+                    showToast('Reminder Removed');
+                }
+                return;
+            }
+
+            const playChannel = e.target.closest('.epg-play-channel');
+            if (playChannel) {
+                const internalReminderBtn = playChannel.querySelector('.reminder-btn-full');
+                if (internalReminderBtn && playChannel.classList.contains('epg-program-cell')) {
+                    internalReminderBtn.click();
+                    return;
+                }
+
+                const idx = playChannel.getAttribute('data-index');
+                const targetChannel = allChannels[idx];
+                if (targetChannel) {
+                    embedStream(targetChannel);
+                }
+            }
+    };
+    
+    if (channelsContainer) channelsContainer.addEventListener('click', handleEpgClick);
+    if (gridContainer) gridContainer.addEventListener('click', handleEpgClick);
+    
+    const handleEpgWheel = (e) => {
+        if (gridContainer) {
+            gridContainer.scrollTop += e.deltaY;
+            gridContainer.scrollLeft += e.deltaX;
+        }
+        e.preventDefault();
+    };
+
+    if (channelsContainer) channelsContainer.addEventListener('wheel', handleEpgWheel, { passive: false });
+    if (gridContainer) gridContainer.addEventListener('wheel', handleEpgWheel, { passive: false });
+
+    if (gridContainer) {
+        gridContainer.addEventListener('scroll', onLiveEpgScroll);
+    }
+
+    const playerPlaylistFilter = document.getElementById('player-epg-playlist-filter');
+    if (playerPlaylistFilter) {
+        playerPlaylistFilter.addEventListener('change', (e) => {
+            playerEpgSelectedPlaylist = e.target.value;
+            playerEpgSelectedGroup = 'all';
+            renderLiveEpgGrid();
+        });
+    }
+
+    const playerGroupFilter = document.getElementById('player-epg-group-filter');
+    if (playerGroupFilter) {
+        playerGroupFilter.addEventListener('change', (e) => {
+            playerEpgSelectedGroup = e.target.value;
+            renderLiveEpgGrid();
+        });
+    }
+
+    const playerNowBtn = document.getElementById('player-epg-now-btn');
+    if (playerNowBtn) {
+        playerNowBtn.addEventListener('click', () => {
+            if (gridContainer && liveEpgGridState) {
+                const pxPerMinute = liveEpgGridState.pxPerMinute;
+                const minutesSinceStart = (new Date().getTime() - liveEpgGridState.gridStart.getTime()) / 60000;
+                const nowPx = minutesSinceStart * pxPerMinute;
+                const targetScroll = Math.max(0, nowPx - (30 * pxPerMinute));
+                gridContainer.scrollLeft = targetScroll;
+                const headerScroll = document.getElementById('live-epg-header-scroll');
+                if (headerScroll) headerScroll.scrollLeft = targetScroll;
+            }
+        });
+    }
+
+    const playerFullBtn = document.getElementById('player-epg-full-btn');
+    if (playerFullBtn) {
+        playerFullBtn.addEventListener('click', () => {
+            const epgBtn = document.getElementById('btn-epg');
+            if (epgBtn) epgBtn.click();
+        });
+    }
+
+    renderVisibleLiveEpgRows(true);
+
+    if (!document.getElementById('live-epg-styles')) {
+        const style = document.createElement('style');
+        style.id = 'live-epg-styles';
+        style.textContent = `
+            #live-epg-scroll-container::-webkit-scrollbar { width: 12px !important; height: 12px !important; }
+            #live-epg-scroll-container::-webkit-scrollbar-track { background: #121212 !important; border-left: 1px solid rgba(255, 255, 255, 0.05) !important; border-top: 1px solid rgba(255, 255, 255, 0.05) !important; }
+            #live-epg-scroll-container::-webkit-scrollbar-thumb { background: #5c5c66 !important; border-radius: 6px !important; border: 3px solid #121212 !important; }
+            #live-epg-scroll-container::-webkit-scrollbar-thumb:hover { background: #bb86fc !important; }
+            #live-epg-scroll-container::-webkit-scrollbar-corner { background: #121212 !important; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    if (gridContainer) {
+        const targetScroll = Math.max(0, nowPx - (30 * pxPerMinute)); // Pad back 30 mins from red line
+        setTimeout(() => {
+            gridContainer.scrollLeft = targetScroll;
+            const headerScroll = document.getElementById('live-epg-header-scroll');
+            if (headerScroll) headerScroll.scrollLeft = targetScroll;
+
+            // Scroll to the active channel if there is one
+            if (currentPlayingChannelIndex >= 0) {
+                const activeChannel = allChannels[currentPlayingChannelIndex];
+                const renderIdx = liveEpgChannelsToRender.findIndex(c => c.title === activeChannel.title && c.url === activeChannel.url);
+                if (renderIdx >= 0) {
+                    const rowHeight = 45;
+                    const scrollToY = renderIdx * rowHeight;
+                    gridContainer.scrollTop = Math.max(0, scrollToY);
+                }
+            }
+        }, 10);
+    }
+
+    window.liveEpgTimeIndicatorInterval = setInterval(() => {
+        const indicator = document.getElementById('live-epg-time-indicator');
+        if (indicator && liveEpgGridState) {
+            const newNow = new Date();
+            const newMinutesSinceStart = (newNow.getTime() - liveEpgGridState.gridStart.getTime()) / 60000;
+            const newNowPx = newMinutesSinceStart * liveEpgGridState.pxPerMinute;
+            indicator.style.left = `${newNowPx}px`;
+        }
+    }, 60000);
 }
 
 async function fetchEpgDataForChannels(channels) {
@@ -4212,7 +4568,9 @@ async function fetchEpgDataForChannels(channels) {
     const epgIdsArr = Array.from(epgIdsToFetch);
     if (epgIdsArr.length === 0) return;
     
-    const { gridStart, gridEnd } = epgGridState;
+    const activeState = epgGridState || liveEpgGridState;
+    if (!activeState) return;
+    const { gridStart, gridEnd } = activeState;
     const startLimit = formatDateToEpgString(gridStart);
     const endLimit = formatDateToEpgString(gridEnd);
     
@@ -4229,6 +4587,7 @@ async function fetchEpgDataForChannels(channels) {
     });
     
     renderVisibleEpgRows(true); // Force re-render with new data
+    renderVisibleLiveEpgRows(true); // Force re-render Live EPG too!
 }
 
 function onEpgScroll() {
@@ -4806,7 +5165,7 @@ async function embedStream(channel) {
             }
         }
         
-        renderEpg(programmes);
+        renderLiveEpgGrid();
         
         // Setup pending EPG payload to send to MPV Lua script
         let progTitle = '', progDesc = '', progTime = '';
@@ -5302,11 +5661,9 @@ window.iptvAPI.onShowRemoteOverrideToast((deviceId) => {
     }, 50);
 });
 
-// Use ResizeObserver to track exact pixel coordinates perfectly
-const resizeObserver = new ResizeObserver(() => {
+function triggerBoundsUpdate() {
     const isLiveViewActive = document.getElementById('btn-live-tv') && document.getElementById('btn-live-tv').classList.contains('active');
     if (streamActive && isLiveViewActive && playerContainer) {
-        console.log('[EVENT] ResizeObserver triggered, updating MPV bounds.');
         const rect = playerContainer.getBoundingClientRect();
         window.iptvAPI.updateMpvBounds({
             x: Math.round(rect.x),
@@ -5317,6 +5674,12 @@ const resizeObserver = new ResizeObserver(() => {
     } else {
         window.iptvAPI.updateMpvBounds({ x: 0, y: 0, width: 0, height: 0 });
     }
+}
+
+// Use ResizeObserver to track exact pixel coordinates perfectly
+const resizeObserver = new ResizeObserver(() => {
+    console.log('[EVENT] ResizeObserver triggered, updating MPV bounds.');
+    triggerBoundsUpdate();
 });
 resizeObserver.observe(playerContainer);
 
@@ -7171,14 +7534,19 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
             playerWrapper.style.setProperty('aspect-ratio', '16 / 9', 'important');
             playerWrapper.style.setProperty('width', 'auto', 'important');
             playerWrapper.style.setProperty('margin-left', '24px', 'important');
-            document.body.style.setProperty('padding', '60px 12px 12px 12px', 'important');
+            document.body.style.setProperty('padding', '82px 12px 12px 12px', 'important');
             document.body.style.setProperty('gap', '12px', 'important');
             if (liveTopHalf) liveTopHalf.style.setProperty('gap', '12px', 'important');
             playerWrapper.style.setProperty('margin-left', '0', 'important');
-            document.body.style.setProperty('padding', '38px 4px 4px 4px', 'important');
+            document.body.style.setProperty('padding', '82px 4px 4px 4px', 'important');
             document.body.style.setProperty('gap', '4px', 'important');
             if (liveTopHalf) liveTopHalf.style.setProperty('gap', '4px', 'important');
         }
+    }
+
+    // Force multiple sequential bounds updates to guarantee perfect alignment and prevent layout race conditions when exiting fullscreen
+    for (let delay of [10, 50, 100, 200, 400, 600, 1000]) {
+        setTimeout(triggerBoundsUpdate, delay);
     }
 });
 
