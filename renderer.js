@@ -4081,22 +4081,205 @@ if (clearBtn) {
 }
 
 // Listen for live hardware stats from MPV (Resolution display removed)
-window.iptvAPI.onMpvPropChange((name, value) => {
-    console.log('[API RECV] onMpvPropChange', { name, value });
+let allPlaybackProgress = [];
+async function loadAllPlaybackProgress() {
+    allPlaybackProgress = await window.iptvAPI.getAllPlaybackProgress();
+}
+
+function getPlaybackProgressId(channel) {
+    if (channel.type === 'episode') {
+        const season = channel.season || 1;
+        const episode = channel.episodeNum || 1;
+        if (channel.tmdbId) {
+            return `tmdb:${channel.tmdbId}:s${season}:e${episode}`;
+        } else if (channel.seriesTitle) {
+            return `stalker:${channel.seriesTitle}:s${season}:e${episode}`;
+        } else {
+            return `url:${channel.url}`;
+        }
+    } else if (channel.type === 'movie' || channel.type === 'vod') {
+        if (channel.tmdbId) {
+            return `tmdb:${channel.tmdbId}`;
+        } else {
+            return `url:${channel.url}`;
+        }
+    }
+    return null;
+}
+
+function getItemProgress(item, type) {
+    const tmdbId = item.tmdb_id || item.tmdbId || '';
+    const title = item.name || item.title;
     
+    // Find all progress rows that match this item
+    const matches = allPlaybackProgress.filter(p => {
+        if (tmdbId && p.tmdb_id == tmdbId) return true;
+        if ((item.url || item.cmd) && p.stream_url === (item.url || item.cmd)) return true;
+        if (title && p.title === title) return true;
+        
+        // Match series episodes by ID prefix (for Stalker or M3U series without TMDB ID)
+        if (type === 'vod' || type === 'series') {
+            if (p.id.startsWith(`stalker:${title}:`)) return true;
+        }
+        return false;
+    });
+    
+    if (matches.length === 0) return null;
+    
+    if (type === 'movie' || (type === 'vod' && item.type !== 'series')) {
+        return matches[0]; // For movies, there is only one match
+    }
+    
+    // For series, sort by last_watched to find the active episode
+    matches.sort((a, b) => new Date(b.last_watched) - new Date(a.last_watched));
+    
+    const latest = matches[0];
+    const allCompleted = matches.every(m => m.completed === 1);
+    
+    return {
+        position: latest.position,
+        duration: latest.duration,
+        completed: allCompleted ? 1 : 0
+    };
+}
+
+async function saveCurrentPlaybackProgress() {
+    let currentChannel = null;
+    if (currentPlayingChannelIndex >= 0) {
+        currentChannel = allChannels[currentPlayingChannelIndex];
+    }
+    if (!currentChannel) {
+        currentChannel = window.currentPlaybackChannel;
+    }
+    if (!currentChannel) return;
+    const progressId = getPlaybackProgressId(currentChannel);
+    if (!progressId) return;
+    
+    const position = window.currentPlaybackTime || 0;
+    const duration = window.currentPlaybackDuration || 0;
+    if (position <= 0 || duration <= 0) return;
+    
+    // Only save progress if watched for more than 5 seconds
+    if (position < 5) return;
+    
+    const completed = (position / duration >= 0.90) ? 1 : 0;
+    
+    const params = {
+        id: progressId,
+        tmdb_id: currentChannel.tmdbId || null,
+        title: currentChannel.title,
+        stream_url: currentChannel.url,
+        season: currentChannel.season ? parseInt(currentChannel.season) : null,
+        episode: currentChannel.episodeNum ? parseInt(currentChannel.episodeNum) : null,
+        position: position,
+        duration: duration,
+        completed: completed
+    };
+    
+    await window.iptvAPI.savePlaybackProgress(params);
+}
+
+function showResumePromptModal(savedSeconds, onChoice) {
+    let modal = document.getElementById('resume-prompt-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'resume-prompt-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(10, 10, 12, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            font-family: 'Outfit', 'Inter', sans-serif;
+        `;
+        document.body.appendChild(modal);
+    }
+    
+    const minutes = Math.floor(savedSeconds / 60);
+    const seconds = Math.floor(savedSeconds % 60);
+    const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    modal.innerHTML = `
+        <div style="background: rgba(30, 30, 40, 0.95); border: 1px solid rgba(187, 134, 252, 0.2); border-radius: 16px; padding: 30px; max-width: 400px; width: 90%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+            <h3 style="color: #bb86fc; margin: 0 0 15px 0; font-size: 1.5em; font-weight: 700;">Resume Playback</h3>
+            <p style="color: #e0e0e0; margin: 0 0 25px 0; font-size: 1em; line-height: 1.6;">You watched this previously. Would you like to resume from <strong>${timeStr}</strong> or start from the beginning?</p>
+            <div style="display: flex; gap: 15px; justify-content: center;">
+                <button id="resume-btn-start-over" class="playlist-btn" style="background: #2a2a2d; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; border: 1px solid #444;">Start Over</button>
+                <button id="resume-btn-resume" class="playlist-btn" style="background: #bb86fc; color: black; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; border: none;">Resume</button>
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+    
+    const startOverBtn = document.getElementById('resume-btn-start-over');
+    const resumeBtn = document.getElementById('resume-btn-resume');
+    
+    startOverBtn.replaceWith(startOverBtn.cloneNode(true));
+    resumeBtn.replaceWith(resumeBtn.cloneNode(true));
+    
+    document.getElementById('resume-btn-start-over').addEventListener('click', () => {
+        modal.style.display = 'none';
+        onChoice(false);
+    });
+    document.getElementById('resume-btn-resume').addEventListener('click', () => {
+        modal.style.display = 'none';
+        onChoice(true);
+    });
+}
+
+window.iptvAPI.onMpvFileLoaded(() => {
+    console.log('[API RECV] onMpvFileLoaded');
+    window.isFileLoaded = true;
+    window.isSwitchingStream = false;
+    
+    if (window.pendingResumeSeekTime !== null && window.pendingResumeSeekTime !== undefined) {
+        const seekTime = window.pendingResumeSeekTime;
+        window.pendingResumeSeekTime = null; // Clear immediately
+        console.log(`[STREAM] File loaded. Executing delayed seek to ${seekTime}`);
+        window.iptvAPI.sendMpvCommand(`seek ${seekTime} absolute`);
+    }
+});
+
+window.iptvAPI.onMpvPropChange((name, value) => {
+    // console.log('[API RECV] onMpvPropChange', { name, value });
+    
+    if (name === 'duration' && value !== null) {
+        window.currentPlaybackDuration = value;
+    }
+
     if (name === 'playback-time') {
+        if (!window.isFileLoaded) return; // Ignore stale values from previous streams
+        
         window.hasStartedPlayback = true;
         if (window.playbackTimeout) {
             clearTimeout(window.playbackTimeout);
             window.playbackTimeout = null;
         }
         
+        if (value !== null) {
+            window.currentPlaybackTime = value;
+            
+            // Throttle progress saves to once every 5 seconds
+            const now = Date.now();
+            if (!window.lastProgressSaveTime || (now - window.lastProgressSaveTime >= 5000)) {
+                window.lastProgressSaveTime = now;
+                saveCurrentPlaybackProgress();
+            }
+        }
+
         if (window.pendingEpgUpdate) {
             const encoded = encodeURIComponent(JSON.stringify(window.pendingEpgUpdate));
-            // Broadcast to all scripts instead of aivue specifically, bypassing script naming issues
             window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`);
-            setTimeout(() => window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`), 500); // Failsafe delivery
-            window.pendingEpgUpdate = null; // Only send once per playback
+            setTimeout(() => window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`), 500);
+            window.pendingEpgUpdate = null;
         }
     }
 });
@@ -4376,7 +4559,7 @@ async function renderLiveEpgGrid() {
     }
 
     let html = `
-    <div id="live-epg-layout-wrapper" style="display: flex; flex-direction: column; flex-grow: 1; width: 100%; height: 100%; overflow: hidden; background: #121212; border: none; border-radius: 0;">
+    <div id="live-epg-layout-wrapper" style="display: flex; flex-direction: column; flex-grow: 1; width: 100%; height: 100%; overflow: hidden; background: #121212; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 0;">
         <!-- Header Row -->
         <div style="display: flex; width: 100%; background: #121212; z-index: 20;">
             <div style="width: 250px; min-width: 250px; background: #121212; border-bottom: 2px solid #333; border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; justify-content: center; font-weight: normal; font-size: 0.9em; color: #fff; box-sizing: border-box; height: 30px;">Channels</div>
@@ -5189,8 +5372,21 @@ async function embedStream(channel) {
     const playerOverlay = document.getElementById('player-overlay');
     if (playerOverlay) playerOverlay.innerHTML = `<span style="color: #bb86fc;">Loading...</span><br><span style="font-size: 0.6em; color: #888;">${safeTitle}</span>`;
 
+    // Track active fallback iterations
+    window.currentPlaybackChannel = channel;
+    window.currentPlaybackFinalUrl = finalStreamUrl;
+    if (window.lastPlaybackChannelUrl !== channel.url) {
+        window.lastPlaybackChannelUrl = channel.url;
+        window.playbackFallbackCount = 0;
+    }
+
     const rect = playerContainer.getBoundingClientRect();
-    console.log('[API] Calling playMpvEmbedded.');
+    
+    // We keep window.pendingResumeSeekTime intact until file-loaded fires
+    window.isFileLoaded = false;
+    window.isSwitchingStream = true;
+    
+    console.log('[API] Calling playMpvEmbedded. Final URL:', finalStreamUrl);
     window.iptvAPI.playMpvEmbedded({
         url: finalStreamUrl,
         title: channel.title,
@@ -5206,6 +5402,7 @@ async function embedStream(channel) {
     window.playbackTimeout = setTimeout(() => {
         if (!window.hasStartedPlayback && streamActive) {
             console.warn('[STREAM] Playback timeout. Stream failed to load.');
+            window.isSwitchingStream = false;
             streamActive = false;
             currentPlayingChannelIndex = -1;
             document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
@@ -5228,19 +5425,108 @@ async function embedStream(channel) {
     }, 12000);
 }
 
+// Hook Stalker query / header fallback retries when MPV triggers unrecognized format error
+window.iptvAPI.onStreamFailedRetry(() => {
+    if (!streamActive || !window.currentPlaybackChannel) return;
+    
+    window.playbackFallbackCount = (window.playbackFallbackCount || 0) + 1;
+    let url = window.currentPlaybackFinalUrl || '';
+    
+    if (window.playbackFallbackCount > 3) {
+        console.log('[MPV FALLBACK SYSTEM] Exceeded maximum fallback attempts (3). Halting stream.');
+        return;
+    }
+    
+    console.log(`[MPV FALLBACK SYSTEM] Stream failed. Triggering fallback attempt #${window.playbackFallbackCount}`);
+    
+    // Strategy 1: If there is a play_token parameter in URL, strip it out or alter query formats
+    if (window.playbackFallbackCount === 1) {
+        if (url.includes('play_token=')) {
+            url = url.replace(/([?&])play_token=[^&]+/i, '$1').replace(/[?&]&/g, '?').replace(/\?$/g, '');
+            console.log('[MPV FALLBACK SYSTEM] Strategy 1: Stripped play_token from Stalker URL:', url);
+        } else if (url.includes('&')) {
+            // Strip all extra URL query parameters
+            url = url.split('&')[0];
+            console.log('[MPV FALLBACK SYSTEM] Strategy 1: Stripped extra query parameters:', url);
+        } else {
+            // Alter extension / append dummy parameter
+            url = url + (url.includes('?') ? '&' : '?') + 'forced_auth=true';
+            console.log('[MPV FALLBACK SYSTEM] Strategy 1: Append force_auth flag:', url);
+        }
+    }
+    
+    // Strategy 2: Strip standard transport extension (e.g. remove .mkv, .mp4, .ts, etc if portal is strict)
+    if (window.playbackFallbackCount === 2) {
+        if (url.includes('.mkv')) {
+            url = url.replace('.mkv', '');
+            console.log('[MPV FALLBACK SYSTEM] Strategy 2: Stripping .mkv extension:', url);
+        } else if (url.includes('.ts')) {
+            url = url.replace('.ts', '');
+            console.log('[MPV FALLBACK SYSTEM] Strategy 2: Stripping .ts extension:', url);
+        } else if (url.includes('.mp4')) {
+            url = url.replace('.mp4', '');
+            console.log('[MPV FALLBACK SYSTEM] Strategy 2: Stripping .mp4 extension:', url);
+        } else {
+            // Strip all queries entirely
+            url = url.split('?')[0];
+            console.log('[MPV FALLBACK SYSTEM] Strategy 2: Stripping all URL queries:', url);
+        }
+    }
+    
+    // Strategy 3: Attempt playing raw feed without Bearer authorization or with stripped MAC parameters
+    if (window.playbackFallbackCount === 3) {
+        if (url.includes('mac=')) {
+            url = url.replace(/([?&])mac=[^&]+/i, '$1').replace(/[?&]&/g, '?').replace(/\?$/g, '');
+            console.log('[MPV FALLBACK SYSTEM] Strategy 3: Stripping mac parameter from URL string:', url);
+        } else {
+            // Add custom Stalker direct command headers fallback parameter
+            url = url + (url.includes('?') ? '&' : '?') + 'mag=mag250';
+            console.log('[MPV FALLBACK SYSTEM] Strategy 3: Appended dummy MAG device tag parameter:', url);
+        }
+    }
+
+    if (window.playbackTimeout) {
+        clearTimeout(window.playbackTimeout);
+        window.playbackTimeout = null;
+    }
+    
+    const rect = playerContainer.getBoundingClientRect();
+    window.iptvAPI.playMpvEmbedded({
+        url: url,
+        title: window.currentPlaybackChannel.title,
+        bounds: {
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height)
+        }
+    });
+
+    window.playbackTimeout = setTimeout(() => {
+        if (!window.hasStartedPlayback && streamActive) {
+            console.warn('[STREAM TIMEOUT] Fallback timeout.');
+            window.isSwitchingStream = false;
+        }
+    }, 12000);
+});
+
 window.iptvAPI.onMpvExit((code) => {
     console.log('[API RECV] onMpvExit with code:', code);
+    window.isSwitchingStream = false;
     
     if (window.playbackTimeout) {
         clearTimeout(window.playbackTimeout);
         window.playbackTimeout = null;
     }
     
+    // Save current playback progress before cleanup
+    saveCurrentPlaybackProgress();
+    
     if (streamActive) {
         streamActive = false;
         currentPlayingChannelIndex = -1;
         document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
-
+ 
         const playerOverlay = document.getElementById('player-overlay');
         if (playerOverlay) {
             playerOverlay.innerHTML = `
@@ -5250,9 +5536,56 @@ window.iptvAPI.onMpvExit((code) => {
                 </div>
             `;
         }
-
+ 
         const fsBtn = document.getElementById('fullscreen-btn');
         if (fsBtn) fsBtn.style.display = 'none';
+    }
+});
+ 
+window.iptvAPI.onMpvStopped(() => {
+    console.log('[API RECV] onMpvStopped');
+    
+    if (window.isSwitchingStream) {
+        console.log('[API RECV] Ignoring onMpvStopped because we are switching streams.');
+        return;
+    }
+    
+    if (streamActive && !window.hasStartedPlayback) {
+        console.log('[API RECV] Ignoring onMpvStopped because a new stream is currently loading.');
+        return;
+    }
+    
+    if (window.playbackTimeout) {
+        clearTimeout(window.playbackTimeout);
+        window.playbackTimeout = null;
+    }
+    
+    // Save current playback progress before cleanup
+    saveCurrentPlaybackProgress();
+    
+    if (streamActive) {
+        streamActive = false;
+        currentPlayingChannelIndex = -1;
+        document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+ 
+        const playerOverlay = document.getElementById('player-overlay');
+        if (playerOverlay) {
+            playerOverlay.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
+                    <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
+                    <span style="color: #a1a1aa; font-size: 1.2em; font-weight: bold;">Playback Stopped</span>
+                </div>
+            `;
+        }
+ 
+        const fsBtn = document.getElementById('fullscreen-btn');
+        if (fsBtn) fsBtn.style.display = 'none';
+    }
+    
+    // Switch to live TV view when stopped
+    const btnLiveTv = document.getElementById('btn-live-tv');
+    if (btnLiveTv) {
+        switchTab('live-tv', btnLiveTv);
     }
 });
 
@@ -6026,10 +6359,10 @@ function injectPremiumStyles() {
         /* Episodes Modal Screen (Frosted Glass Overlay Window) */
         #episodes-modal {
             position: fixed !important;
-            top: 12px !important;
-            left: 88px !important;
-            width: calc(100vw - 100px) !important;
-            height: calc(100vh - 24px) !important;
+            top: 82px !important;
+            left: 12px !important;
+            width: calc(100vw - 24px) !important;
+            height: calc(100vh - 94px) !important;
             background: rgba(10, 10, 12, 0.5) !important;
             backdrop-filter: blur(36px) !important;
             -webkit-backdrop-filter: blur(36px) !important;
@@ -6122,10 +6455,10 @@ function injectPremiumStyles() {
         /* Netflix-style Details Modal Screen (Frosted Glass Overlay Window) */
         #premium-details-modal {
             position: fixed !important;
-            top: 12px !important;
-            left: 88px !important;
-            width: calc(100vw - 100px) !important;
-            height: calc(100vh - 24px) !important;
+            top: 82px !important;
+            left: 12px !important;
+            width: calc(100vw - 24px) !important;
+            height: calc(100vh - 94px) !important;
             background: rgba(10, 10, 12, 0.5) !important;
             backdrop-filter: blur(36px) !important;
             -webkit-backdrop-filter: blur(36px) !important;
@@ -6313,6 +6646,40 @@ function injectPremiumStyles() {
             box-shadow: 0 6px 20px rgba(187, 134, 252, 0.45) !important;
             transform: scale(1.04) !important;
         }
+
+        .catalog-progress-bar-wrapper {
+            position: absolute !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 4px !important;
+            background: rgba(255, 255, 255, 0.2) !important;
+            z-index: 4 !important;
+        }
+        .catalog-progress-bar {
+            height: 100% !important;
+            background: #bb86fc !important;
+            width: 0% !important;
+        }
+        .catalog-watched-badge {
+            position: absolute !important;
+            top: 8px !important;
+            left: 8px !important;
+            background: rgba(46, 125, 50, 0.95) !important;
+            backdrop-filter: blur(8px) !important;
+            -webkit-backdrop-filter: blur(8px) !important;
+            border: 1px solid rgba(76, 175, 80, 0.5) !important;
+            color: #fff !important;
+            font-weight: bold !important;
+            font-size: 0.72em !important;
+            padding: 3px 6px !important;
+            border-radius: 6px !important;
+            z-index: 3 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5) !important;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -6475,18 +6842,46 @@ async function openMovieDetailsModal(streamInfo) {
     document.getElementById('details-backdrop-banner').style.backgroundImage = `linear-gradient(to top, #181818, rgba(24, 24, 24, 0.7) 40%, rgba(24, 24, 24, 0) 80%), url(${bannerUrl})`;
     
     const playBtn = document.getElementById('details-play-btn');
+    const resumeBtn = document.getElementById('details-resume-btn');
     const episodesSection = document.getElementById('details-episodes-section');
     
     episodesSection.style.display = 'none';
     playBtn.style.display = 'flex';
+    if (resumeBtn) resumeBtn.style.display = 'none';
     
     playBtn.replaceWith(playBtn.cloneNode(true));
+    if (resumeBtn) resumeBtn.replaceWith(resumeBtn.cloneNode(true));
     const newPlayBtn = document.getElementById('details-play-btn');
-    newPlayBtn.addEventListener('click', () => {
+    const newResumeBtn = document.getElementById('details-resume-btn');
+    
+    let savedProgress = null;
+    const progId = getPlaybackProgressId(streamInfo);
+    
+    newPlayBtn.addEventListener('click', async () => {
         modal.style.display = 'none';
         switchTab('live-tv', document.getElementById('btn-live-tv'));
         embedStream(streamInfo);
     });
+    
+    if (newResumeBtn) {
+        newResumeBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+            switchTab('live-tv', document.getElementById('btn-live-tv'));
+            if (savedProgress) {
+                window.pendingResumeSeekTime = savedProgress.position;
+            }
+            embedStream(streamInfo);
+        });
+    }
+
+    if (progId && streamInfo.type !== 'series') {
+        window.iptvAPI.getPlaybackProgress(progId).then(saved => {
+            if (saved && saved.position > 0 && !saved.completed) {
+                savedProgress = saved;
+                if (newResumeBtn) newResumeBtn.style.display = 'flex';
+            }
+        });
+    }
     
     modal.style.display = 'flex';
     
@@ -6622,9 +7017,23 @@ async function openMovieDetailsModal(streamInfo) {
                 epGrid.innerHTML = '<div style="color: #888; padding: 20px;">No episodes found.</div>';
                 
                 // Default click to play the whole series details entry
-                finalPlayBtn.addEventListener('click', () => {
+                finalPlayBtn.addEventListener('click', async () => {
                     modal.style.display = 'none';
                     switchTab('live-tv', document.getElementById('btn-live-tv'));
+                    
+                    const progId = getPlaybackProgressId(streamInfo);
+                    if (progId) {
+                        const saved = await window.iptvAPI.getPlaybackProgress(progId);
+                        if (saved && saved.position > 0 && !saved.completed) {
+                            showResumePromptModal(saved.position, (resume) => {
+                                if (resume) {
+                                    window.pendingResumeSeekTime = saved.position;
+                                }
+                                embedStream(streamInfo);
+                            });
+                            return;
+                        }
+                    }
                     embedStream(streamInfo);
                 });
                 return;
@@ -6653,10 +7062,11 @@ async function openMovieDetailsModal(streamInfo) {
                     const cleaned = firstEp.name.replace(cleanPrefix, '').trim();
                     if (cleaned) firstEpDisplayName = cleaned;
                 }
-                finalPlayBtn.addEventListener('click', () => {
+                finalPlayBtn.addEventListener('click', async () => {
                     modal.style.display = 'none';
                     switchTab('live-tv', document.getElementById('btn-live-tv'));
-                    embedStream({
+                    
+                    const episodeChannel = {
                         title: `${streamInfo.title} - S${firstSeason}E${firstEp.episodeNum} - ${firstEpDisplayName}`,
                         url: firstEp.url,
                         logo: streamInfo.logo,
@@ -6667,12 +7077,41 @@ async function openMovieDetailsModal(streamInfo) {
                         season: firstSeason,
                         episodeNum: firstEp.episodeNum,
                         tmdbData: tmdbData
-                    });
+                    };
+                    
+                    const progId = getPlaybackProgressId(episodeChannel);
+                    if (progId) {
+                        const saved = await window.iptvAPI.getPlaybackProgress(progId);
+                        if (saved && saved.position > 0 && !saved.completed) {
+                            showResumePromptModal(saved.position, (resume) => {
+                                if (resume) {
+                                    window.pendingResumeSeekTime = saved.position;
+                                }
+                                embedStream(episodeChannel);
+                            });
+                            return;
+                        }
+                    }
+                    embedStream(episodeChannel);
                 });
             } else {
-                finalPlayBtn.addEventListener('click', () => {
+                finalPlayBtn.addEventListener('click', async () => {
                     modal.style.display = 'none';
                     switchTab('live-tv', document.getElementById('btn-live-tv'));
+                    
+                    const progId = getPlaybackProgressId(streamInfo);
+                    if (progId) {
+                        const saved = await window.iptvAPI.getPlaybackProgress(progId);
+                        if (saved && saved.position > 0 && !saved.completed) {
+                            showResumePromptModal(saved.position, (resume) => {
+                                if (resume) {
+                                    window.pendingResumeSeekTime = saved.position;
+                                }
+                                embedStream(streamInfo);
+                            });
+                            return;
+                        }
+                    }
                     embedStream(streamInfo);
                 });
             }
@@ -6716,10 +7155,11 @@ async function openMovieDetailsModal(streamInfo) {
                         </div>
                     `;
                     
-                    card.addEventListener('click', () => {
+                    card.addEventListener('click', async () => {
                         modal.style.display = 'none';
                         switchTab('live-tv', document.getElementById('btn-live-tv'));
-                        embedStream({
+                        
+                        const episodeChannel = {
                             title: `${streamInfo.title} - S${seasonNum}E${ep.episodeNum} - ${epDisplayName}`,
                             url: ep.url,
                             logo: streamInfo.logo,
@@ -6730,7 +7170,22 @@ async function openMovieDetailsModal(streamInfo) {
                             season: seasonNum,
                             episodeNum: ep.episodeNum,
                             tmdbData: tmdbData
-                        });
+                        };
+                        
+                        const progId = getPlaybackProgressId(episodeChannel);
+                        if (progId) {
+                            const saved = await window.iptvAPI.getPlaybackProgress(progId);
+                            if (saved && saved.position > 0 && !saved.completed) {
+                                showResumePromptModal(saved.position, (resume) => {
+                                    if (resume) {
+                                        window.pendingResumeSeekTime = saved.position;
+                                    }
+                                    embedStream(episodeChannel);
+                                });
+                                return;
+                            }
+                        }
+                        embedStream(episodeChannel);
                     });
                     
                     epGrid.appendChild(card);
@@ -6979,7 +7434,8 @@ async function renderMovies() {
         });
         grid.appendChild(backBtnContainer);
 
-        const renderItems = (items) => {
+        const renderItems = async (items) => {
+            await loadAllPlaybackProgress();
             items.sort((a, b) => sortAlphaNum(a.name || a.title, b.name || b.title));
             items.forEach(item => {
                 const card = document.createElement('div');
@@ -6995,9 +7451,30 @@ async function renderMovies() {
                     card.dataset.tmdbId = tmdbId;
                 }
                 
+                let progressOverlayHtml = '';
+                const progress = getItemProgress(item, 'movie');
+                if (progress) {
+                    if (progress.completed === 1) {
+                        progressOverlayHtml = `
+                            <div class="catalog-watched-badge" title="Fully Watched">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                Watched
+                            </div>
+                        `;
+                    } else if (progress.position > 0 && progress.duration > 0) {
+                        const pct = Math.min(100, Math.max(0, (progress.position / progress.duration) * 100));
+                        progressOverlayHtml = `
+                            <div class="catalog-progress-bar-wrapper">
+                                <div class="catalog-progress-bar" style="width: ${pct}%;"></div>
+                            </div>
+                        `;
+                    }
+                }
+                
                 card.innerHTML = `
                     <div class="catalog-poster-wrapper">
                         <img class="catalog-poster" src="${logoUrl}" alt="${title}" onerror="this.onerror=null; this.src='assets/logo.ico';">
+                        ${progressOverlayHtml}
                     </div>
                     <div class="catalog-info">
                         <h4 class="catalog-title" title="${title.replace(/"/g, '&quot;')}">${title}</h4>
@@ -7220,7 +7697,8 @@ async function renderVod() {
         });
         grid.appendChild(backBtnContainer);
 
-        const renderItems = (items) => {
+        const renderItems = async (items) => {
+            await loadAllPlaybackProgress();
             items.sort((a, b) => sortAlphaNum(a.name || a.title, b.name || b.title));
             items.forEach(item => {
                 const card = document.createElement('div');
@@ -7236,9 +7714,30 @@ async function renderVod() {
                     card.dataset.tmdbId = tmdbId;
                 }
                 
+                let progressOverlayHtml = '';
+                const progress = getItemProgress(item, 'vod');
+                if (progress) {
+                    if (progress.completed === 1) {
+                        progressOverlayHtml = `
+                            <div class="catalog-watched-badge" title="All Episodes Watched">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                Watched
+                            </div>
+                        `;
+                    } else if (progress.position > 0 && progress.duration > 0) {
+                        const pct = Math.min(100, Math.max(0, (progress.position / progress.duration) * 100));
+                        progressOverlayHtml = `
+                            <div class="catalog-progress-bar-wrapper">
+                                <div class="catalog-progress-bar" style="width: ${pct}%;"></div>
+                            </div>
+                        `;
+                    }
+                }
+                
                 card.innerHTML = `
                     <div class="catalog-poster-wrapper">
                         <img class="catalog-poster" src="${logoUrl}" alt="${title}" onerror="this.onerror=null; this.src='assets/logo.ico';">
+                        ${progressOverlayHtml}
                     </div>
                     <div class="catalog-info">
                         <h4 class="catalog-title" title="${title.replace(/"/g, '&quot;')}">${title}</h4>
@@ -7403,18 +7902,37 @@ async function openEpisodesModal(playlistId, seriesId, seriesTitle, seriesPoster
                     <div class="episode-name" title="${ep.name}">${ep.name || `Episode ${ep.episodeNum}`}</div>
                 `;
                 
-                epCard.addEventListener('click', () => {
+                epCard.addEventListener('click', async () => {
                     console.log('[CATALOG] Playing Series Episode:', ep.name, ep.url);
                     modal.style.display = 'none';
                     switchTab('live-tv', document.getElementById('btn-live-tv'));
                     
                     const seriesPoster = seriesPosterUrl || playlist.channels.find(c => c.tvg_id === seriesId)?.logo || 'assets/logo.ico';
-                    embedStream({
+                    const episodeChannel = {
                         title: `${seriesTitle} - S${seasonNum}E${ep.episodeNum} - ${ep.name || 'Episode'}`,
                         url: ep.url,
                         logo: seriesPoster,
-                        playlistId: playlist.id
-                    });
+                        playlistId: playlist.id,
+                        type: 'episode',
+                        seriesTitle: seriesTitle,
+                        season: seasonNum,
+                        episodeNum: ep.episodeNum
+                    };
+                    
+                    const progId = getPlaybackProgressId(episodeChannel);
+                    if (progId) {
+                        const saved = await window.iptvAPI.getPlaybackProgress(progId);
+                        if (saved && saved.position > 0 && !saved.completed) {
+                            showResumePromptModal(saved.position, (resume) => {
+                                if (resume) {
+                                    window.pendingResumeSeekTime = saved.position;
+                                }
+                                embedStream(episodeChannel);
+                            });
+                            return;
+                        }
+                    }
+                    embedStream(episodeChannel);
                 });
                 
                 episodesGrid.appendChild(epCard);
@@ -7510,7 +8028,7 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
     if (topHeader) topHeader.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
     
     if (channelDetails) channelDetails.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
-    if (liveBottomHalf) liveBottomHalf.style.setProperty('display', isFullscreen ? 'none' : 'block', 'important');
+    if (liveBottomHalf) liveBottomHalf.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
     
     if (liveTopHalf) liveTopHalf.style.setProperty('height', isFullscreen ? '100%' : '50%', 'important');
     

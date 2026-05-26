@@ -18,8 +18,11 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     onFullscreenChange: (callback) => ipcRenderer.on('fullscreen-state', (_event, isFull) => callback(isFull)),
     onMpvPropChange: (callback) => ipcRenderer.on('mpv-prop-change', (_event, name, val) => callback(name, val)),
     onMpvExit: (callback) => ipcRenderer.on('mpv-exit', (_event, code) => callback(code)),
+    onMpvStopped: (callback) => ipcRenderer.on('mpv-stopped', () => callback()),
+    onMpvFileLoaded: (callback) => ipcRenderer.on('mpv-file-loaded', () => callback()),
     onPreviousChannel: (callback) => ipcRenderer.on('mpv-previous-channel', callback),
     onNextChannel: (callback) => ipcRenderer.on('mpv-next-channel', callback),
+    onStreamFailedRetry: (callback) => ipcRenderer.on('mpv-stream-failed-retry', callback),
     saveChannels: (channels) => ipcRenderer.invoke('save-channels', channels),
     deletePlaylist: (playlistId) => ipcRenderer.invoke('delete-playlist', playlistId),
     clearAllPlaylists: () => ipcRenderer.invoke('clear-all-playlists'),
@@ -50,5 +53,8 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     fetchTmdbByTitle: (params) => ipcRenderer.invoke('fetch-tmdb-by-title', params),
     fetchTmdbById: (params) => ipcRenderer.invoke('fetch-tmdb-by-id', params),
     fetchTmdbSeasonEpisodes: (params) => ipcRenderer.invoke('fetch-tmdb-season-episodes', params),
+    getPlaybackProgress: (id) => ipcRenderer.invoke('get-playback-progress', id),
+    savePlaybackProgress: (params) => ipcRenderer.invoke('save-playback-progress', params),
+    getAllPlaybackProgress: () => ipcRenderer.invoke('get-all-playback-progress'),
     log: (category, level, message) => ipcRenderer.send('write-log', { category, level, message })
 });

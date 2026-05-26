@@ -101,6 +101,19 @@ try {
             file_path TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS playback_progress (
+            id TEXT PRIMARY KEY,
+            tmdb_id TEXT,
+            title TEXT,
+            stream_url TEXT,
+            season INTEGER,
+            episode INTEGER,
+            position REAL,
+            duration REAL,
+            last_watched TEXT,
+            completed INTEGER DEFAULT 0
+        );
+
         -- Indexes for lightning fast lookups
         CREATE INDEX IF NOT EXISTS idx_channels_playlist ON channels(playlist_id);
         CREATE INDEX IF NOT EXISTS idx_channels_group ON channels(group_name);
@@ -1451,6 +1464,7 @@ function connectIPC() {
         ipcClient.write(JSON.stringify({ command: ["observe_property", 7, "core-idle"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["observe_property", 9, "pause"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["observe_property", 10, "path"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 11, "duration"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["request_log_messages", "v"] }) + '\n');
     });
     
@@ -1501,8 +1515,27 @@ function connectIPC() {
                     }
                 }
                 
-                if (['file-loaded', 'start-file', 'end-file', 'tracks-changed'].includes(msg.event)) {
+                if (['file-loaded', 'start-file', 'tracks-changed'].includes(msg.event)) {
                     console.log(`[MPV LIFECYCLE EVENT] ${msg.event}`, msg);
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send(`mpv-${msg.event}`);
+                    }
+                }
+                if (msg.event === 'end-file') {
+                    console.log('[MPV LIFECYCLE EVENT] end-file', msg);
+                    if (msg.reason === 'error' && (msg.file_error === 'unrecognized file format' || msg.file_error === 'loading failed')) {
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            console.log('[MPV FALLBACK SYSTEM] Stream load failed. Invoking next fallback strategy.');
+                            mainWindow.webContents.send('mpv-stream-failed-retry');
+                        }
+                    } else if (msg.reason === 'stop' || msg.reason === 'quit') {
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            if (mainWindow.isFullScreen()) {
+                                mainWindow.setFullScreen(false);
+                            }
+                            mainWindow.webContents.send('mpv-stopped');
+                        }
+                    }
                 }
                 if (msg.event === 'log-message') {
                     if (msg.level === 'error' || msg.level === 'warn') console.log(`[MPV LOG] ${msg.text.trim()}`);
@@ -1549,6 +1582,12 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
     const macMatch = urlStr.match(/[?&]mac=([^&]+)/i);
     if (macMatch) {
         mac = decodeURIComponent(macMatch[1]);
+    } else {
+        // Fallback for paths that contain /mac=XX:XX:XX:XX:XX:XX or similar inline patterns
+        const inlineMacMatch = urlStr.match(/mac=([0-9a-fA-F:]{17})/i);
+        if (inlineMacMatch) {
+            mac = inlineMacMatch[1];
+        }
     }
     
     let session = null;
@@ -1567,10 +1606,10 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
 
     const playStream = () => {
         if (ipcClient && !ipcClient.destroyed) {
-            let ua = '';
+            let ua = 'VLC/3.0.9 LibVLC/3.0.9'; // Premium default User-Agent to prevent 403 / I/O reconnect errors
             let headersVal = [];
             
-            if (mac && session) {
+            if (mac) {
                 ua = 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
                 let referer = '';
                 if (portalUrl) {
@@ -1578,18 +1617,19 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
                 } else {
                     referer = urlStr.split('/play/')[0] + '/c/index.html';
                 }
-                const cookies = `mac=${mac}; stb_lang=en; timezone=GMT` + (session.phpSessionId ? `; PHPSESSID=${session.phpSessionId}` : '');
+                const sessionPHPSessId = session ? session.phpSessionId : '';
+                const cookies = `mac=${mac}; stb_lang=en; timezone=GMT` + (sessionPHPSessId ? `; PHPSESSID=${sessionPHPSessId}` : '');
                 headersVal = [
                     'X-User-Agent: Model: MAG250; Link: Ethernet',
                     `Cookie: ${cookies}`,
                     `Referer: ${referer}`
                 ];
-                if (session.token) {
+                if (session && session.token) {
                     headersVal.push(`Authorization: Bearer ${session.token}`);
                 }
                 console.log('[MPV HEADER INJECT] Injecting MAG stbapp headers for Stalker stream. MAC:', mac, 'Referer:', referer);
             } else {
-                console.log('[MPV HEADER INJECT] Clearing custom MAG headers for standard stream.');
+                console.log('[MPV HEADER INJECT] Using default VLC User-Agent and clearing custom headers.');
             }
             
             ipcClient.write(JSON.stringify({ command: ["set_property", "user-agent", ua] }) + '\n');
@@ -3528,6 +3568,47 @@ ipcMain.handle('save-mappings-bulk', (event, mappingsArray) => {
     } catch (e) {
         console.error('[DB ERR] Failed to save mappings bulk:', e);
         throw e;
+    }
+});
+
+ipcMain.handle('get-playback-progress', (event, id) => {
+    try {
+        if (!db) return null;
+        const row = db.prepare("SELECT * FROM playback_progress WHERE id = ?").get(id);
+        return row || null;
+    } catch (e) {
+        console.error('[DB ERR] Failed to get playback progress:', e);
+        return null;
+    }
+});
+
+ipcMain.handle('save-playback-progress', (event, { id, tmdb_id, title, stream_url, season, episode, position, duration, completed }) => {
+    try {
+        if (!db) return false;
+        const last_watched = new Date().toISOString();
+        db.prepare(`
+            INSERT INTO playback_progress (id, tmdb_id, title, stream_url, season, episode, position, duration, last_watched, completed)
+            VALUES (@id, @tmdb_id, @title, @stream_url, @season, @episode, @position, @duration, @last_watched, @completed)
+            ON CONFLICT(id) DO UPDATE SET
+                position = excluded.position,
+                duration = excluded.duration,
+                last_watched = excluded.last_watched,
+                completed = excluded.completed
+        `).run({ id, tmdb_id: tmdb_id || null, title: title || null, stream_url: stream_url || null, season: season || null, episode: episode || null, position, duration, last_watched, completed });
+        return true;
+    } catch (e) {
+        console.error('[DB ERR] Failed to save playback progress:', e);
+        return false;
+    }
+});
+
+ipcMain.handle('get-all-playback-progress', () => {
+    try {
+        if (!db) return [];
+        return db.prepare("SELECT * FROM playback_progress").all();
+    } catch (e) {
+        console.error('[DB ERR] Failed to get all playback progress:', e);
+        return [];
     }
 });
 
