@@ -9258,11 +9258,11 @@ function renderTmdbMovieCard(channel, tmdbData) {
     }
     const detailTimeslot = document.getElementById('detail-timeslot');
     if (detailTimeslot) {
-        detailTimeslot.textContent = rating ? `${rating} • ${runtime || 'Movie'}${year ? ` • ${year}` : ''}` : `Movie${year ? ` • ${year}` : ''}`;
+        detailTimeslot.textContent = '';
     }
     const detailDescription = document.getElementById('detail-description');
     if (detailDescription) {
-        detailDescription.textContent = overview;
+        detailDescription.textContent = '';
     }
     
     // Update pending EPG payload
@@ -9328,11 +9328,11 @@ function renderTmdbEpisodeCard(channel, tmdbData, episodeData, seriesTitle, seas
     }
     const detailTimeslot = document.getElementById('detail-timeslot');
     if (detailTimeslot) {
-        detailTimeslot.textContent = rating ? `${rating} • ${epTitle}` : `${epTitle}`;
+        detailTimeslot.textContent = '';
     }
     const detailDescription = document.getElementById('detail-description');
     if (detailDescription) {
-        detailDescription.textContent = overview;
+        detailDescription.textContent = '';
     }
     
     // Update pending EPG payload
@@ -9378,11 +9378,11 @@ function renderTmdbFallbackCard(channel) {
     }
     const detailTimeslot = document.getElementById('detail-timeslot');
     if (detailTimeslot) {
-        detailTimeslot.textContent = isEpisode ? 'Episode' : 'Movie';
+        detailTimeslot.textContent = '';
     }
     const detailDescription = document.getElementById('detail-description');
     if (detailDescription) {
-        detailDescription.textContent = 'No synopsis available on TMDB. Please check if your TMDB API configuration is valid in Settings.';
+        detailDescription.textContent = '';
     }
 }
 
