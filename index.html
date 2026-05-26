@@ -761,6 +761,17 @@
             <div id="player-wrapper" style="flex: 2; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; display: flex; background: black;">
                 <div id="player-container" style="flex-grow: 1; position: relative; display: flex; align-items: center; justify-content: center; text-align: center;">
                     <div id="player-overlay" style="color: #888; font-size: 1.5em; z-index: 1; padding: 20px;">Select a channel to play</div>
+                    
+                    <!-- Autoplay Countdown Overlay -->
+                    <div id="autoplay-countdown-overlay" style="display: none; position: absolute; bottom: 80px; right: 20px; width: 340px; background: rgba(18, 18, 18, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px; padding: 15px 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.6); z-index: 9999; text-align: left; transition: all 0.3s ease; box-sizing: border-box; font-family: 'Inter', sans-serif;">
+                        <div style="font-size: 0.75em; color: #bb86fc; font-weight: bold; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 6px;">Next Episode</div>
+                        <div id="autoplay-next-title" style="font-size: 1.05em; color: white; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; font-family: 'Outfit', sans-serif;">S01E02 - Episode Name</div>
+                        <div id="autoplay-countdown-text" style="font-size: 0.85em; color: #a1a1aa; margin-bottom: 12px;">Playing in 15 seconds...</div>
+                        <div style="display: flex; gap: 10px;">
+                            <button id="autoplay-play-now-btn" style="flex: 1; padding: 8px 15px; background: #bb86fc; color: #121212; border: none; font-weight: bold; border-radius: 6px; cursor: pointer; transition: background 0.2s; font-size: 0.9em;">Play Now</button>
+                            <button id="autoplay-cancel-btn" style="padding: 8px 15px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); font-weight: bold; border-radius: 6px; cursor: pointer; transition: background 0.2s; font-size: 0.9em;">Cancel</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -801,23 +801,26 @@ aeroStyles.textContent = `
     /* Fullscreen button overlay */
     #fullscreen-btn {
         position: absolute;
-        top: 10px;
-        right: 10px;
-        background: rgba(0,0,0,0.5);
+        top: 20px;
+        right: 20px;
+        background: rgba(0,0,0,0.7);
+        backdrop-filter: blur(10px);
         color: white;
         border: 1px solid rgba(255,255,255,0.2);
-        border-radius: 5px;
-        width: 32px;
-        height: 32px;
-        font-size: 20px;
-        line-height: 32px;
+        border-radius: 12px;
+        width: 96px;
+        height: 96px;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         z-index: 100;
-        transition: opacity 0.3s;
+        transition: opacity 0.3s, background-color 0.2s, transform 0.2s;
         opacity: 0;
+    }
+    #fullscreen-btn:hover {
+        background: rgba(0,0,0,0.9);
+        transform: scale(1.05);
     }
     #player-container:hover #fullscreen-btn {
         opacity: 1;
@@ -1521,6 +1524,9 @@ let channelMappings = {};
 
 let savedReminders = JSON.parse(localStorage.getItem('iptv_reminders') || '[]');
 
+window.isAutoplayEnabled = localStorage.getItem('iptv_autoplay_next') !== 'false';
+window.currentPlayingSeriesEpisodes = [];
+
 // Prevent forms from reloading the Electron application
 document.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -2088,6 +2094,23 @@ async function renderSettings() {
     console.log('[UI] Rendering settings view.');
     if (!settingsView) return;
 
+    // Fetch EPG channels list dynamically in background when settings tab is opened
+    if (!epgChannelsData) {
+        console.log('[BACKGROUND] epgChannelsData is null. Fetching dynamically in renderSettings...');
+        const allEpgSources = savedPlaylists.map(p => p.epg).filter(e => e && e !== 'Not Configured');
+        savedEpgs.forEach(e => { if (!allEpgSources.includes(e)) allEpgSources.push(e); });
+        const combinedEpgs = allEpgSources.join(',');
+        if (combinedEpgs) {
+            window.iptvAPI.getEpgChannels(combinedEpgs).then(data => {
+                epgChannelsData = data;
+                console.log('[BACKGROUND] EPG channels list loaded successfully in renderSettings.', data.length);
+                renderMappingColumns();
+            }).catch(err => {
+                console.error('[BACKGROUND] Failed to fetch EPG channels list in renderSettings:', err);
+            });
+        }
+    }
+
     let remoteSettings = {};
     savedEpgs.sort((a, b) => sortAlphaNum(getEpgName(a), getEpgName(b)));
 
@@ -2126,6 +2149,7 @@ async function renderSettings() {
             <div style="width: 200px; flex-shrink: 0; position: sticky; top: 10px; background: rgba(30, 30, 30, 0.75); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid #333; border-radius: 12px; padding: 15px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); z-index: 10;">
                 <h3 style="color: #bb86fc; margin: 0 0 10px 0; font-size: 1.25em; font-family: 'Outfit', 'Inter', sans-serif; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">Settings</h3>
                 <button class="settings-menu-btn active" data-target="card-epg">EPG Sources</button>
+                <button class="settings-menu-btn" data-target="card-playback">Playback Settings</button>
                 <button class="settings-menu-btn" data-target="card-reminders">Reminders</button>
                 <button class="settings-menu-btn" data-target="card-mapping">Channel Mapping</button>
                 <button class="settings-menu-btn" data-target="card-remote">Remote Control</button>
@@ -2252,6 +2276,22 @@ async function renderSettings() {
                     </div>
                 </div>
 
+                <!-- Playback Settings -->
+                <div id="card-playback" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                    <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">Playback Settings</h3>
+                    <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Configure video player behaviors and automated navigation preferences.</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: #121212; padding: 15px; border-radius: 8px; border: 1px solid #2d2d2d;">
+                        <div style="margin-right: 15px;">
+                            <span style="color: #e0e0e0; font-weight: bold; display: block; margin-bottom: 4px; font-size: 0.95em;">Auto-Play Next Episode</span>
+                            <span style="color: #888; font-size: 0.85em;">Automatically resolves and plays the next episode with an interactive 30s countdown overlay.</span>
+                        </div>
+                        <label class="autoplay-toggle-container" style="position: relative; display: inline-block; width: 46px; height: 24px; flex-shrink: 0; cursor: pointer;">
+                            <input type="checkbox" id="settings-autoplay-toggle" style="opacity: 0; width: 0; height: 0;">
+                            <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #444; transition: .3s; border-radius: 24px;"></span>
+                        </label>
+                    </div>
+                </div>
+
                 <!-- Danger Zone -->
                 <div id="card-danger" style="background: linear-gradient(135deg, rgba(207, 102, 121, 0.08), rgba(207, 102, 121, 0.02)); padding: 25px; border-radius: 12px; border: 1px solid rgba(207, 102, 121, 0.35); box-shadow: 0 8px 32px rgba(207, 102, 121, 0.1), inset 0 0 20px rgba(207, 102, 121, 0.05); min-width: 0; transition: all 0.3s ease;">
                     <h3 style="color: #ff6b6b; margin-top: 0; margin-bottom: 8px; font-family: 'Outfit', 'Inter', sans-serif; font-weight: bold; text-shadow: 0 0 10px rgba(255,107,107,0.2);">Danger Zone</h3>
@@ -2261,6 +2301,17 @@ async function renderSettings() {
             </div>
         </div>
     `;
+
+    // Playback autoplay toggle listener
+    const autoplayToggle = document.getElementById('settings-autoplay-toggle');
+    if (autoplayToggle) {
+        autoplayToggle.checked = window.isAutoplayEnabled;
+        autoplayToggle.addEventListener('change', (e) => {
+            window.isAutoplayEnabled = e.target.checked;
+            localStorage.setItem('iptv_autoplay_next', e.target.checked ? 'true' : 'false');
+            console.log('[SETTINGS] Autoplay Next Episode toggled to:', window.isAutoplayEnabled);
+        });
+    }
 
     // 1. Immediately attach all static event listeners to avoid input lockups
     document.getElementById('settings-add-epg-btn').addEventListener('click', async () => {
@@ -4273,6 +4324,26 @@ window.iptvAPI.onMpvPropChange((name, value) => {
                 window.lastProgressSaveTime = now;
                 saveCurrentPlaybackProgress();
             }
+
+            // Check remaining time for autoplay trigger
+            if (window.isAutoplayEnabled && window.currentPlaybackDuration > 0) {
+                const remaining = window.currentPlaybackDuration - value;
+                if (remaining <= 30 && remaining > 5) {
+                    if (!window.isAutoplayBlockedForCurrentEpisode && !nextEpisodeToPlay && !autoplayInterval) {
+                        const nextEp = findNextEpisode();
+                        if (nextEp) {
+                            console.log('[AUTOPLAY] Nearing end of episode. Next Episode:', nextEp);
+                            showAutoplayOverlay(nextEp);
+                        }
+                    }
+                } else {
+                    // Hide overlay if user seeks backward
+                    if (remaining > 30 && (autoplayInterval || nextEpisodeToPlay)) {
+                        hideAutoplayOverlay();
+                        nextEpisodeToPlay = null;
+                    }
+                }
+            }
         }
 
         if (window.pendingEpgUpdate) {
@@ -5375,6 +5446,22 @@ async function embedStream(channel) {
     // Track active fallback iterations
     window.currentPlaybackChannel = channel;
     window.currentPlaybackFinalUrl = finalStreamUrl;
+
+    // Autoplay Next Episode initialization
+    hideAutoplayOverlay();
+    window.isAutoplayBlockedForCurrentEpisode = false;
+    if (channel && channel.type === 'episode') {
+        getEpisodesForSeries(channel).then(eps => {
+            window.currentPlayingSeriesEpisodes = eps;
+            console.log(`[AUTOPLAY] Cached ${eps.length} episodes for series:`, channel.seriesTitle);
+        }).catch(err => {
+            console.error('[AUTOPLAY] Error loading series episodes cache:', err);
+            window.currentPlayingSeriesEpisodes = [];
+        });
+    } else {
+        window.currentPlayingSeriesEpisodes = [];
+    }
+
     if (window.lastPlaybackChannelUrl !== channel.url) {
         window.lastPlaybackChannelUrl = channel.url;
         window.playbackFallbackCount = 0;
@@ -5512,6 +5599,7 @@ window.iptvAPI.onStreamFailedRetry(() => {
 
 window.iptvAPI.onMpvExit((code) => {
     console.log('[API RECV] onMpvExit with code:', code);
+    hideAutoplayOverlay();
     window.isSwitchingStream = false;
     
     if (window.playbackTimeout) {
@@ -5544,6 +5632,7 @@ window.iptvAPI.onMpvExit((code) => {
  
 window.iptvAPI.onMpvStopped(() => {
     console.log('[API RECV] onMpvStopped');
+    hideAutoplayOverlay();
     
     if (window.isSwitchingStream) {
         console.log('[API RECV] Ignoring onMpvStopped because we are switching streams.');
@@ -6680,6 +6769,25 @@ function injectPremiumStyles() {
             justify-content: center !important;
             box-shadow: 0 4px 10px rgba(0,0,0,0.5) !important;
         }
+
+        /* Playback Settings Premium Toggle Switch */
+        .autoplay-toggle-container input:checked + .slider {
+            background-color: #bb86fc !important;
+        }
+        .autoplay-toggle-container .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        .autoplay-toggle-container input:checked + .slider:before {
+            transform: translateX(22px);
+        }
     `;
     document.head.appendChild(style);
 }
@@ -6763,6 +6871,166 @@ function initTmdbObserver() {
         rootMargin: '0px 200px 0px 200px'
     });
 }
+
+async function getEpisodesForSeries(streamInfo) {
+    try {
+        if (!streamInfo) return [];
+        const playlistId = streamInfo.playlistId;
+        if (!playlistId && savedPlaylists.length === 0) return [];
+        const playlist = savedPlaylists.find(p => p.id.toString() === (playlistId ? playlistId.toString() : '')) || savedPlaylists[0];
+        if (!playlist) return [];
+
+        let episodes = [];
+        
+        if (playlist.epg && playlist.epg.startsWith('stalker:')) {
+            const url = playlist.source;
+            const mac = playlist.epg.substring(8);
+            const seriesId = streamInfo.tvg_id || streamInfo.id;
+            episodes = await window.iptvAPI.getStalkerEpisodes({ url, mac, seriesId });
+        } else {
+            const parsedClicked = parseM3uSeriesName(streamInfo.seriesTitle || streamInfo.title || streamInfo.name || '');
+            if (playlist.channels) {
+                playlist.channels.forEach(item => {
+                    if (item.disabled) return;
+                    if (item.type === 'series' || item.type === 'vod') {
+                        const parsedItem = parseM3uSeriesName(item.name || item.title);
+                        if (parsedItem.seriesTitle.toLowerCase() === parsedClicked.seriesTitle.toLowerCase()) {
+                            episodes.push({
+                                id: item.id || item.tvg_id || item.tvgId,
+                                name: item.name || item.title,
+                                season: parsedItem.season,
+                                episodeNum: parsedItem.episode,
+                                url: item.url,
+                                logo: item.logo || streamInfo.logo
+                            });
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Sort episodes by season then episode number
+        episodes.sort((a, b) => {
+            const aS = parseInt(a.season || 1);
+            const bS = parseInt(b.season || 1);
+            if (aS !== bS) return aS - bS;
+            return parseInt(a.episodeNum || 1) - parseInt(b.episodeNum || 1);
+        });
+        
+        return episodes;
+    } catch (e) {
+        console.error('[AUTOPLAY] Error fetching series episodes:', e);
+        return [];
+    }
+}
+
+let autoplayInterval = null;
+let autoplayCountdown = 15;
+let nextEpisodeToPlay = null;
+
+function hideAutoplayOverlay() {
+    if (autoplayInterval) {
+        clearInterval(autoplayInterval);
+        autoplayInterval = null;
+    }
+    const overlay = document.getElementById('autoplay-countdown-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+function showAutoplayOverlay(nextEp) {
+    if (!window.isAutoplayEnabled) return;
+    
+    hideAutoplayOverlay();
+    nextEpisodeToPlay = nextEp;
+    
+    const overlay = document.getElementById('autoplay-countdown-overlay');
+    const titleEl = document.getElementById('autoplay-next-title');
+    const descEl = document.getElementById('autoplay-countdown-text');
+    
+    if (!overlay || !titleEl || !descEl) return;
+    
+    // Set next episode display title
+    let displayTitle = `S${nextEp.season}E${nextEp.episodeNum}`;
+    if (nextEp.name) {
+        const playlist = savedPlaylists.find(p => p.id.toString() === (window.currentPlaybackChannel.playlistId ? window.currentPlaybackChannel.playlistId.toString() : ''));
+        let cleanName = nextEp.name;
+        if (playlist && !playlist.epg?.startsWith('stalker:')) {
+            const cleanPrefix = new RegExp(`^.*?\\b(s\\d+e\\d+|\\d+x\\d+|episode\\s*\\d+|ep\\s*\\d+)\\b\\s*[-_.:]?\\s*`, 'i');
+            cleanName = nextEp.name.replace(cleanPrefix, '').trim();
+        }
+        displayTitle += ` - ${cleanName || nextEp.name}`;
+    }
+    
+    titleEl.textContent = displayTitle;
+    titleEl.setAttribute('title', displayTitle);
+    
+    autoplayCountdown = 15; // 15 seconds countdown
+    descEl.textContent = `Playing in ${autoplayCountdown} seconds...`;
+    overlay.style.display = 'block';
+    
+    autoplayInterval = setInterval(() => {
+        autoplayCountdown--;
+        if (autoplayCountdown <= 0) {
+            hideAutoplayOverlay();
+            playNextEpisode();
+        } else {
+            descEl.textContent = `Playing in ${autoplayCountdown} seconds...`;
+        }
+    }, 1000);
+}
+
+async function playNextEpisode() {
+    if (!nextEpisodeToPlay || !window.currentPlaybackChannel) return;
+    
+    const nextEp = nextEpisodeToPlay;
+    nextEpisodeToPlay = null;
+    hideAutoplayOverlay();
+    
+    console.log('[AUTOPLAY] Autoplaying next episode:', nextEp);
+    
+    let epDisplayName = nextEp.name || `Episode ${nextEp.episodeNum}`;
+    const playlist = savedPlaylists.find(p => p.id.toString() === (window.currentPlaybackChannel.playlistId ? window.currentPlaybackChannel.playlistId.toString() : ''));
+    if (nextEp.name && playlist && !playlist.epg?.startsWith('stalker:')) {
+        const cleanPrefix = new RegExp(`^.*?\\b(s\\d+e\\d+|\\d+x\\d+|episode\\s*\\d+|ep\\s*\\d+)\\b\\s*[-_.:]?\\s*`, 'i');
+        const cleaned = nextEp.name.replace(cleanPrefix, '').trim();
+        if (cleaned) epDisplayName = cleaned;
+    }
+    
+    const nextChannel = {
+        title: `${window.currentPlaybackChannel.seriesTitle} - S${nextEp.season}E${nextEp.episodeNum} - ${epDisplayName}`,
+        url: nextEp.url,
+        logo: window.currentPlaybackChannel.logo,
+        playlistId: window.currentPlaybackChannel.playlistId,
+        type: 'episode',
+        tmdbId: window.currentPlaybackChannel.tmdbId,
+        seriesTitle: window.currentPlaybackChannel.seriesTitle,
+        season: nextEp.season,
+        episodeNum: nextEp.episodeNum,
+        tmdbData: window.currentPlaybackChannel.tmdbData
+    };
+    
+    embedStream(nextChannel);
+    showToast(`Autoplaying: S${nextEp.season}E${nextEp.episodeNum}`);
+}
+
+function findNextEpisode() {
+    if (!window.currentPlaybackChannel || window.currentPlaybackChannel.type !== 'episode' || !window.currentPlayingSeriesEpisodes || window.currentPlayingSeriesEpisodes.length === 0) {
+        return null;
+    }
+    
+    const currentSeason = parseInt(window.currentPlaybackChannel.season || 1);
+    const currentEpNum = parseInt(window.currentPlaybackChannel.episodeNum || 1);
+    
+    // Find the next episode in the sorted list
+    return window.currentPlayingSeriesEpisodes.find(ep => {
+        const epS = parseInt(ep.season || 1);
+        const epNum = parseInt(ep.episodeNum || 1);
+        if (epS > currentSeason) return true;
+        if (epS === currentSeason && epNum > currentEpNum) return true;
+        return false;
+    });
+}
+
 
 function parseM3uSeriesName(title) {
     let name = (title || '').trim();
@@ -7981,6 +8249,22 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    
+    // Autoplay Overlay buttons setup
+    const playNowBtn = document.getElementById('autoplay-play-now-btn');
+    const cancelBtn = document.getElementById('autoplay-cancel-btn');
+    if (playNowBtn) {
+        playNowBtn.addEventListener('click', () => {
+            playNextEpisode();
+        });
+    }
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            hideAutoplayOverlay();
+            window.isAutoplayBlockedForCurrentEpisode = true;
+            showToast('Auto-play cancelled');
+        });
+    }
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             if (modal && modal.style.display === 'flex') {
@@ -8216,7 +8500,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Add custom fullscreen button to the player container
     const fsBtn = document.createElement('button');
     fsBtn.id = 'fullscreen-btn';
-    fsBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>';
+    fsBtn.innerHTML = '<svg viewBox="0 0 24 24" width="54" height="54" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>';
     fsBtn.title = 'Toggle Fullscreen';
     fsBtn.style.display = 'none'; // Initially hidden
     playerContainer.appendChild(fsBtn);
@@ -8327,21 +8611,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         }, 4 * 60 * 60 * 1000); // Check every 4 hours, actual web fetch limited to 24h by python cache
     }, 5000);
 
-    // Fast-load EPG mapping channels in the background asynchronously so settings screen loads instantly on click
-    setTimeout(() => {
-        const allEpgSources = savedPlaylists.map(p => p.epg).filter(e => e && e !== 'Not Configured');
-        savedEpgs.forEach(e => { if (!allEpgSources.includes(e)) allEpgSources.push(e); });
-        const combinedEpgs = allEpgSources.join(',');
-        if (combinedEpgs) {
-            console.log('[BACKGROUND] Prefetching EPG channels list for fast settings loading.');
-            window.iptvAPI.getEpgChannels(combinedEpgs).then(data => {
-                epgChannelsData = data;
-                console.log('[BACKGROUND] EPG channels list preloaded successfully.', data.length);
-            }).catch(err => {
-                console.error('[BACKGROUND] Failed to prefetch EPG channels:', err);
-            });
-        }
-    }, 3000);
+
 
     // Check for Reminders periodically
     setInterval(() => {

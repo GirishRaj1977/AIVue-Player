@@ -501,6 +501,7 @@ local function set_icon_theme()
     -- Override fullscreen icons with exact matching vector-brackets drawings (centered 24x24 ASS graphics)
     icons.fullscreen = "{\\p1}m -5 2 l -7 2 l -7 7 l -2 7 l -2 5 l -5 5 l -5 2 m -7 -7 l -2 -7 l -2 -5 l -5 -5 l -5 -2 l -7 -2 m 7 2 l 5 2 l 5 5 l 2 5 l 2 7 l 7 7 m 2 -7 l 2 -5 l 5 -5 l 5 -2 l 7 -2 l 7 -7{\\p0}"
     icons.fullscreen_exit = "{\\p1}m -8 2 l -4 2 l -4 6 l -2 6 l -2 0 l -8 0 m -8 -2 l -2 -2 l -2 -8 l -4 -8 l -4 -4 l -8 -4 m 4 2 l 0 2 l 0 8 l 2 8 l 2 4 l 4 4 m 2 -6 l 2 -4 l 6 -4 l 6 0 l 8 0 l 8 -8 l 2 -8{\\p0}"
+    icons.stop = "{\\p1}m -9 0 l 9 0 l 9 18 l -9 18{\\p0}"
 end
 
 local locale
@@ -1917,6 +1918,23 @@ layouts["modern"] = function ()
 
     -- OSC title
     geo = {x = 25, y = refY - (chapter_index and user_opts.title_with_chapter_height or user_opts.title_height) - epg_h_offset, an = 1, w = osc_geo.w - 50 - (loop_button and 45 or 0) - (speed_button and 45 or 0), h = user_opts.title_font_size + epg_h_offset}
+    
+    -- Title background panel
+    new_element("title_bg", "box")
+    lo = add_layout("title_bg")
+    lo.geometry = {
+        x = geo.x - 10,
+        y = geo.y - geo.h - 5,
+        an = 7,
+        w = geo.w + 20,
+        h = geo.h + 10 + (user_opts.show_chapter_title and 20 or 0)
+    }
+    lo.layer = 12
+    lo.style = "{\\blur4\\bord1\\1c&H111111&\\3c&H333333&}"
+    lo.box.radius = 8
+    lo.alpha[1] = 100
+    lo.alpha[3] = 100
+
     lo = add_layout("title")
     lo.geometry = geo
     lo.style = string.format("%s{\\clip(0,%f,%f,%f)}", osc_styles.title, geo.y - geo.h, geo.x + geo.w, geo.y + geo.h + epg_h_offset)
@@ -2231,6 +2249,23 @@ layouts["modern-compact"] = function ()
     local title_w = (chapter_index and (osc_geo.w - 50) or (osc_geo.w - 50 - time_codes_width))
     if title_w < 0 then title_w = 0 end
     geo = {x = 25, y = refY - (chapter_index and user_opts.title_with_chapter_height or user_opts.title_height) - epg_h_offset, an = 1, w = title_w, h = user_opts.title_font_size + epg_h_offset}
+    
+    -- Title background panel
+    new_element("title_bg", "box")
+    lo = add_layout("title_bg")
+    lo.geometry = {
+        x = geo.x - 10,
+        y = geo.y - geo.h - 5,
+        an = 7,
+        w = geo.w + 20,
+        h = geo.h + 10 + (user_opts.show_chapter_title and 20 or 0)
+    }
+    lo.layer = 12
+    lo.style = "{\\blur4\\bord1\\1c&H111111&\\3c&H333333&}"
+    lo.box.radius = 8
+    lo.alpha[1] = 100
+    lo.alpha[3] = 100
+
     lo = add_layout("title")
     lo.geometry = geo
     lo.style = string.format("%s{\\clip(%f,%f,%f,%f)}", osc_styles.title, geo.x, geo.y - geo.h, geo.x + geo.w, geo.y + geo.h + epg_h_offset)

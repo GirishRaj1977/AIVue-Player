@@ -1388,7 +1388,7 @@ function initMpv() {
         `--config-dir=${binDir}`, 
         `--load-scripts=no`,    
         `--script=${luaScript}`,
-        `--script-opts=aivue-osc_on_start=yes,aivue-bottomhover=no,aivue-window_controls=yes,aivue-playlist_button=no,aivue-info_button=no,aivue-ontop_button=no,aivue-jump_buttons=no,aivue-chapter_skip_buttons=no,aivue-track_nextprev_buttons=yes`,
+        `--script-opts=aivue-osc_on_start=yes,aivue-bottomhover=no,aivue-window_controls=yes,aivue-playlist_button=no,aivue-info_button=no,aivue-ontop_button=no,aivue-jump_buttons=no,aivue-chapter_skip_buttons=no,aivue-track_nextprev_buttons=yes,aivue-fullscreen_button=no`,
         `--input-cursor=yes`,   
         `--input-vo-keyboard=yes`, 
         `--osc=no`,             
