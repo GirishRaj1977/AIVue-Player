@@ -748,14 +748,20 @@
     
     <div id="main-view" style="display: none;">
         <div id="live-top-half" style="display: flex; height: 50%; width: 100%; transition: all 0.2s; gap: 12px;">
-            <div id="channel-details" style="flex: 1; background: #1a1a1a; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden;">
-                <img id="detail-logo" src="assets/logo.ico" style="width: 130px; height: 130px; object-fit: contain; margin-bottom: 15px; background: #ffffff; border-radius: 8px; padding: 10px;" onerror="this.onerror=null; this.src='assets/logo.ico';">
-                <h2 id="detail-name" style="margin: 0 0 15px 0; color: #bb86fc; text-align: center; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Select a Channel</h2>
-                <div id="detail-info" style="width: 100%; color: #888; font-size: 0.95em; line-height: 1.8; max-width: 250px; display: none;">
-                    <div style="display: flex; justify-content: space-between;"><strong>Resolution:</strong> <span id="detail-res">--</span></div>
-                    <div style="margin-top: 15px; border-top: 1px solid #333; padding-top: 15px;">
-                        <strong style="color: #bb86fc;">Now Playing:</strong><br>
-                        <span id="detail-program" style="color: #e0e0e0; display: block; margin-top: 5px;">--</span>
+            <div id="channel-details" style="flex: 1; background: #1a1a1a; padding: 20px; box-sizing: border-box; display: flex; flex-direction: row; gap: 20px; align-items: stretch; justify-content: flex-start; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden;">
+                <!-- Left aligned column: channel logo and channel name below it -->
+                <div style="display: flex; flex-direction: column; align-items: flex-start; width: 120px; flex-shrink: 0; min-width: 0;">
+                    <img id="detail-logo" src="assets/logo.ico" style="width: 110px; height: 110px; object-fit: contain; background: #ffffff; border-radius: 8px; padding: 10px; margin-bottom: 10px; align-self: flex-start;" onerror="this.onerror=null; this.src='assets/logo.ico';">
+                    <h2 id="detail-name" style="margin: 0; color: #bb86fc; font-family: 'Outfit', 'Inter', sans-serif; font-size: 0.95em; font-weight: bold; width: 100%; white-space: normal; word-break: break-word; text-align: left;">Select a Channel</h2>
+                </div>
+                <!-- Right aligned column: Now playing details, with full details of the program along with name and time slot -->
+                <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; min-width: 0; border-left: 1px solid rgba(255, 255, 255, 0.08); padding-left: 20px;">
+                    <div id="detail-info" style="width: 100%; color: #888; font-size: 0.95em; line-height: 1.6; display: none; height: 100%;">
+                        <strong style="color: #bb86fc; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 6px;">Now Playing</strong>
+                        <div id="detail-program" style="color: #e0e0e0; font-size: 1.05rem; font-weight: bold; line-height: 1.4; margin-bottom: 4px;">--</div>
+                        <div id="detail-timeslot" style="color: #a1a1aa; font-size: 0.85rem; font-weight: 500; margin-bottom: 8px;">--</div>
+                        <div id="detail-description" style="color: #888; font-size: 0.82rem; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;">--</div>
+                        <span id="detail-res" style="display: none;">--</span>
                     </div>
                 </div>
             </div>

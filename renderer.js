@@ -587,11 +587,12 @@ aeroStyles.textContent = `
         border-radius: 24px !important;
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
         display: flex !important;
-        flex-direction: column !important;
-        align-items: flex-start !important;
+        flex-direction: row !important;
+        align-items: stretch !important;
         justify-content: flex-start !important;
-        padding: 16px !important;
+        padding: 20px !important;
         box-sizing: border-box !important;
+        gap: 20px !important;
     }
     
     #detail-logo {
@@ -600,13 +601,13 @@ aeroStyles.textContent = `
         border-radius: 10px !important;
         padding: 8px !important;
         box-shadow: inset 0 2px 6px rgba(0,0,0,0.4) !important;
-        margin-bottom: 12px !important;
+        margin-bottom: 10px !important;
         width: 100px !important;
         height: 100px !important;
         max-width: 100px !important;
         max-height: 100px !important;
         object-fit: contain !important;
-        align-self: center !important;
+        align-self: flex-start !important;
         transition: all 0.3s ease !important;
     }
     
@@ -616,7 +617,7 @@ aeroStyles.textContent = `
         font-size: 0.92rem !important;
         font-weight: 700 !important;
         letter-spacing: -0.01em !important;
-        margin: 0 0 12px 0 !important;
+        margin: 0 !important;
         width: 100% !important;
         word-break: break-word !important;
         white-space: normal !important;
@@ -631,14 +632,14 @@ aeroStyles.textContent = `
     #detail-info {
         display: flex !important;
         flex-direction: column !important;
-        gap: 12px !important;
+        gap: 8px !important;
         width: 100% !important;
         max-width: none !important;
         font-family: 'Inter', sans-serif !important;
-        font-size: 0.8rem !important;
+        font-size: 0.85rem !important;
         color: #a1a1aa !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
-        padding-top: 16px !important;
+        border-top: none !important;
+        padding-top: 0 !important;
     }
     
     #detail-info strong {
@@ -5636,15 +5637,31 @@ async function embedStream(channel) {
         }
         
         const detailProgram = document.getElementById('detail-program');
+        const detailTimeslot = document.getElementById('detail-timeslot');
+        const detailDescription = document.getElementById('detail-description');
         const currentProg = getCurrentProgram(programmes);
         if (detailProgram) {
             if (currentProg) {
+                detailProgram.textContent = currentProg.title || 'No Title';
                 const pStart = parseEpgTime(currentProg.start);
                 const pEnd = parseEpgTime(currentProg.stop);
                 const timeStr = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-                detailProgram.innerHTML = `${currentProg.title} <span style="font-size: 0.9em; color: #bb86fc; margin-left: 8px;">(${timeStr})</span>`;
+                if (detailTimeslot) {
+                    detailTimeslot.textContent = timeStr;
+                    detailTimeslot.style.display = 'block';
+                }
+                if (detailDescription) {
+                    detailDescription.textContent = currentProg.desc || 'No description available.';
+                    detailDescription.style.display = 'block';
+                }
             } else {
-                detailProgram.textContent = '--';
+                detailProgram.textContent = 'No Information Available';
+                if (detailTimeslot) {
+                    detailTimeslot.textContent = '--';
+                }
+                if (detailDescription) {
+                    detailDescription.textContent = 'No EPG data available for this channel.';
+                }
             }
         }
         
@@ -9237,7 +9254,15 @@ function renderTmdbMovieCard(channel, tmdbData) {
     // Update Now Playing EPG program info in Left Details Panel
     const detailProgram = document.getElementById('detail-program');
     if (detailProgram) {
-        detailProgram.innerHTML = `<span style="font-weight: bold; color: #43CB44;">Playing Movie</span><br><span style="font-size: 0.95em; color: #bb86fc; margin-top: 4px; display: inline-block; font-weight: 500;">${title}${year ? ` (${year})` : ''}</span>`;
+        detailProgram.textContent = title;
+    }
+    const detailTimeslot = document.getElementById('detail-timeslot');
+    if (detailTimeslot) {
+        detailTimeslot.textContent = rating ? `${rating} • ${runtime || 'Movie'}${year ? ` • ${year}` : ''}` : `Movie${year ? ` • ${year}` : ''}`;
+    }
+    const detailDescription = document.getElementById('detail-description');
+    if (detailDescription) {
+        detailDescription.textContent = overview;
     }
     
     // Update pending EPG payload
@@ -9299,7 +9324,15 @@ function renderTmdbEpisodeCard(channel, tmdbData, episodeData, seriesTitle, seas
     // Update Now Playing EPG program info in Left Details Panel
     const detailProgram = document.getElementById('detail-program');
     if (detailProgram) {
-        detailProgram.innerHTML = `<span style="font-weight: bold; color: #43CB44;">Playing Episode</span><br><span style="font-size: 0.95em; color: #bb86fc; margin-top: 4px; display: inline-block; font-weight: 500;">S${seasonNum}E${episodeNum} - ${epTitle}</span>`;
+        detailProgram.textContent = `${showTitle} - S${seasonNum}E${episodeNum}`;
+    }
+    const detailTimeslot = document.getElementById('detail-timeslot');
+    if (detailTimeslot) {
+        detailTimeslot.textContent = rating ? `${rating} • ${epTitle}` : `${epTitle}`;
+    }
+    const detailDescription = document.getElementById('detail-description');
+    if (detailDescription) {
+        detailDescription.textContent = overview;
     }
     
     // Update pending EPG payload
@@ -9341,7 +9374,15 @@ function renderTmdbFallbackCard(channel) {
     // Update Now Playing EPG program info in Left Details Panel
     const detailProgram = document.getElementById('detail-program');
     if (detailProgram) {
-        detailProgram.innerHTML = `<span style="font-weight: bold; color: #888;">Playing Stream</span><br><span style="font-size: 0.95em; color: #e0e0e0; margin-top: 4px; display: inline-block; font-weight: 500;">${title}</span>`;
+        detailProgram.textContent = title;
+    }
+    const detailTimeslot = document.getElementById('detail-timeslot');
+    if (detailTimeslot) {
+        detailTimeslot.textContent = isEpisode ? 'Episode' : 'Movie';
+    }
+    const detailDescription = document.getElementById('detail-description');
+    if (detailDescription) {
+        detailDescription.textContent = 'No synopsis available on TMDB. Please check if your TMDB API configuration is valid in Settings.';
     }
 }
 
