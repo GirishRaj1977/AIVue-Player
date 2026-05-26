@@ -1,0 +1,265 @@
+========================================================================
+             AIVUE PLAYER - COMPLETE DVR & RECORDING SYSTEM CODEBITS
+========================================================================
+
+This file compiles all core code additions and integrations implemented 
+for the persistent Live TV DVR capture system and background scheduler.
+
+------------------------------------------------------------------------
+1. PRELOAD API EXPOSURES (preload.js)
+------------------------------------------------------------------------
+We exposed the main IPC methods to window.iptvAPI so the frontend can
+communicate with the background capture downloader and SQLite scheduler.
+
+Snippet:
+```javascript
+    startRecording: (channelUrl, channelName, programName, headers) => ipcRenderer.invoke('start-recording', channelUrl, channelName, programName, headers),
+    stopRecording: (recordingId) => ipcRenderer.invoke('stop-recording', recordingId),
+    getActiveRecordings: () => ipcRenderer.invoke('get-active-recordings'),
+    getRecordings: () => ipcRenderer.invoke('get-recordings'),
+    deleteRecording: (filename) => ipcRenderer.invoke('delete-recording', filename),
+    getRecordingPath: () => ipcRenderer.invoke('get-recording-path'),
+    saveRecordingPath: (path) => ipcRenderer.invoke('save-recording-path', path),
+    onRecordingStatusChange: (callback) => ipcRenderer.on('recording-status-change', (_event, data) => callback(data)),
+    
+    // Scheduled Recording Engine
+    scheduleRecording: (channelUrl, channelName, programName, startTime, endTime, headers) => ipcRenderer.invoke('schedule-recording', channelUrl, channelName, programName, startTime, endTime, headers),
+    getScheduledRecordings: () => ipcRenderer.invoke('get-scheduled-recordings'),
+    cancelScheduledRecording: (scheduleId) => ipcRenderer.invoke('cancel-scheduled-recording', scheduleId),
+```
+
+------------------------------------------------------------------------
+2. SCHEDULER ENGINE & BACKGROUND DOWNLOADER (index.js)
+------------------------------------------------------------------------
+Handles absolute redirects, relative headers, database transactions, 
+and dynamically executes active scheduled recordings.
+
+A. Relative Redirect & Header Resolvers:
+```javascript
+function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone, onError) {
+    console.log('[DVR DEBUG] URL=', urlStr);
+    console.log('[DVR DEBUG] ABS=', /^https?:\/\//.test(urlStr));
+    let requestInstance = null;
+    let fileStream = null;
+    let isCancelled = false;
+
+    const startDownload = (currentUrl) => {
+        if (isCancelled) return;
+
+        try {
+            const parsedUrl = new URL(currentUrl);
+            const protocol = parsedUrl.protocol === 'https:' ? https : http;
+            
+            const headers = {
+                'User-Agent': 'VLC/3.0.9 LibVLC/3.0.9'
+            };
+            if (customHeaders && Array.isArray(customHeaders)) {
+                customHeaders.forEach(h => {
+                    const parts = h.split(':');
+                    if (parts.length >= 2) {
+                        headers[parts[0].trim()] = parts.slice(1).join(':').trim();
+                    }
+                });
+            }
+
+            const options = {
+                headers: headers,
+                timeout: 15000
+            };
+
+            requestInstance = protocol.get(currentUrl, options, (res) => {
+                // Resolves relative location redirects against the requesting parent URL origin
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    const redirectUrl = new URL(res.headers.location, currentUrl).href;
+                    console.log(`[DVR] Redirecting to: ${redirectUrl}`);
+                    startDownload(redirectUrl);
+                    return;
+                }
+                
+                if (res.statusCode !== 200) {
+                    onError(new Error(`Server returned HTTP ${res.statusCode}`));
+                    return;
+                }
+                
+                fileStream = fs.createWriteStream(destPath);
+                let bytesWritten = 0;
+                
+                res.on('data', (chunk) => {
+                    bytesWritten += chunk.length;
+                    fileStream.write(chunk);
+                    onProgress(bytesWritten);
+                });
+                
+                res.on('end', () => {
+                    fileStream.end();
+                    onDone();
+                });
+            });
+        } catch(err) {
+            onError(err);
+        }
+    };
+    // ...
+}
+```
+
+B. IPC Handlers & SQLite Scheduler Thread:
+```javascript
+ipcMain.handle('schedule-recording', (event, channelUrl, channelName, programName, startTime, endTime, headers = []) => {
+    console.log('[DVR SCHEDULER IPC] schedule-recording:', channelName, '--', programName, '-- Start:', startTime);
+    try {
+        if (!db) return false;
+        const metadata = JSON.stringify({ channelName, programName, headers });
+        const res = db.prepare(`
+            INSERT INTO dvr_schedule (channel_url, start_time, end_time, status, file_path)
+            VALUES (?, ?, ?, 'pending', ?)
+        `).run(channelUrl, startTime, endTime, metadata);
+        return res.lastInsertRowid;
+    } catch (e) {
+        console.error('[DB ERR] Failed to schedule recording:', e);
+        return false;
+    }
+});
+
+const activeScheduleRecordings = new Map();
+
+async function checkScheduledRecordings() {
+    if (!db) return;
+    const nowIso = new Date().toISOString();
+    try {
+        // Start pending recordings whose time has arrived
+        const pending = db.prepare("SELECT * FROM dvr_schedule WHERE status = 'pending' AND start_time <= ?").all(nowIso);
+        for (const row of pending) {
+            let meta = { channelName: 'Scheduled', programName: 'Program', headers: [] };
+            try { if (row.file_path) meta = JSON.parse(row.file_path); } catch (e) {}
+            
+            console.log(`[DVR SCHEDULER] Starting scheduled recording: ${meta.programName}`);
+            db.prepare("UPDATE dvr_schedule SET status = 'recording' WHERE id = ?").run(row.id);
+            
+            let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
+            // ... [sanitises paths, handles files]
+            const recordingId = crypto.randomUUID();
+            
+            const download = downloadStream(row.channel_url, destPath, meta.headers, handleProgress, handleDone, handleError);
+            activeRecordings.set(recordingId, { ... });
+            activeScheduleRecordings.set(row.id, recordingId);
+        }
+        
+        // Stop ongoing scheduled recordings whose end time has arrived
+        const active = db.prepare("SELECT * FROM dvr_schedule WHERE status = 'recording' AND end_time <= ?").all(nowIso);
+        for (const row of active) {
+            console.log(`[DVR SCHEDULER] Ending scheduled recording id ${row.id}`);
+            const recordingId = activeScheduleRecordings.get(row.id);
+            if (recordingId) {
+                const rec = activeRecordings.get(recordingId);
+                if (rec) rec.cancel();
+            }
+            db.prepare("UPDATE dvr_schedule SET status = 'completed' WHERE id = ?").run(row.id);
+        }
+    } catch (e) {
+        console.error('[DVR SCHEDULER LOOP ERROR]', e);
+    }
+}
+setInterval(checkScheduledRecordings, 5000);
+```
+
+------------------------------------------------------------------------
+3. EPG CONTROLS & DYNAMIC TOKEN RESOLUTIONS (renderer.js)
+------------------------------------------------------------------------
+Implements user interface clicks, conditional toggles for future programs, 
+and fetches fresh Stalker links prior to scheduling.
+
+A. Dynamic Link Resolver:
+```javascript
+async function resolveChannelStreamUrl(channel) {
+    let finalStreamUrl = channel.stream_url || channel.url || '';
+    if (finalStreamUrl.startsWith('stalker-cmd:')) {
+        const playlist = savedPlaylists.find(p => p.id === channel.playlist_id || p.id === channel.playlistId);
+        if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
+            const mac = playlist.epg.substring(8);
+            const parts = finalStreamUrl.substring(12).split('|');
+            const type = parts[0];
+            const cmd = parts.slice(1).join('|');
+            const resolved = await window.iptvAPI.resolveStalkerLink({ url: playlist.source, mac, type, cmd });
+            if (resolved) finalStreamUrl = resolved;
+        }
+    }
+    return finalStreamUrl;
+}
+```
+
+B. EPG Cell rendering (Record button conditional to isFuture only):
+```javascript
+const startTimeIso = pStart.toISOString();
+const isScheduled = clientScheduledRecordings.some(s => s.channelName === channel.title && s.programName === prog.title && s.startTime === startTimeIso && s.status === 'pending');
+const isRecording = clientActiveRecordings.some(r => r.channelName === channel.title && r.status === 'recording');
+
+const recordStyle = (isRecording || isScheduled) ? 'color: #ef4444; opacity: 1; filter: drop-shadow(0 0 4px #ef4444);' + (isRecording ? ' animation: pulse 1.5s infinite;' : '') : 'opacity: 0.4;';
+
+const recordHtml = isFuture ? `
+    <span class="epg-record-btn" 
+          data-channel="${safeTitle.replace(/"/g, '&quot;')}" 
+          data-url="${channel.url.replace(/"/g, '&quot;')}" 
+          data-prog="${pTitle.replace(/"/g, '&quot;')}" 
+          data-start="${prog.start}" 
+          data-stop="${prog.stop}" 
+          style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" 
+          title="${isScheduled ? 'Cancel Scheduled Recording' : 'Schedule Recording'}">
+       🔴
+    </span>` : '';
+```
+
+C. EPG Click & Schedule Toggle Handlers:
+```javascript
+const handleEpgClick = (e) => {
+    const recordBtn = e.target.closest('.epg-record-btn');
+    if (recordBtn) {
+        e.stopPropagation();
+        const channelTitle = recordBtn.getAttribute('data-channel');
+        const channelUrl = recordBtn.getAttribute('data-url');
+        const progTitle = recordBtn.getAttribute('data-prog');
+        const startRaw = recordBtn.getAttribute('data-start');
+        const stopRaw = recordBtn.getAttribute('data-stop');
+        
+        const startTimeIso = parseEpgTime(startRaw).toISOString();
+        const endTimeIso = parseEpgTime(stopRaw).toISOString();
+        
+        const existingSchedule = clientScheduledRecordings.find(s => s.channelName === channelTitle && s.programName === progTitle && s.startTime === startTimeIso && s.status === 'pending');
+        
+        if (existingSchedule) {
+            // Cancel scheduled booking
+            window.iptvAPI.cancelScheduledRecording(existingSchedule.id).then(success => {
+                if (success) {
+                    showToast('Scheduled recording cancelled: ' + progTitle);
+                    renderFullEpg();
+                    renderLiveEpg();
+                }
+            });
+        } else {
+            // Create scheduled booking
+            const targetChannel = allChannels.find(c => c.title === channelTitle);
+            const resolveUrlAndSchedule = async () => {
+                try {
+                    const resolvedUrl = targetChannel ? await resolveChannelStreamUrl(targetChannel) : channelUrl;
+                    let customHeaders = [];
+                    // ... [creates stalker MAG portal headers if necessary]
+                    
+                    window.iptvAPI.scheduleRecording(resolvedUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders).then(res => {
+                        if (res) {
+                            showToast(`Recording scheduled: ${progTitle}`);
+                            renderFullEpg();
+                            renderLiveEpg();
+                        }
+                    });
+                } catch(err) {
+                    showToast('Failed to schedule: ' + err.message, true);
+                }
+            };
+            resolveUrlAndSchedule();
+        }
+        return;
+    }
+    // ...
+}
+```
+========================================================================

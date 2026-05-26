@@ -3690,13 +3690,84 @@ const activeRecordings = new Map();
 function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone, onError) {
     console.log('[DVR DEBUG] URL=', urlStr);
     console.log('[DVR DEBUG] ABS=', /^https?:\/\//.test(urlStr));
+    
+    let ffmpegProcess = null;
     let requestInstance = null;
     let fileStream = null;
     let isCancelled = false;
+    
+    const cancel = () => {
+        isCancelled = true;
+        if (ffmpegProcess) {
+            console.log('[DVR] Killing active FFmpeg process...');
+            ffmpegProcess.kill('SIGKILL');
+        }
+        if (requestInstance) requestInstance.destroy();
+        if (fileStream) fileStream.end();
+    };
 
     const startDownload = (currentUrl) => {
         if (isCancelled) return;
+        
+        console.log('[DVR] Attempting stream capture via FFmpeg...');
+        
+        let headersString = '';
+        if (customHeaders && Array.isArray(customHeaders)) {
+            headersString = customHeaders.map(h => `${h}\r\n`).join('');
+        }
+        headersString += 'User-Agent: VLC/3.0.9 LibVLC/3.0.9\r\n';
 
+        const args = [];
+        if (headersString) {
+            args.push('-headers', headersString);
+        }
+        args.push('-i', currentUrl, '-c', 'copy', '-y', destPath);
+
+        try {
+            ffmpegProcess = spawn('ffmpeg', args);
+            
+            let ffmpegStarted = false;
+            
+            ffmpegProcess.on('error', (err) => {
+                if (err.code === 'ENOENT') {
+                    console.log('[DVR] FFmpeg not found on system PATH. Falling back to native Node HTTP capturing...');
+                    startHttpDownload(currentUrl);
+                } else {
+                    onError(err);
+                }
+            });
+
+            ffmpegProcess.stderr.on('data', (data) => {
+                if (isCancelled) return;
+                const log = data.toString();
+                const sizeMatch = log.match(/size=\s*(\d+)\s*(kB|mB)/i);
+                if (sizeMatch) {
+                    ffmpegStarted = true;
+                    let size = parseInt(sizeMatch[1]);
+                    if (sizeMatch[2].toLowerCase() === 'mb') size *= 1024;
+                    if (onProgress) onProgress(size * 1024);
+                }
+            });
+
+            ffmpegProcess.on('close', (code) => {
+                if (isCancelled) return;
+                if (code === 0 || ffmpegStarted) {
+                    console.log('[DVR] FFmpeg capture completed successfully.');
+                    onDone();
+                } else {
+                    console.log(`[DVR] FFmpeg process exited with code ${code}. Trying HTTP fallback...`);
+                    startHttpDownload(currentUrl);
+                }
+            });
+            
+        } catch (e) {
+            console.log('[DVR] FFmpeg spawning threw exception. Falling back to native Node HTTP capturing...', e);
+            startHttpDownload(currentUrl);
+        }
+    };
+
+    const startHttpDownload = (currentUrl) => {
+        if (isCancelled) return;
         try {
             const parsedUrl = new URL(currentUrl);
             const protocol = parsedUrl.protocol === 'https:' ? https : http;
@@ -3722,7 +3793,7 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
                 if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                     const redirectUrl = new URL(res.headers.location, currentUrl).href;
                     console.log(`[DVR] Redirecting to: ${redirectUrl}`);
-                    startDownload(redirectUrl);
+                    startHttpDownload(redirectUrl);
                     return;
                 }
 
@@ -3754,16 +3825,16 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
                     onError(err);
                 });
             });
-
+            
             requestInstance.on('error', (err) => {
                 onError(err);
             });
-
+            
             requestInstance.on('timeout', () => {
                 requestInstance.destroy();
                 onError(new Error('Connection timeout'));
             });
-
+            
         } catch (err) {
             onError(err);
         }
@@ -3771,13 +3842,7 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
 
     startDownload(urlStr);
 
-    return {
-        cancel: () => {
-            isCancelled = true;
-            if (requestInstance) requestInstance.destroy();
-            if (fileStream) fileStream.end();
-        }
-    };
+    return { cancel };
 }
 
 ipcMain.handle('get-recording-path', () => {
@@ -4082,6 +4147,127 @@ async function checkScheduledRecordings() {
             
             const recordingId = crypto.randomUUID();
             
+            const startScheduledDownload = async () => {
+                let activeUrl = row.channel_url;
+                let cleanHeaders = [];
+                let stalkerMeta = null;
+                
+                if (meta.headers && Array.isArray(meta.headers)) {
+                    meta.headers.forEach(h => {
+                        if (h.startsWith('STALKER-METADATA:')) {
+                            try {
+                                stalkerMeta = JSON.parse(h.substring(17));
+                            } catch (e) {}
+                        } else {
+                            cleanHeaders.push(h);
+                        }
+                    });
+                }
+                
+                // Dynamically resolve Stalker command to fresh absolute stream link at START time!
+                if (activeUrl.startsWith('stalker-cmd:') && stalkerMeta) {
+                    try {
+                        const parts = activeUrl.substring(12).split('|');
+                        const type = parts[0];
+                        const cmd = parts.slice(1).join('|');
+                        
+                        console.log(`[DVR SCHEDULER] Resolving fresh Stalker link for scheduled recording:`, stalkerMeta);
+                        const probes = [{ type, cmd }];
+                        
+                        let parsedObj = null;
+                        if (typeof cmd === 'string') {
+                            if (cmd.startsWith('{')) {
+                                try { parsedObj = JSON.parse(cmd); } catch (e) {}
+                            } else {
+                                try {
+                                    const decoded = Buffer.from(cmd, 'base64').toString('utf8');
+                                    if (decoded.startsWith('{')) parsedObj = JSON.parse(decoded);
+                                } catch (e) {}
+                            }
+                        }
+
+                        if (parsedObj) {
+                            const altObj = { ...parsedObj };
+                            if (altObj.episode_num && !altObj.episode_number) altObj.episode_number = altObj.episode_num;
+                            if (altObj.episode_number && !altObj.episode_num) altObj.episode_num = altObj.episode_number;
+
+                            const asJson = JSON.stringify(altObj);
+                            const asBase64 = Buffer.from(asJson).toString('base64');
+                            if (cmd !== asJson) probes.push({ type, cmd: asJson });
+                            if (cmd !== asBase64) probes.push({ type, cmd: asBase64 });
+                        }
+
+                        let resolvedUrl = '';
+                        for (const probe of probes) {
+                            console.log('[DVR SCHEDULER] create_link Probe:', probe);
+                            const res = await stalkerRequest(stalkerMeta.portalUrl, stalkerMeta.mac, 'create_link', probe);
+                            
+                            const candidates = [
+                                res?.js?.cmd,
+                                res?.js?.url,
+                                res?.cmd,
+                                res?.url,
+                                res?.stream_url,
+                                Array.isArray(res?.js) ? res.js[0]?.cmd : null,
+                                Array.isArray(res?.js) ? res.js[0]?.url : null
+                            ];
+
+                            for (const c of candidates) {
+                                if (c && typeof c === 'string') {
+                                    const cleaned = c.trim().replace(/^ffmpeg\s+/i, '');
+                                    if (!cleaned.includes('stream=&')) {
+                                        resolvedUrl = cleaned;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (resolvedUrl) break;
+                        }
+
+                        if (resolvedUrl) {
+                            if (!resolvedUrl.startsWith('http')) {
+                                const parsed = new URL(stalkerMeta.portalUrl);
+                                resolvedUrl = `${parsed.protocol}//${parsed.host}${resolvedUrl.startsWith('/') ? '' : '/'}${resolvedUrl}`;
+                            } else {
+                                const parsedFinal = new URL(resolvedUrl);
+                                if (parsedFinal.hostname === 'localhost' || parsedFinal.hostname === '127.0.0.1') {
+                                    const parsedPortal = new URL(stalkerMeta.portalUrl);
+                                    parsedFinal.protocol = parsedPortal.protocol;
+                                    parsedFinal.host = parsedPortal.host;
+                                    resolvedUrl = parsedFinal.href;
+                                }
+                            }
+                            activeUrl = resolvedUrl;
+                            console.log('[DVR SCHEDULER] Stalker link resolved successfully to fresh URL:', activeUrl);
+                        } else {
+                            console.warn('[DVR SCHEDULER] Failed to resolve Stalker link, falling back to original url.');
+                        }
+                    } catch (err) {
+                        console.error('[DVR SCHEDULER] Error resolving stalker link on schedule start:', err);
+                    }
+                }
+                
+                try {
+                    const download = downloadStream(activeUrl, destPath, cleanHeaders, handleProgress, handleDone, handleError);
+                    
+                    activeRecordings.set(recordingId, {
+                        id: recordingId,
+                        channelName: meta.channelName,
+                        programName: meta.programName,
+                        filename,
+                        destPath,
+                        cancel: download.cancel,
+                        startTime: Date.now(),
+                        bytesWritten: 0
+                    });
+                    
+                    activeScheduleRecordings.set(row.id, recordingId);
+                } catch (err) {
+                    console.error('[DVR SCHEDULER] Failed to start downloader:', err);
+                    db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id);
+                }
+            };
+            
             const handleProgress = (bytes) => {
                 const rec = activeRecordings.get(recordingId);
                 if (rec) rec.bytesWritten = bytes;
@@ -4134,25 +4320,7 @@ async function checkScheduledRecordings() {
                 }
             };
             
-            try {
-                const download = downloadStream(row.channel_url, destPath, meta.headers || [], handleProgress, handleDone, handleError);
-                
-                activeRecordings.set(recordingId, {
-                    id: recordingId,
-                    channelName: meta.channelName,
-                    programName: meta.programName,
-                    filename,
-                    destPath,
-                    cancel: download.cancel,
-                    startTime: Date.now(),
-                    bytesWritten: 0
-                });
-                
-                activeScheduleRecordings.set(row.id, recordingId);
-            } catch (err) {
-                console.error('[DVR SCHEDULER] Failed to start downloader:', err);
-                db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id);
-            }
+            startScheduledDownload();
         }
         
         // 2. Stop ongoing scheduled recordings whose end time has arrived

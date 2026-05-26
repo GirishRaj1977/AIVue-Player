@@ -4779,7 +4779,7 @@ async function renderLiveEpgGrid() {
                     const targetChannel = allChannels.find(c => c.title === channelTitle);
                     const resolveUrlAndSchedule = async () => {
                         try {
-                            const resolvedUrl = targetChannel ? await resolveChannelStreamUrl(targetChannel) : channelUrl;
+                            const originalUrl = targetChannel ? (targetChannel.stream_url || targetChannel.url) : channelUrl;
                             let customHeaders = [];
                             if (targetChannel && targetChannel.stream_url && targetChannel.stream_url.startsWith('stalker-cmd:')) {
                                 const playlist = savedPlaylists.find(p => p.id === targetChannel.playlist_id || p.id === targetChannel.playlistId);
@@ -4789,12 +4789,13 @@ async function renderLiveEpgGrid() {
                                     let referer = portalUrl.replace('/server/load.php', '/c/index.html').replace('/portal.php', '/c/index.html');
                                     customHeaders = [
                                         `X-User-Agent: Model: MAG250; Link: Ethernet`,
-                                        `Referer: ${referer}`
+                                        `Referer: ${referer}`,
+                                        `STALKER-METADATA:${JSON.stringify({ portalUrl, mac })}`
                                     ];
                                 }
                             }
                             
-                            window.iptvAPI.scheduleRecording(resolvedUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders).then(res => {
+                            window.iptvAPI.scheduleRecording(originalUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders).then(res => {
                                 if (res) {
                                     showToast(`Recording scheduled: ${progTitle}`);
                                     renderFullEpg();
@@ -5331,7 +5332,7 @@ async function renderFullEpg() {
                     const targetChannel = allChannels.find(c => c.title === channelTitle);
                     const resolveUrlAndSchedule = async () => {
                         try {
-                            const resolvedUrl = targetChannel ? await resolveChannelStreamUrl(targetChannel) : channelUrl;
+                            const originalUrl = targetChannel ? (targetChannel.stream_url || targetChannel.url) : channelUrl;
                             let customHeaders = [];
                             if (targetChannel && targetChannel.stream_url && targetChannel.stream_url.startsWith('stalker-cmd:')) {
                                 const playlist = savedPlaylists.find(p => p.id === targetChannel.playlist_id || p.id === targetChannel.playlistId);
@@ -5341,12 +5342,13 @@ async function renderFullEpg() {
                                     let referer = portalUrl.replace('/server/load.php', '/c/index.html').replace('/portal.php', '/c/index.html');
                                     customHeaders = [
                                         `X-User-Agent: Model: MAG250; Link: Ethernet`,
-                                        `Referer: ${referer}`
+                                        `Referer: ${referer}`,
+                                        `STALKER-METADATA:${JSON.stringify({ portalUrl, mac })}`
                                     ];
                                 }
                             }
                             
-                            window.iptvAPI.scheduleRecording(resolvedUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders).then(res => {
+                            window.iptvAPI.scheduleRecording(originalUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders).then(res => {
                                 if (res) {
                                     showToast(`Recording scheduled: ${progTitle}`);
                                     renderFullEpg();
