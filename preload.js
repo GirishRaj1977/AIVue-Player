@@ -56,5 +56,13 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     getPlaybackProgress: (id) => ipcRenderer.invoke('get-playback-progress', id),
     savePlaybackProgress: (params) => ipcRenderer.invoke('save-playback-progress', params),
     getAllPlaybackProgress: () => ipcRenderer.invoke('get-all-playback-progress'),
+    startRecording: (channelUrl, channelName, programName, headers) => ipcRenderer.invoke('start-recording', channelUrl, channelName, programName, headers),
+    stopRecording: (recordingId) => ipcRenderer.invoke('stop-recording', recordingId),
+    getActiveRecordings: () => ipcRenderer.invoke('get-active-recordings'),
+    getRecordings: () => ipcRenderer.invoke('get-recordings'),
+    deleteRecording: (filename) => ipcRenderer.invoke('delete-recording', filename),
+    getRecordingPath: () => ipcRenderer.invoke('get-recording-path'),
+    saveRecordingPath: (path) => ipcRenderer.invoke('save-recording-path', path),
+    onRecordingStatusChange: (callback) => ipcRenderer.on('recording-status-change', (_event, data) => callback(data)),
     log: (category, level, message) => ipcRenderer.send('write-log', { category, level, message })
 });

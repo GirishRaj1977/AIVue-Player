@@ -87,6 +87,11 @@ try {
             channel_title TEXT PRIMARY KEY,
             epg_id TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS dvr_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
         
         CREATE TABLE IF NOT EXISTS external_epgs (
             source_url TEXT PRIMARY KEY
@@ -3631,4 +3636,300 @@ ipcMain.handle('factory-reset', () => {
         console.error("[DB ERR] Factory reset failed:", e);
         throw e;
     }
+});
+
+// ==========================================
+// --- DVR LIVE TV CHANNELS RECORDING ENGINE ---
+// ==========================================
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
+
+const activeRecordings = new Map();
+
+function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone, onError) {
+    console.log('[DVR DEBUG] URL=', urlStr);
+    console.log('[DVR DEBUG] ABS=', /^https?:\/\//.test(urlStr));
+    let requestInstance = null;
+    let fileStream = null;
+    let isCancelled = false;
+
+    const startDownload = (currentUrl) => {
+        if (isCancelled) return;
+
+        try {
+            const parsedUrl = new URL(currentUrl);
+            const protocol = parsedUrl.protocol === 'https:' ? https : http;
+            
+            const headers = {
+                'User-Agent': 'VLC/3.0.9 LibVLC/3.0.9'
+            };
+            if (customHeaders && Array.isArray(customHeaders)) {
+                customHeaders.forEach(h => {
+                    const parts = h.split(':');
+                    if (parts.length >= 2) {
+                        headers[parts[0].trim()] = parts.slice(1).join(':').trim();
+                    }
+                });
+            }
+
+            const options = {
+                headers: headers,
+                timeout: 15000
+            };
+
+            requestInstance = protocol.get(currentUrl, options, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    const redirectUrl = new URL(res.headers.location, currentUrl).href;
+                    console.log(`[DVR] Redirecting to: ${redirectUrl}`);
+                    startDownload(redirectUrl);
+                    return;
+                }
+
+                if (res.statusCode !== 200) {
+                    onError(new Error(`Server returned HTTP ${res.statusCode}`));
+                    return;
+                }
+
+                fileStream = fs.createWriteStream(destPath);
+                let bytesWritten = 0;
+
+                res.on('data', (chunk) => {
+                    if (isCancelled) {
+                        res.destroy();
+                        return;
+                    }
+                    fileStream.write(chunk);
+                    bytesWritten += chunk.length;
+                    if (onProgress) onProgress(bytesWritten);
+                });
+
+                res.on('end', () => {
+                    fileStream.end();
+                    if (!isCancelled) onDone();
+                });
+
+                res.on('error', (err) => {
+                    fileStream.end();
+                    onError(err);
+                });
+            });
+
+            requestInstance.on('error', (err) => {
+                onError(err);
+            });
+
+            requestInstance.on('timeout', () => {
+                requestInstance.destroy();
+                onError(new Error('Connection timeout'));
+            });
+
+        } catch (err) {
+            onError(err);
+        }
+    };
+
+    startDownload(urlStr);
+
+    return {
+        cancel: () => {
+            isCancelled = true;
+            if (requestInstance) requestInstance.destroy();
+            if (fileStream) fileStream.end();
+        }
+    };
+}
+
+ipcMain.handle('get-recording-path', () => {
+    try {
+        if (!db) return path.join(app.getPath('documents'), 'AIVueRecordings');
+        const row = db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        if (row && row.value) return row.value;
+    } catch (e) {
+        console.error('[DB ERR] Failed to read recording path settings:', e);
+    }
+    return path.join(app.getPath('documents'), 'AIVueRecordings');
+});
+
+ipcMain.handle('save-recording-path', (event, targetPath) => {
+    try {
+        if (!db) return false;
+        db.prepare("INSERT OR REPLACE INTO dvr_settings (key, value) VALUES ('recording_path', ?)").run(targetPath);
+        if (!fs.existsSync(targetPath)) {
+            fs.mkdirSync(targetPath, { recursive: true });
+        }
+        return true;
+    } catch (e) {
+        console.error('[DB ERR] Failed to save recording path settings:', e);
+        return false;
+    }
+});
+
+ipcMain.handle('start-recording', async (event, channelUrl, channelName, programName, headers = []) => {
+    console.log('[DVR IPC] Start recording requested for:', channelName, '-- Program:', programName);
+    
+    let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
+    try {
+        const row = db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        if (row && row.value) folder = row.value;
+    } catch (e) {}
+    
+    if (!fs.existsSync(folder)) {
+        fs.mkdirSync(folder, { recursive: true });
+    }
+    
+    const safeChannelName = channelName.replace(/[\/\\:\*\?"<>\|]/g, '_');
+    const safeProgramName = programName.replace(/[\/\\:\*\?"<>\|]/g, '_');
+    const filename = `${safeChannelName} - ${safeProgramName}.ts`;
+    const destPath = path.join(folder, filename);
+    
+    const recordingId = crypto.randomUUID();
+    let headersVal = [];
+    if (headers && Array.isArray(headers)) {
+        headersVal = headers;
+    }
+    
+    const handleProgress = (bytes) => {
+        const rec = activeRecordings.get(recordingId);
+        if (rec) {
+            rec.bytesWritten = bytes;
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('recording-status-change', {
+                id: recordingId,
+                status: 'recording',
+                channelName,
+                programName,
+                filename,
+                bytesWritten: bytes,
+                startTime: rec ? rec.startTime : Date.now()
+            });
+        }
+    };
+    
+    const handleDone = () => {
+        activeRecordings.delete(recordingId);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('recording-status-change', {
+                id: recordingId,
+                status: 'completed',
+                channelName,
+                programName,
+                filename
+            });
+        }
+    };
+    
+    const handleError = (err) => {
+        activeRecordings.delete(recordingId);
+        console.error('[DVR ERROR] Recording failed:', err.message);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('recording-status-change', {
+                id: recordingId,
+                status: 'error',
+                channelName,
+                programName,
+                filename,
+                error: err.message
+            });
+        }
+    };
+    
+    const download = downloadStream(channelUrl, destPath, headersVal, handleProgress, handleDone, handleError);
+    
+    activeRecordings.set(recordingId, {
+        id: recordingId,
+        channelName,
+        programName,
+        filename,
+        destPath,
+        cancel: download.cancel,
+        startTime: Date.now(),
+        bytesWritten: 0
+    });
+    
+    return {
+        id: recordingId,
+        filename,
+        status: 'recording'
+    };
+});
+
+ipcMain.handle('stop-recording', (event, recordingId) => {
+    console.log('[DVR IPC] Stop recording requested for id:', recordingId);
+    const rec = activeRecordings.get(recordingId);
+    if (rec) {
+        rec.cancel();
+        activeRecordings.delete(recordingId);
+        return true;
+    }
+    return false;
+});
+
+ipcMain.handle('get-active-recordings', () => {
+    const list = [];
+    for (const [id, rec] of activeRecordings.entries()) {
+        list.push({
+            id: rec.id,
+            channelName: rec.channelName,
+            programName: rec.programName,
+            filename: rec.filename,
+            startTime: rec.startTime,
+            bytesWritten: rec.bytesWritten
+        });
+    }
+    return list;
+});
+
+ipcMain.handle('get-recordings', async () => {
+    let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
+    try {
+        const row = db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        if (row && row.value) folder = row.value;
+    } catch (e) {}
+    
+    if (!fs.existsSync(folder)) {
+        return [];
+    }
+    
+    try {
+        const files = fs.readdirSync(folder);
+        const list = [];
+        files.forEach(f => {
+            if (f.endsWith('.ts')) {
+                const filePath = path.join(folder, f);
+                const stats = fs.statSync(filePath);
+                list.push({
+                    filename: f,
+                    sizeBytes: stats.size,
+                    createdTime: stats.birthtimeMs,
+                    absolutePath: filePath
+                });
+            }
+        });
+        list.sort((a, b) => b.createdTime - a.createdTime);
+        return list;
+    } catch (e) {
+        console.error('[DVR ERR] Failed to read recordings folder:', e);
+        return [];
+    }
+});
+
+ipcMain.handle('delete-recording', async (event, filename) => {
+    let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
+    try {
+        const row = db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        if (row && row.value) folder = row.value;
+    } catch (e) {}
+    
+    const filePath = path.join(folder, filename);
+    try {
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            return true;
+        }
+    } catch (e) {
+        console.error('[DVR ERR] Failed to delete recording file:', e);
+    }
+    return false;
 });

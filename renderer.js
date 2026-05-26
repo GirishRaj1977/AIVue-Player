@@ -1523,6 +1523,7 @@ let savedEpgs = [];
 let channelMappings = {};
 
 let savedReminders = JSON.parse(localStorage.getItem('iptv_reminders') || '[]');
+let clientActiveRecordings = [];
 
 window.isAutoplayEnabled = localStorage.getItem('iptv_autoplay_next') !== 'false';
 window.currentPlayingSeriesEpisodes = [];
@@ -2153,6 +2154,7 @@ async function renderSettings() {
                 <button class="settings-menu-btn" data-target="card-reminders">Reminders</button>
                 <button class="settings-menu-btn" data-target="card-mapping">Channel Mapping</button>
                 <button class="settings-menu-btn" data-target="card-remote">Remote Control</button>
+                <button class="settings-menu-btn" data-target="card-dvr">Recording Path</button>
                 <button class="settings-menu-btn" data-target="card-tmdb">TMDB Integration</button>
                 <button class="settings-menu-btn" data-target="card-danger">Danger Zone</button>
             </div>
@@ -2242,7 +2244,17 @@ async function renderSettings() {
                     </div>
                     
                     <div id="settings-remote-config" style="border-top: 1px solid #333; padding-top: 20px; margin-top: 10px;">
-                        <div style="color: #888; text-align: center; padding: 20px 0;">Loading Remote Settings...</div>
+                    </div>
+                </div>
+
+                <!-- Recording Settings Card -->
+                <div id="card-dvr" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                    <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">Recording Storage Path</h3>
+                    <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Choose where recorded live streams (.ts files) will be saved on your computer.</p>
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+                        <input type="text" id="settings-recording-path" readonly style="flex: 1; min-width: 250px; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                        <button id="settings-browse-recording-btn" class="playlist-btn" style="background: #333; color: white; border: 1px solid #444; font-weight: bold; padding: 10px 20px; white-space: nowrap;">Browse</button>
+                        <button id="settings-save-recording-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 20px; white-space: nowrap;">Save Path</button>
                     </div>
                 </div>
 
@@ -2503,6 +2515,42 @@ async function renderSettings() {
         }
     });
 
+    // Load and wire recording directory configurations
+    try {
+        window.iptvAPI.getRecordingPath().then(p => {
+            const pathInput = document.getElementById('settings-recording-path');
+            if (pathInput) pathInput.value = p;
+        });
+    } catch (e) {
+        console.error('Error loading recording path settings:', e);
+    }
+
+    const browseRecordingBtn = document.getElementById('settings-browse-recording-btn');
+    if (browseRecordingBtn) {
+        browseRecordingBtn.addEventListener('click', async () => {
+            const filePaths = await window.iptvAPI.openFileDialog();
+            if (filePaths && filePaths.length > 0) {
+                const pathInput = document.getElementById('settings-recording-path');
+                if (pathInput) pathInput.value = filePaths[0];
+            }
+        });
+    }
+
+    const saveRecordingBtn = document.getElementById('settings-save-recording-btn');
+    if (saveRecordingBtn) {
+        saveRecordingBtn.addEventListener('click', async () => {
+            const pathInput = document.getElementById('settings-recording-path');
+            if (pathInput) {
+                const success = await window.iptvAPI.saveRecordingPath(pathInput.value.trim());
+                if (success) {
+                    showToast('Recording path saved successfully!');
+                } else {
+                    showToast('Failed to save recording path.', true);
+                }
+            }
+        });
+    }
+
     document.getElementById('settings-factory-reset-btn').addEventListener('click', async () => {
         console.log('[SETTINGS] Factory reset button clicked.');
         if (confirm("Are you sure you want to completely wipe all data? The application will restart.")) {
@@ -2541,7 +2589,7 @@ async function renderSettings() {
     const updateActiveMenuButton = () => {
         if (settingsView.style.display === 'none') return;
         const containerRect = settingsView.getBoundingClientRect();
-        const cards = ['card-epg', 'card-reminders', 'card-mapping', 'card-remote', 'card-tmdb', 'card-danger'];
+        const cards = ['card-epg', 'card-reminders', 'card-mapping', 'card-remote', 'card-dvr', 'card-tmdb', 'card-danger'];
         let currentActive = 'card-epg';
         
         for (const cardId of cards) {
@@ -3544,6 +3592,8 @@ function renderPlaylists() {
             editingPlaylistIndex = idx;
             
             if (playlist.epg && playlist.epg.startsWith('stalker:')) {
+                const stalkerTab = document.getElementById('tab-playlist-stalker');
+                if (stalkerTab) stalkerTab.click();
                 if (importStalkerName) importStalkerName.value = playlist.name;
                 if (importStalkerUrl) importStalkerUrl.value = playlist.source;
                 const mac = playlist.epg.substring(8);
@@ -3552,6 +3602,8 @@ function renderPlaylists() {
                 if (importStalkerSubmitBtn) importStalkerSubmitBtn.textContent = 'Update';
                 if (importStalkerCancelBtn) importStalkerCancelBtn.style.display = 'block';
             } else if (playlist.source.startsWith('http://') || playlist.source.startsWith('https://')) {
+                const m3uTab = document.getElementById('tab-playlist-m3u');
+                if (m3uTab) m3uTab.click();
                 if (importNameInput) importNameInput.value = playlist.name;
                 if (btnModeUrl) btnModeUrl.click();
                 if (importUrlPath) importUrlPath.value = playlist.source;
@@ -3562,6 +3614,8 @@ function renderPlaylists() {
                 if (importSubmitBtn) importSubmitBtn.textContent = 'Update';
                 if (importCancelBtn) importCancelBtn.style.display = 'block';
             } else {
+                const m3uTab = document.getElementById('tab-playlist-m3u');
+                if (m3uTab) m3uTab.click();
                 if (importNameInput) importNameInput.value = playlist.name;
                 if (btnModeFile) btnModeFile.click();
                 if (importFilePath) importFilePath.value = playlist.source;
@@ -3905,6 +3959,26 @@ channelList.addEventListener('scroll', () => {
             localStorage.setItem('iptv_sidebar_scroll', channelList.scrollTop);
         }
     }, 150);
+});
+// Tab Switching for "Add Playlist"
+const playlistTabs = document.querySelectorAll('.playlist-tab-btn');
+const playlistContents = document.querySelectorAll('.playlist-tab-content');
+
+playlistTabs.forEach(tab => {
+    tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        playlistTabs.forEach(t => t.classList.remove('active'));
+        playlistContents.forEach(c => {
+            c.style.display = 'none';
+        });
+        
+        tab.classList.add('active');
+        const targetId = tab.id.replace('tab-', 'content-');
+        const targetEl = document.getElementById(targetId);
+        if (targetEl) {
+            targetEl.style.display = 'flex';
+        }
+    });
 });
 
 let currentImportMode = 'file';
@@ -4501,10 +4575,14 @@ function renderVisibleLiveEpgRows(force = false) {
                     const isReminderSet = savedReminders.some(r => r.progTitle === prog.title && r.startTime === prog.start && r.channelTitle === channel.title);
                     const reminderStyle = isReminderSet ? 'opacity: 1; filter: drop-shadow(0 0 4px #bb86fc);' : 'opacity: 0.3; filter: grayscale(100%);';
                     const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
+                    
+                    const isRecording = clientActiveRecordings.some(r => r.channelName === channel.title && r.status === 'recording');
+                    const recordStyle = isRecording ? 'color: #ef4444; opacity: 1; filter: drop-shadow(0 0 4px #ef4444); animation: pulse 1.5s infinite;' : 'opacity: 0.4;';
+                    const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isRecording ? 'Stop Recording' : 'Record Live Stream'}">🔴</span>` : '';
 
                     programsHtml += `
                     <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.15); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; padding: 2px 4px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
-                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${pTitle}</div>
+                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${recordHtml}${pTitle}</div>
                         <div style="font-size: 0.75em; color: #888; margin-top: 4px;">${timeStr}</div>
                     </div>`;
                 }
@@ -4666,6 +4744,49 @@ async function renderLiveEpgGrid() {
     const gridContainer = document.getElementById('live-epg-scroll-container');
     
     const handleEpgClick = (e) => {
+            const recordBtn = e.target.closest('.epg-record-btn');
+            if (recordBtn) {
+                e.stopPropagation();
+                const channelTitle = recordBtn.getAttribute('data-channel');
+                const channelUrl = recordBtn.getAttribute('data-url');
+                const progTitle = recordBtn.getAttribute('data-prog');
+                
+                const activeRec = clientActiveRecordings.find(r => r.channelName === channelTitle && r.status === 'recording');
+                if (activeRec) {
+                    window.iptvAPI.stopRecording(activeRec.id).then(stopped => {
+                        if (stopped) {
+                            showToast('Recording stopped: ' + progTitle);
+                            activeRec.status = 'stopped';
+                            clientActiveRecordings = clientActiveRecordings.filter(r => r.id !== activeRec.id);
+                            renderFullEpg();
+                            renderLiveEpg();
+                        } else {
+                            showToast('Failed to stop recording.', true);
+                        }
+                    });
+                } else {
+                    window.iptvAPI.startRecording(channelUrl, channelTitle, progTitle, []).then(res => {
+                        if (res && res.id) {
+                            showToast(`Recording started in background: ${progTitle}`);
+                            clientActiveRecordings.push({
+                                id: res.id,
+                                channelName: channelTitle,
+                                programName: progTitle,
+                                filename: res.filename,
+                                status: 'recording',
+                                bytesWritten: 0,
+                                startTime: Date.now()
+                            });
+                            renderFullEpg();
+                            renderLiveEpg();
+                        } else {
+                            showToast('Failed to start recording.', true);
+                        }
+                    });
+                }
+                return;
+            }
+
             const reminderBtn = e.target.closest('.reminder-btn-full');
             if (reminderBtn) {
                 e.stopPropagation();
@@ -4953,10 +5074,14 @@ function renderVisibleEpgRows(force = false) {
                     const isReminderSet = savedReminders.some(r => r.progTitle === prog.title && r.startTime === prog.start && r.channelTitle === channel.title);
                     const reminderStyle = isReminderSet ? 'opacity: 1; filter: drop-shadow(0 0 4px #bb86fc);' : 'opacity: 0.3; filter: grayscale(100%);';
                     const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
+                    
+                    const isRecording = clientActiveRecordings.some(r => r.channelName === channel.title && r.status === 'recording');
+                    const recordStyle = isRecording ? 'color: #ef4444; opacity: 1; filter: drop-shadow(0 0 4px #ef4444); animation: pulse 1.5s infinite;' : 'opacity: 0.4;';
+                    const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isRecording ? 'Stop Recording' : 'Record Live Stream'}">🔴</span>` : '';
 
                     programsHtml += `
                     <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.15); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; padding: 2px 4px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
-                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${pTitle}</div>
+                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${recordHtml}${pTitle}</div>
                         <div style="font-size: 0.75em; color: #888; margin-top: 4px;">${timeStr}</div>
                     </div>`;
                 }
@@ -5146,6 +5271,49 @@ async function renderFullEpg() {
     const gridContainer = document.getElementById('epg-scroll-container');
     
     const handleEpgClick = (e) => {
+            const recordBtn = e.target.closest('.epg-record-btn');
+            if (recordBtn) {
+                e.stopPropagation();
+                const channelTitle = recordBtn.getAttribute('data-channel');
+                const channelUrl = recordBtn.getAttribute('data-url');
+                const progTitle = recordBtn.getAttribute('data-prog');
+                
+                const activeRec = clientActiveRecordings.find(r => r.channelName === channelTitle && r.status === 'recording');
+                if (activeRec) {
+                    window.iptvAPI.stopRecording(activeRec.id).then(stopped => {
+                        if (stopped) {
+                            showToast('Recording stopped: ' + progTitle);
+                            activeRec.status = 'stopped';
+                            clientActiveRecordings = clientActiveRecordings.filter(r => r.id !== activeRec.id);
+                            renderFullEpg();
+                            renderLiveEpg();
+                        } else {
+                            showToast('Failed to stop recording.', true);
+                        }
+                    });
+                } else {
+                    window.iptvAPI.startRecording(channelUrl, channelTitle, progTitle, []).then(res => {
+                        if (res && res.id) {
+                            showToast(`Recording started in background: ${progTitle}`);
+                            clientActiveRecordings.push({
+                                id: res.id,
+                                channelName: channelTitle,
+                                programName: progTitle,
+                                filename: res.filename,
+                                status: 'recording',
+                                bytesWritten: 0,
+                                startTime: Date.now()
+                            });
+                            renderFullEpg();
+                            renderLiveEpg();
+                        } else {
+                            showToast('Failed to start recording.', true);
+                        }
+                    });
+                }
+                return;
+            }
+
             const reminderBtn = e.target.closest('.reminder-btn-full');
             if (reminderBtn) {
                 e.stopPropagation();
@@ -6198,6 +6366,7 @@ function switchTab(tabId, clickedBtn) {
     const isSettings = tabId === 'settings';
     const isMovies = tabId === 'movies';
     const isVod = tabId === 'vod';
+    const isRecordingTab = tabId === 'recording';
 
     if (sidebar) sidebar.style.setProperty('display', isLive ? 'flex' : 'none', 'important');
     if (mainView) mainView.style.setProperty('display', isLive ? 'flex' : 'none', 'important');
@@ -6222,6 +6391,10 @@ function switchTab(tabId, clickedBtn) {
     const vodView = document.getElementById('vod-view');
     if (vodView) vodView.style.setProperty('display', isVod ? 'flex' : 'none', 'important');
     if (isVod) renderVod();
+
+    const recordingView = document.getElementById('recording-view');
+    if (recordingView) recordingView.style.setProperty('display', isRecordingTab ? 'flex' : 'none', 'important');
+    if (isRecordingTab) renderRecordings();
 
     // Explicitly hide or restore the video player bounds instantly when switching views
     if (isLive && streamActive && playerContainer) {
@@ -6255,7 +6428,7 @@ document.getElementById('btn-epg').addEventListener('click', function() { if (!t
 document.getElementById('btn-settings').addEventListener('click', function() { if (!this.disabled) switchTab('settings', this); });
 document.getElementById('btn-movies').addEventListener('click', function() { if (!this.disabled) switchTab('movies', this); });
 document.getElementById('btn-vod').addEventListener('click', function() { if (!this.disabled) switchTab('vod', this); });
-document.getElementById('btn-recording').addEventListener('click', function() { showToast('Coming in Next Version'); });
+document.getElementById('btn-recording').addEventListener('click', function() { switchTab('recording', this); });
 
 let laneObserver = null;
 let tmdbObserver = null;
@@ -6787,6 +6960,22 @@ function injectPremiumStyles() {
         }
         .autoplay-toggle-container input:checked + .slider:before {
             transform: translateX(22px);
+        }
+
+        /* Playlist Tab Styles */
+        .playlist-tab-btn {
+            font-family: 'Inter', sans-serif !important;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .playlist-tab-btn:hover {
+            color: #ffffff !important;
+            background: rgba(255, 255, 255, 0.05) !important;
+        }
+        .playlist-tab-btn.active {
+            color: #ffffff !important;
+            background: rgba(187, 134, 252, 0.15) !important;
+            border: 1px solid rgba(187, 134, 252, 0.3) !important;
+            box-shadow: 0 4px 12px rgba(187, 134, 252, 0.15) !important;
         }
     `;
     document.head.appendChild(style);
@@ -9087,4 +9276,189 @@ function updateMpvEpgPayload(title, overview, time) {
     } else {
         window.pendingEpgUpdate = epgUpdatePayload;
     }
+}
+
+// ==========================================
+// --- DVR LIVE TV RECORDINGS FRONTEND ---
+// ==========================================
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 MB';
+    const mb = bytes / (1024 * 1024);
+    return mb.toFixed(2) + ' MB';
+}
+
+async function renderRecordings() {
+    const activeSection = document.getElementById('active-recordings-section');
+    const activeList = document.getElementById('active-recordings-list');
+    const savedList = document.getElementById('saved-recordings-list');
+    
+    if (!savedList) return;
+    
+    let activeRecs = [];
+    try {
+        activeRecs = await window.iptvAPI.getActiveRecordings();
+        clientActiveRecordings = activeRecs.map(r => ({
+            ...r,
+            status: 'recording'
+        }));
+    } catch (e) {
+        console.error('Error fetching active recordings:', e);
+    }
+    
+    if (activeRecs.length > 0) {
+        if (activeSection) activeSection.style.display = 'flex';
+        if (activeList) {
+            activeList.innerHTML = activeRecs.map(rec => {
+                const elapsedMin = Math.round((Date.now() - rec.startTime) / 60000);
+                return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px;">
+                    <div style="display: flex; flex-direction: column; overflow: hidden; min-width: 0; flex-grow: 1;">
+                        <span style="color: #fff; font-weight: bold; font-size: 0.95em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${rec.channelName}</span>
+                        <span style="color: #bbb; font-size: 0.85em; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Recording: ${rec.programName}</span>
+                        <span style="color: #888; font-size: 0.8em; margin-top: 4px;" id="active-progress-${rec.id}">Size: ${formatBytes(rec.bytesWritten)} &bull; ${elapsedMin} min elapsed</span>
+                    </div>
+                    <button class="playlist-btn stop-rec-btn" data-id="${rec.id}" style="background: #cf6679; color: black; font-weight: bold; padding: 8px 16px; border-radius: 6px;">Stop</button>
+                </div>`;
+            }).join('');
+            
+            activeList.querySelectorAll('.stop-rec-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = btn.getAttribute('data-id');
+                    const stopped = await window.iptvAPI.stopRecording(id);
+                    if (stopped) {
+                        showToast('Recording stopped');
+                        clientActiveRecordings = clientActiveRecordings.filter(r => r.id !== id);
+                        renderRecordings();
+                        renderFullEpg();
+                    } else {
+                        showToast('Failed to stop recording.', true);
+                    }
+                });
+            });
+        }
+    } else {
+        if (activeSection) activeSection.style.display = 'none';
+        if (activeList) activeList.innerHTML = '';
+    }
+    
+    let savedRecs = [];
+    try {
+        savedRecs = await window.iptvAPI.getRecordings();
+    } catch (e) {
+        console.error('Error fetching saved recordings:', e);
+    }
+    
+    if (savedRecs.length > 0) {
+        savedList.innerHTML = savedRecs.map(rec => {
+            const dateStr = new Date(rec.createdTime).toLocaleString();
+            return `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: rgba(30,30,30,0.6); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; backdrop-filter: blur(10px);">
+                <div style="display: flex; flex-direction: column; overflow: hidden; min-width: 0; flex-grow: 1; margin-right: 15px;">
+                    <span style="color: #fff; font-weight: bold; font-size: 0.95em; word-break: break-all;">${rec.filename.replace('.ts', '')}</span>
+                    <span style="color: #888; font-size: 0.8em; margin-top: 5px;">Recorded on: ${dateStr} &bull; Size: ${formatBytes(rec.sizeBytes)}</span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="playlist-btn play-rec-btn" data-path="${rec.absolutePath.replace(/"/g, '&quot;')}" data-name="${rec.filename.replace(/"/g, '&quot;')}" style="background: #bb86fc; color: black; font-weight: bold; padding: 8px 16px; border-radius: 6px;">Play</button>
+                    <button class="playlist-btn delete-rec-btn" data-filename="${rec.filename.replace(/"/g, '&quot;')}" style="background: transparent; color: #cf6679; border: 1px solid rgba(207,102,121,0.4); padding: 8px 16px; border-radius: 6px;">Delete</button>
+                </div>
+            </div>`;
+        }).join('');
+        
+        savedList.querySelectorAll('.play-rec-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const filePath = btn.getAttribute('data-path');
+                const fileName = btn.getAttribute('data-name');
+                console.log('[DVR PLAY] Playing recorded stream:', filePath);
+                const recordingChannelObject = {
+                    title: fileName.replace('.ts', ''),
+                    url: filePath,
+                    type: 'live'
+                };
+                switchTab('live-tv', document.getElementById('btn-live-tv'));
+                embedStream(recordingChannelObject);
+            });
+        });
+        
+        savedList.querySelectorAll('.delete-rec-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const filename = btn.getAttribute('data-filename');
+                if (confirm(`Are you sure you want to delete recording: ${filename}?`)) {
+                    const deleted = await window.iptvAPI.deleteRecording(filename);
+                    if (deleted) {
+                        showToast('Recording deleted.');
+                        renderRecordings();
+                    } else {
+                        showToast('Failed to delete recording.', true);
+                    }
+                }
+            });
+        });
+    } else {
+        savedList.innerHTML = '<div style="color: #666; text-align: center; padding: 40px 0; font-style: italic;">No saved recordings found in your configured folder.</div>';
+    }
+}
+
+try {
+    window.iptvAPI.onRecordingStatusChange((data) => {
+        console.log('[DVR STATUS UPDATE]', data);
+        
+        if (data.status === 'recording') {
+            const existing = clientActiveRecordings.find(r => r.id === data.id);
+            if (existing) {
+                existing.bytesWritten = data.bytesWritten;
+            } else {
+                clientActiveRecordings.push({
+                    id: data.id,
+                    channelName: data.channelName,
+                    programName: data.programName,
+                    filename: data.filename,
+                    status: 'recording',
+                    bytesWritten: data.bytesWritten,
+                    startTime: data.startTime || Date.now()
+                });
+            }
+            
+            const progressEl = document.getElementById(`active-progress-${data.id}`);
+            if (progressEl) {
+                const elapsedMin = Math.round((Date.now() - (data.startTime || Date.now())) / 60000);
+                progressEl.innerHTML = `Size: ${formatBytes(data.bytesWritten)} &bull; ${elapsedMin} min elapsed`;
+            }
+        } else if (data.status === 'completed' || data.status === 'error' || data.status === 'stopped') {
+            clientActiveRecordings = clientActiveRecordings.filter(r => r.id !== data.id);
+            if (data.status === 'completed') {
+                showToast(`Recording Completed: ${data.filename}`);
+            } else if (data.status === 'error') {
+                showToast(`Recording Failed: ${data.error || 'Connection Lost'}`, true);
+            }
+            
+            const recView = document.getElementById('recording-view');
+            if (recView && recView.style.display === 'flex') {
+                renderRecordings();
+            }
+            renderFullEpg();
+            const liveView = document.getElementById('live-tv-view');
+            if (liveView && liveView.style.display === 'flex') {
+                renderLiveEpg();
+            }
+        }
+    });
+} catch (e) {
+    console.error('Failed to register onRecordingStatusChange listener:', e);
+}
+
+async function resolveChannelStreamUrl(channel) {
+    let finalStreamUrl = channel.stream_url || channel.url || '';
+    if (finalStreamUrl.startsWith('stalker-cmd:')) {
+        const playlist = savedPlaylists.find(p => p.id === channel.playlist_id || p.id === channel.playlistId);
+        if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
+            const mac = playlist.epg.substring(8);
+            const parts = finalStreamUrl.substring(12).split('|');
+            const type = parts[0];
+            const cmd = parts.slice(1).join('|');
+            const resolved = await window.iptvAPI.resolveStalkerLink({ url: playlist.source, mac, type, cmd });
+            if (resolved) finalStreamUrl = resolved;
+        }
+    }
+    return finalStreamUrl;
 }
