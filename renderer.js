@@ -5480,6 +5480,11 @@ async function embedStream(channel) {
     console.log('[STREAM] Embedding stream for channel:', channel.title);
     streamActive = true;
     
+    if (window.activeEpgTrackingInterval) {
+        clearInterval(window.activeEpgTrackingInterval);
+        window.activeEpgTrackingInterval = null;
+    }
+    
     if (window.playbackTimeout) {
         clearTimeout(window.playbackTimeout);
         window.playbackTimeout = null;
@@ -5683,6 +5688,11 @@ async function embedStream(channel) {
             progDesc: progDesc,
             progTime: progTime
         };
+        
+        // Periodically track EPG changes to dynamically update details card and OSC
+        window.activeEpgTrackingInterval = setInterval(() => {
+            updatePlayingChannelEpg(channel);
+        }, 30000);
     }
 
     const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -9399,6 +9409,62 @@ function updateMpvEpgPayload(title, overview, time) {
         window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`);
     } else {
         window.pendingEpgUpdate = epgUpdatePayload;
+    }
+}
+
+async function updatePlayingChannelEpg(channel) {
+    if (!channel || channel.type === 'movie' || channel.type === 'series' || channel.type === 'episode') return;
+    
+    const mappedId = channelMappings[channel.title];
+    const epgIds = [mappedId, channel.tvg_id, channel.tvg_name].filter(Boolean);
+    if (epgIds.length === 0) return;
+    
+    try {
+        const epgData = await window.iptvAPI.getEpg(epgIds, null, null);
+        
+        let programmes = [];
+        for (const id of epgIds) {
+            if (epgData[id] && epgData[id].length > 0) { programmes = epgData[id]; break; }
+        }
+        
+        const currentProg = getCurrentProgram(programmes);
+        if (!currentProg) return;
+        
+        const pStart = parseEpgTime(currentProg.start);
+        const pEnd = parseEpgTime(currentProg.stop);
+        const timeStr = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+        
+        const detailProgram = document.getElementById('detail-program');
+        if (detailProgram && detailProgram.textContent !== currentProg.title) {
+            console.log('[EPG TRACKER] Program changed to:', currentProg.title);
+            
+            detailProgram.textContent = currentProg.title || 'No Title';
+            
+            const detailTimeslot = document.getElementById('detail-timeslot');
+            if (detailTimeslot) {
+                detailTimeslot.textContent = timeStr;
+                detailTimeslot.style.display = 'block';
+            }
+            
+            const detailDescription = document.getElementById('detail-description');
+            if (detailDescription) {
+                detailDescription.textContent = currentProg.desc || 'No description available.';
+                detailDescription.style.display = 'block';
+            }
+            
+            // Also update the OSC inside MPV
+            updateMpvEpgPayload(currentProg.title, currentProg.desc || '', timeStr);
+            
+            // Also update pendingEpgUpdate payload
+            window.pendingEpgUpdate = {
+                title: channel.title || '',
+                progTitle: currentProg.title || '',
+                progDesc: currentProg.desc || '',
+                progTime: timeStr
+            };
+        }
+    } catch (e) {
+        console.error('[EPG TRACKER ERR] Failed to update playing channel EPG:', e);
     }
 }
 
