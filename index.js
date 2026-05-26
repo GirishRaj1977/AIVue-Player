@@ -2829,10 +2829,29 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
         for (const probe of probes) {
             console.log('[CREATE LINK PROBE]', probe);
             const res = await stalkerRequest(url, mac, 'create_link', probe);
+            console.log('[CREATE LINK RAW]', JSON.stringify(res));
             
-            finalUrl = res?.js?.cmd || res?.js?.url || '';
-            if (finalUrl) {
-                console.log('[CREATE LINK SUCCESS] Found URL using probe.');
+            const candidates = [
+                res?.js?.cmd,
+                res?.js?.url,
+                res?.cmd,
+                res?.url,
+                res?.stream_url,
+                Array.isArray(res?.js) ? res.js[0]?.cmd : null,
+                Array.isArray(res?.js) ? res.js[0]?.url : null
+            ];
+
+            let candidateUrl = '';
+            for (const c of candidates) {
+                if (c && typeof c === 'string') {
+                    candidateUrl = c.trim();
+                    break;
+                }
+            }
+
+            if (candidateUrl) {
+                finalUrl = candidateUrl;
+                console.log('[CREATE LINK SUCCESS] Found URL using probe. Candidate URL:', finalUrl);
                 break;
             }
         }
