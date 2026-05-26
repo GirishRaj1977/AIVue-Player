@@ -2785,6 +2785,24 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
     try {
         console.log('[STALKER IPC] Resolving link for:', { url, mac, type, cmd, series });
         
+        let originalCmd = cmd || '';
+        if (originalCmd.startsWith('ffmpeg ')) {
+            originalCmd = originalCmd.substring(7).trim();
+        }
+
+        // HEURISTIC: Direct Playback Bypass
+        if (originalCmd.startsWith('http') && 
+            !originalCmd.includes('localhost') && 
+            !originalCmd.includes('127.0.0.1') && 
+            (originalCmd.includes('/play/live.php') || 
+             originalCmd.includes('/play/movie.php') || 
+             originalCmd.includes('/play/series.php')) && 
+            !originalCmd.includes('stream=&')) {
+            
+            console.log('[STALKER IPC] Heuristic Match: Bypassing create_link for direct play URL:', originalCmd);
+            return originalCmd;
+        }
+
         const probes = [];
 
         if (series !== undefined && series !== null) {
@@ -2808,7 +2826,6 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
 
         if (parsedObj) {
             const altObj = { ...parsedObj };
-            // Ensure both episode_num and episode_number are present
             if (altObj.episode_num && !altObj.episode_number) altObj.episode_number = altObj.episode_num;
             if (altObj.episode_number && !altObj.episode_num) altObj.episode_num = altObj.episode_number;
 
@@ -2838,14 +2855,18 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
                 res?.url,
                 res?.stream_url,
                 Array.isArray(res?.js) ? res.js[0]?.cmd : null,
-                Array.isArray(res?.js) ? res.js[0]?.url : null
+                Array.isArray(res?.js) ? res.js[0]?.url : null,
+                originalCmd // Absolute fallback
             ];
 
             let candidateUrl = '';
             for (const c of candidates) {
                 if (c && typeof c === 'string') {
-                    candidateUrl = c.trim();
-                    break;
+                    const cleaned = c.trim().replace(/^ffmpeg\s+/i, '');
+                    if (!cleaned.includes('stream=&')) {
+                        candidateUrl = cleaned;
+                        break;
+                    }
                 }
             }
 
