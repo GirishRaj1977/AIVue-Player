@@ -6503,12 +6503,34 @@ function injectPremiumStyles() {
     const style = document.createElement('style');
     style.id = 'premium-catalog-styles';
     style.innerHTML = `
-        /* Movies/Series Screens transparent backing */
-        #movies-view, #vod-view {
+        /* Premium Global Purple to Black Seamless Background Gradient */
+        body {
+            background: linear-gradient(135deg, #1d0933 0%, #0b0314 40%, #000000 100%) !important;
+            background-attachment: fixed !important;
+        }
+        
+        #top-header {
+            background: rgba(14, 7, 24, 0.45) !important;
+            backdrop-filter: blur(30px) !important;
+            -webkit-backdrop-filter: blur(30px) !important;
+            border-bottom: 1px solid rgba(187, 134, 252, 0.15) !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
+        }
+
+        #movies-view, #vod-view, #playlist-view, #recording-view, #epg-view, #settings-view, #main-view {
             background: transparent !important;
             border: none !important;
+        }
+        
+        #movies-view, #vod-view {
             padding: 40px 32px 32px 56px !important;
             box-sizing: border-box !important;
+        }
+
+        #live-bottom-half {
+            background: rgba(10, 10, 15, 0.4) !important;
+            backdrop-filter: blur(10px) !important;
+            border-color: rgba(255,255,255,0.06) !important;
         }
 
         #movies-view::-webkit-scrollbar, #vod-view::-webkit-scrollbar, #episodes-modal *::-webkit-scrollbar, #premium-details-modal::-webkit-scrollbar {
