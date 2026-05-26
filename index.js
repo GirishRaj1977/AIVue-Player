@@ -3933,3 +3933,207 @@ ipcMain.handle('delete-recording', async (event, filename) => {
     }
     return false;
 });
+
+// ==========================================
+// --- DVR RECORDINGS SCHEDULER ENGINE ---
+// ==========================================
+
+ipcMain.handle('schedule-recording', (event, channelUrl, channelName, programName, startTime, endTime, headers = []) => {
+    console.log('[DVR SCHEDULER IPC] schedule-recording:', channelName, '--', programName, '-- Start:', startTime);
+    try {
+        if (!db) return false;
+        
+        const metadata = JSON.stringify({ channelName, programName, headers });
+        const res = db.prepare(`
+            INSERT INTO dvr_schedule (channel_url, start_time, end_time, status, file_path)
+            VALUES (?, ?, ?, 'pending', ?)
+        `).run(channelUrl, startTime, endTime, metadata);
+        
+        return res.lastInsertRowid;
+    } catch (e) {
+        console.error('[DB ERR] Failed to schedule recording:', e);
+        return false;
+    }
+});
+
+ipcMain.handle('get-scheduled-recordings', () => {
+    try {
+        if (!db) return [];
+        const rows = db.prepare("SELECT * FROM dvr_schedule ORDER BY start_time ASC").all();
+        return rows.map(r => {
+            let meta = { channelName: 'Unknown', programName: 'Scheduled Program', headers: [] };
+            try {
+                if (r.file_path) meta = JSON.parse(r.file_path);
+            } catch (e) {}
+            return {
+                id: r.id,
+                channelUrl: r.channel_url,
+                startTime: r.start_time,
+                endTime: r.end_time,
+                status: r.status,
+                channelName: meta.channelName,
+                programName: meta.programName
+            };
+        });
+    } catch (e) {
+        console.error('[DB ERR] Failed to get scheduled recordings:', e);
+        return [];
+    }
+});
+
+ipcMain.handle('cancel-scheduled-recording', (event, scheduleId) => {
+    console.log('[DVR SCHEDULER IPC] cancel-scheduled-recording:', scheduleId);
+    try {
+        if (!db) return false;
+        
+        const row = db.prepare("SELECT * FROM dvr_schedule WHERE id = ?").get();
+        if (row && row.status === 'recording') {
+            const recordingId = activeScheduleRecordings.get(scheduleId);
+            if (recordingId) {
+                const rec = activeRecordings.get(recordingId);
+                if (rec) rec.cancel();
+                activeRecordings.delete(recordingId);
+            }
+            activeScheduleRecordings.delete(scheduleId);
+        }
+        
+        db.prepare("DELETE FROM dvr_schedule WHERE id = ?").run(scheduleId);
+        return true;
+    } catch (e) {
+        console.error('[DB ERR] Failed to cancel scheduled recording:', e);
+        return false;
+    }
+});
+
+const activeScheduleRecordings = new Map();
+
+async function checkScheduledRecordings() {
+    if (!db) return;
+    
+    const nowIso = new Date().toISOString();
+    
+    try {
+        // 1. Start pending recordings whose time has arrived
+        const pending = db.prepare("SELECT * FROM dvr_schedule WHERE status = 'pending' AND start_time <= ?").all();
+        for (const row of pending) {
+            let meta = { channelName: 'Scheduled', programName: 'Program', headers: [] };
+            try {
+                if (row.file_path) meta = JSON.parse(row.file_path);
+            } catch (e) {}
+            
+            console.log(`[DVR SCHEDULER] Starting scheduled recording: ${meta.programName} on ${meta.channelName}`);
+            
+            db.prepare("UPDATE dvr_schedule SET status = 'recording' WHERE id = ?").run(row.id);
+            
+            let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
+            try {
+                const setting = db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+                if (setting && setting.value) folder = setting.value;
+            } catch (e) {}
+            
+            if (!fs.existsSync(folder)) {
+                fs.mkdirSync(folder, { recursive: true });
+            }
+            
+            const safeChannelName = meta.channelName.replace(/[\/\\:\*\?"<>\|]/g, '_');
+            const safeProgramName = meta.programName.replace(/[\/\\:\*\?"<>\|]/g, '_');
+            const filename = `${safeChannelName} - ${safeProgramName}.ts`;
+            const destPath = path.join(folder, filename);
+            
+            const recordingId = crypto.randomUUID();
+            
+            const handleProgress = (bytes) => {
+                const rec = activeRecordings.get(recordingId);
+                if (rec) rec.bytesWritten = bytes;
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('recording-status-change', {
+                        id: recordingId,
+                        status: 'recording',
+                        channelName: meta.channelName,
+                        programName: meta.programName,
+                        filename,
+                        bytesWritten: bytes,
+                        startTime: rec ? rec.startTime : Date.now()
+                    });
+                }
+            };
+            
+            const handleDone = () => {
+                activeRecordings.delete(recordingId);
+                activeScheduleRecordings.delete(row.id);
+                try {
+                    db.prepare("UPDATE dvr_schedule SET status = 'completed' WHERE id = ?").run(row.id);
+                } catch (e) {}
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('recording-status-change', {
+                        id: recordingId,
+                        status: 'completed',
+                        channelName: meta.channelName,
+                        programName: meta.programName,
+                        filename
+                    });
+                }
+            };
+            
+            const handleError = (err) => {
+                activeRecordings.delete(recordingId);
+                activeScheduleRecordings.delete(row.id);
+                try {
+                    db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id);
+                } catch (e) {}
+                console.error('[DVR SCHEDULER ERROR] Recording failed:', err.message);
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('recording-status-change', {
+                        id: recordingId,
+                        status: 'error',
+                        channelName: meta.channelName,
+                        programName: meta.programName,
+                        filename,
+                        error: err.message
+                    });
+                }
+            };
+            
+            try {
+                const download = downloadStream(row.channel_url, destPath, meta.headers || [], handleProgress, handleDone, handleError);
+                
+                activeRecordings.set(recordingId, {
+                    id: recordingId,
+                    channelName: meta.channelName,
+                    programName: meta.programName,
+                    filename,
+                    destPath,
+                    cancel: download.cancel,
+                    startTime: Date.now(),
+                    bytesWritten: 0
+                });
+                
+                activeScheduleRecordings.set(row.id, recordingId);
+            } catch (err) {
+                console.error('[DVR SCHEDULER] Failed to start downloader:', err);
+                db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id);
+            }
+        }
+        
+        // 2. Stop ongoing scheduled recordings whose end time has arrived
+        const active = db.prepare("SELECT * FROM dvr_schedule WHERE status = 'recording' AND end_time <= ?").all();
+        for (const row of active) {
+            console.log(`[DVR SCHEDULER] Ending scheduled recording id ${row.id}`);
+            const recordingId = activeScheduleRecordings.get(row.id);
+            if (recordingId) {
+                const rec = activeRecordings.get(recordingId);
+                if (rec) {
+                    rec.cancel();
+                }
+                activeRecordings.delete(recordingId);
+            }
+            activeScheduleRecordings.delete(row.id);
+            db.prepare("UPDATE dvr_schedule SET status = 'completed' WHERE id = ?").run(row.id);
+        }
+        
+    } catch (e) {
+        console.error('[DVR SCHEDULER LOOP ERROR]', e);
+    }
+}
+
+setInterval(checkScheduledRecordings, 5000);

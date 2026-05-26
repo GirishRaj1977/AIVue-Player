@@ -1524,6 +1524,7 @@ let channelMappings = {};
 
 let savedReminders = JSON.parse(localStorage.getItem('iptv_reminders') || '[]');
 let clientActiveRecordings = [];
+let clientScheduledRecordings = [];
 
 window.isAutoplayEnabled = localStorage.getItem('iptv_autoplay_next') !== 'false';
 window.currentPlayingSeriesEpisodes = [];
@@ -4576,9 +4577,11 @@ function renderVisibleLiveEpgRows(force = false) {
                     const reminderStyle = isReminderSet ? 'opacity: 1; filter: drop-shadow(0 0 4px #bb86fc);' : 'opacity: 0.3; filter: grayscale(100%);';
                     const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
                     
+                    const startTimeIso = pStart.toISOString();
+                    const isScheduled = clientScheduledRecordings.some(s => s.channelName === channel.title && s.programName === prog.title && s.startTime === startTimeIso && s.status === 'pending');
                     const isRecording = clientActiveRecordings.some(r => r.channelName === channel.title && r.status === 'recording');
-                    const recordStyle = isRecording ? 'color: #ef4444; opacity: 1; filter: drop-shadow(0 0 4px #ef4444); animation: pulse 1.5s infinite;' : 'opacity: 0.4;';
-                    const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isRecording ? 'Stop Recording' : 'Record Live Stream'}">🔴</span>` : '';
+                    const recordStyle = (isRecording || isScheduled) ? 'color: #ef4444; opacity: 1; filter: drop-shadow(0 0 4px #ef4444);' + (isRecording ? ' animation: pulse 1.5s infinite;' : '') : 'opacity: 0.4;';
+                    const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isScheduled ? 'Cancel Scheduled Recording' : 'Schedule Recording'}">🔴</span>` : '';
 
                     programsHtml += `
                     <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.15); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; padding: 2px 4px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
@@ -4624,6 +4627,10 @@ function renderVisibleLiveEpgRows(force = false) {
 async function renderLiveEpgGrid() {
     const container = document.getElementById('epg-container');
     if (!container) return;
+
+    try {
+        clientScheduledRecordings = await window.iptvAPI.getScheduledRecordings();
+    } catch (e) {}
 
     if (allChannels.length === 0) {
         container.innerHTML = '<div style="color: #888; text-align: center; margin-top: 50px;">No channels available.</div>';
@@ -4750,39 +4757,58 @@ async function renderLiveEpgGrid() {
                 const channelTitle = recordBtn.getAttribute('data-channel');
                 const channelUrl = recordBtn.getAttribute('data-url');
                 const progTitle = recordBtn.getAttribute('data-prog');
+                const startRaw = recordBtn.getAttribute('data-start');
+                const stopRaw = recordBtn.getAttribute('data-stop');
                 
-                const activeRec = clientActiveRecordings.find(r => r.channelName === channelTitle && r.status === 'recording');
-                if (activeRec) {
-                    window.iptvAPI.stopRecording(activeRec.id).then(stopped => {
-                        if (stopped) {
-                            showToast('Recording stopped: ' + progTitle);
-                            activeRec.status = 'stopped';
-                            clientActiveRecordings = clientActiveRecordings.filter(r => r.id !== activeRec.id);
+                const startTimeIso = parseEpgTime(startRaw).toISOString();
+                const endTimeIso = parseEpgTime(stopRaw).toISOString();
+                
+                const existingSchedule = clientScheduledRecordings.find(s => s.channelName === channelTitle && s.programName === progTitle && s.startTime === startTimeIso && s.status === 'pending');
+                
+                if (existingSchedule) {
+                    window.iptvAPI.cancelScheduledRecording(existingSchedule.id).then(success => {
+                        if (success) {
+                            showToast('Scheduled recording cancelled: ' + progTitle);
                             renderFullEpg();
                             renderLiveEpg();
                         } else {
-                            showToast('Failed to stop recording.', true);
+                            showToast('Failed to cancel schedule.', true);
                         }
                     });
                 } else {
-                    window.iptvAPI.startRecording(channelUrl, channelTitle, progTitle, []).then(res => {
-                        if (res && res.id) {
-                            showToast(`Recording started in background: ${progTitle}`);
-                            clientActiveRecordings.push({
-                                id: res.id,
-                                channelName: channelTitle,
-                                programName: progTitle,
-                                filename: res.filename,
-                                status: 'recording',
-                                bytesWritten: 0,
-                                startTime: Date.now()
+                    const targetChannel = allChannels.find(c => c.title === channelTitle);
+                    const resolveUrlAndSchedule = async () => {
+                        try {
+                            const resolvedUrl = targetChannel ? await resolveChannelStreamUrl(targetChannel) : channelUrl;
+                            let customHeaders = [];
+                            if (targetChannel && targetChannel.stream_url && targetChannel.stream_url.startsWith('stalker-cmd:')) {
+                                const playlist = savedPlaylists.find(p => p.id === targetChannel.playlist_id || p.id === targetChannel.playlistId);
+                                if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
+                                    const mac = playlist.epg.substring(8);
+                                    let portalUrl = playlist.source;
+                                    let referer = portalUrl.replace('/server/load.php', '/c/index.html').replace('/portal.php', '/c/index.html');
+                                    customHeaders = [
+                                        `X-User-Agent: Model: MAG250; Link: Ethernet`,
+                                        `Referer: ${referer}`
+                                    ];
+                                }
+                            }
+                            
+                            window.iptvAPI.scheduleRecording(resolvedUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders).then(res => {
+                                if (res) {
+                                    showToast(`Recording scheduled: ${progTitle}`);
+                                    renderFullEpg();
+                                    renderLiveEpg();
+                                } else {
+                                    showToast('Failed to schedule recording.', true);
+                                }
                             });
-                            renderFullEpg();
-                            renderLiveEpg();
-                        } else {
-                            showToast('Failed to start recording.', true);
+                        } catch (err) {
+                            console.error('Error scheduling recording:', err);
+                            showToast('Failed to schedule: ' + err.message, true);
                         }
-                    });
+                    };
+                    resolveUrlAndSchedule();
                 }
                 return;
             }
@@ -5075,9 +5101,11 @@ function renderVisibleEpgRows(force = false) {
                     const reminderStyle = isReminderSet ? 'opacity: 1; filter: drop-shadow(0 0 4px #bb86fc);' : 'opacity: 0.3; filter: grayscale(100%);';
                     const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
                     
+                    const startTimeIso = pStart.toISOString();
+                    const isScheduled = clientScheduledRecordings.some(s => s.channelName === channel.title && s.programName === prog.title && s.startTime === startTimeIso && s.status === 'pending');
                     const isRecording = clientActiveRecordings.some(r => r.channelName === channel.title && r.status === 'recording');
-                    const recordStyle = isRecording ? 'color: #ef4444; opacity: 1; filter: drop-shadow(0 0 4px #ef4444); animation: pulse 1.5s infinite;' : 'opacity: 0.4;';
-                    const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isRecording ? 'Stop Recording' : 'Record Live Stream'}">🔴</span>` : '';
+                    const recordStyle = (isRecording || isScheduled) ? 'color: #ef4444; opacity: 1; filter: drop-shadow(0 0 4px #ef4444);' + (isRecording ? ' animation: pulse 1.5s infinite;' : '') : 'opacity: 0.4;';
+                    const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isScheduled ? 'Cancel Scheduled Recording' : 'Schedule Recording'}">🔴</span>` : '';
 
                     programsHtml += `
                     <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.15); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; padding: 2px 4px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
@@ -5124,6 +5152,10 @@ async function renderFullEpg() {
     const epgView = document.getElementById('epg-view');
     console.log('[UI] Rendering full EPG view.');
     if (!epgView) return;
+
+    try {
+        clientScheduledRecordings = await window.iptvAPI.getScheduledRecordings();
+    } catch (e) {}
 
     if (allChannels.length === 0) {
         epgView.innerHTML = '<div style="color: #888; text-align: center; margin-top: 50px;">No channels available.</div>';
@@ -5277,39 +5309,58 @@ async function renderFullEpg() {
                 const channelTitle = recordBtn.getAttribute('data-channel');
                 const channelUrl = recordBtn.getAttribute('data-url');
                 const progTitle = recordBtn.getAttribute('data-prog');
+                const startRaw = recordBtn.getAttribute('data-start');
+                const stopRaw = recordBtn.getAttribute('data-stop');
                 
-                const activeRec = clientActiveRecordings.find(r => r.channelName === channelTitle && r.status === 'recording');
-                if (activeRec) {
-                    window.iptvAPI.stopRecording(activeRec.id).then(stopped => {
-                        if (stopped) {
-                            showToast('Recording stopped: ' + progTitle);
-                            activeRec.status = 'stopped';
-                            clientActiveRecordings = clientActiveRecordings.filter(r => r.id !== activeRec.id);
+                const startTimeIso = parseEpgTime(startRaw).toISOString();
+                const endTimeIso = parseEpgTime(stopRaw).toISOString();
+                
+                const existingSchedule = clientScheduledRecordings.find(s => s.channelName === channelTitle && s.programName === progTitle && s.startTime === startTimeIso && s.status === 'pending');
+                
+                if (existingSchedule) {
+                    window.iptvAPI.cancelScheduledRecording(existingSchedule.id).then(success => {
+                        if (success) {
+                            showToast('Scheduled recording cancelled: ' + progTitle);
                             renderFullEpg();
                             renderLiveEpg();
                         } else {
-                            showToast('Failed to stop recording.', true);
+                            showToast('Failed to cancel schedule.', true);
                         }
                     });
                 } else {
-                    window.iptvAPI.startRecording(channelUrl, channelTitle, progTitle, []).then(res => {
-                        if (res && res.id) {
-                            showToast(`Recording started in background: ${progTitle}`);
-                            clientActiveRecordings.push({
-                                id: res.id,
-                                channelName: channelTitle,
-                                programName: progTitle,
-                                filename: res.filename,
-                                status: 'recording',
-                                bytesWritten: 0,
-                                startTime: Date.now()
+                    const targetChannel = allChannels.find(c => c.title === channelTitle);
+                    const resolveUrlAndSchedule = async () => {
+                        try {
+                            const resolvedUrl = targetChannel ? await resolveChannelStreamUrl(targetChannel) : channelUrl;
+                            let customHeaders = [];
+                            if (targetChannel && targetChannel.stream_url && targetChannel.stream_url.startsWith('stalker-cmd:')) {
+                                const playlist = savedPlaylists.find(p => p.id === targetChannel.playlist_id || p.id === targetChannel.playlistId);
+                                if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
+                                    const mac = playlist.epg.substring(8);
+                                    let portalUrl = playlist.source;
+                                    let referer = portalUrl.replace('/server/load.php', '/c/index.html').replace('/portal.php', '/c/index.html');
+                                    customHeaders = [
+                                        `X-User-Agent: Model: MAG250; Link: Ethernet`,
+                                        `Referer: ${referer}`
+                                    ];
+                                }
+                            }
+                            
+                            window.iptvAPI.scheduleRecording(resolvedUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders).then(res => {
+                                if (res) {
+                                    showToast(`Recording scheduled: ${progTitle}`);
+                                    renderFullEpg();
+                                    renderLiveEpg();
+                                } else {
+                                    showToast('Failed to schedule recording.', true);
+                                }
                             });
-                            renderFullEpg();
-                            renderLiveEpg();
-                        } else {
-                            showToast('Failed to start recording.', true);
+                        } catch (err) {
+                            console.error('Error scheduling recording:', err);
+                            showToast('Failed to schedule: ' + err.message, true);
                         }
-                    });
+                    };
+                    resolveUrlAndSchedule();
                 }
                 return;
             }

@@ -64,5 +64,8 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     getRecordingPath: () => ipcRenderer.invoke('get-recording-path'),
     saveRecordingPath: (path) => ipcRenderer.invoke('save-recording-path', path),
     onRecordingStatusChange: (callback) => ipcRenderer.on('recording-status-change', (_event, data) => callback(data)),
+    scheduleRecording: (channelUrl, channelName, programName, startTime, endTime, headers) => ipcRenderer.invoke('schedule-recording', channelUrl, channelName, programName, startTime, endTime, headers),
+    getScheduledRecordings: () => ipcRenderer.invoke('get-scheduled-recordings'),
+    cancelScheduledRecording: (scheduleId) => ipcRenderer.invoke('cancel-scheduled-recording', scheduleId),
     log: (category, level, message) => ipcRenderer.send('write-log', { category, level, message })
 });
