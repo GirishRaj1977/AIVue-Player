@@ -4790,9 +4790,13 @@ async function renderLiveEpgGrid() {
                                     customHeaders = [
                                         `X-User-Agent: Model: MAG250; Link: Ethernet`,
                                         `Referer: ${referer}`,
-                                        `STALKER-METADATA:${JSON.stringify({ portalUrl, mac })}`
+                                        `STALKER-METADATA:${JSON.stringify({ portalUrl, mac, sourceType: 'stalker' })}`
                                     ];
                                 }
+                            } else {
+                                customHeaders = [
+                                    `STALKER-METADATA:${JSON.stringify({ sourceType: 'm3u' })}`
+                                ];
                             }
                             
                             window.iptvAPI.scheduleRecording(originalUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders).then(res => {
@@ -5343,9 +5347,13 @@ async function renderFullEpg() {
                                     customHeaders = [
                                         `X-User-Agent: Model: MAG250; Link: Ethernet`,
                                         `Referer: ${referer}`,
-                                        `STALKER-METADATA:${JSON.stringify({ portalUrl, mac })}`
+                                        `STALKER-METADATA:${JSON.stringify({ portalUrl, mac, sourceType: 'stalker' })}`
                                     ];
                                 }
+                            } else {
+                                customHeaders = [
+                                    `STALKER-METADATA:${JSON.stringify({ sourceType: 'm3u' })}`
+                                ];
                             }
                             
                             window.iptvAPI.scheduleRecording(originalUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders).then(res => {

@@ -4151,12 +4151,16 @@ async function checkScheduledRecordings() {
                 let activeUrl = row.channel_url;
                 let cleanHeaders = [];
                 let stalkerMeta = null;
+                let sourceType = 'm3u';
                 
                 if (meta.headers && Array.isArray(meta.headers)) {
                     meta.headers.forEach(h => {
                         if (h.startsWith('STALKER-METADATA:')) {
                             try {
                                 stalkerMeta = JSON.parse(h.substring(17));
+                                if (stalkerMeta && stalkerMeta.sourceType) {
+                                    sourceType = stalkerMeta.sourceType;
+                                }
                             } catch (e) {}
                         } else {
                             cleanHeaders.push(h);
@@ -4165,7 +4169,7 @@ async function checkScheduledRecordings() {
                 }
                 
                 // Dynamically resolve Stalker command to fresh absolute stream link at START time!
-                if (activeUrl.startsWith('stalker-cmd:') && stalkerMeta) {
+                if (sourceType === 'stalker' && stalkerMeta) {
                     try {
                         const parts = activeUrl.substring(12).split('|');
                         const type = parts[0];
