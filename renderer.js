@@ -3923,6 +3923,7 @@ channelList.addEventListener('click', (e) => {
         }
         localStorage.setItem('iptv_expanded_groups', JSON.stringify(Array.from(window.expandedGroups)));
         renderChannels();
+        renderLiveEpgGrid();
         return;
     }
 
@@ -4689,12 +4690,20 @@ async function renderLiveEpgGrid() {
     const sidebarChannelSearch = document.getElementById('channel-search');
     const sidebarSearchVal = sidebarChannelSearch ? sidebarChannelSearch.value.toLowerCase() : '';
 
+    if (!window.expandedGroups || window.expandedGroups.size === 0) {
+        container.innerHTML = topBarHtml + '<div style="color: #888; text-align: center; margin-top: 50px; font-family: \'Inter\', sans-serif;">Expand a group in the sidebar to view EPG schedules.</div>';
+        return;
+    }
+
     liveEpgChannelsToRender = allChannels.filter(channel => {
         if (sidebarFilterVal === 'favs' && !channel.favourite) return false;
         if (sidebarFilterVal !== 'all' && sidebarFilterVal !== 'favs' && String(channel.playlistId) !== String(sidebarFilterVal)) return false;
         
         const rawTitle = channel.title || 'Unknown Channel';
         if (sidebarSearchVal && !rawTitle.toLowerCase().includes(sidebarSearchVal)) return false;
+        
+        const channelGroup = channel.group || 'Uncategorized';
+        if (!window.expandedGroups.has(channelGroup)) return false;
         
         return true;
     });
