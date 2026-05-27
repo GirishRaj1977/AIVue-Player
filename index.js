@@ -133,6 +133,24 @@ try {
         // column type already exists
     }
     
+    // Safety check for portal_profiles table
+    try {
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS portal_profiles (
+                portal_url TEXT PRIMARY KEY,
+                uses_direct_source INTEGER DEFAULT 0,
+                requires_headers INTEGER DEFAULT 0,
+                preferred_format TEXT,
+                last_working_url TEXT,
+                link_resolves INTEGER DEFAULT 0,
+                token_failures INTEGER DEFAULT 0,
+                avg_resolve_ms REAL DEFAULT 0
+            )
+        `);
+    } catch (e) {
+        console.error('[DB] Failed to create portal_profiles table:', e);
+    }
+    
     // Safety check for existing playlists table (in case it didn't have exp_date column previously)
     try {
         db.exec("ALTER TABLE playlists ADD COLUMN exp_date TEXT");
@@ -2555,6 +2573,50 @@ async function runInChunks(items, chunkSize, asyncFn) {
     }
 }
 
+function getPortalProfile(portalUrl) {
+    if (!db) return null;
+    try {
+        const row = db.prepare('SELECT * FROM portal_profiles WHERE portal_url = ?').get(portalUrl);
+        return row || null;
+    } catch (e) {
+        console.error('[DB] Failed to get portal profile:', e.message);
+        return null;
+    }
+}
+
+function updatePortalProfile(portalUrl, updates) {
+    if (!db) return;
+    try {
+        const existing = getPortalProfile(portalUrl);
+        if (!existing) {
+            db.prepare(`
+                INSERT INTO portal_profiles (portal_url, uses_direct_source, requires_headers, preferred_format, last_working_url, link_resolves, token_failures, avg_resolve_ms)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                portalUrl,
+                updates.uses_direct_source || 0,
+                updates.requires_headers || 0,
+                updates.preferred_format || null,
+                updates.last_working_url || null,
+                updates.link_resolves || 0,
+                updates.token_failures || 0,
+                updates.avg_resolve_ms || 0
+            );
+        } else {
+            const setClause = [];
+            const params = [];
+            for (const [k, v] of Object.entries(updates)) {
+                setClause.push(`${k} = ?`);
+                params.push(v);
+            }
+            params.push(portalUrl);
+            db.prepare(`UPDATE portal_profiles SET ${setClause.join(', ')} WHERE portal_url = ?`).run(...params);
+        }
+    } catch (e) {
+        console.error('[DB] Failed to update portal profile:', e.message);
+    }
+}
+
 // =========================================================================
 // --- XTREAM CODES (XC API) ENGINE SUPPORT ---
 // =========================================================================
@@ -2588,42 +2650,63 @@ async function xtreamFetch(server, username, password, action = null, extraParam
 }
 
 async function resolveXtreamLink(server, username, password, streamId, type, extension = null, directSourceUrl = null) {
+    const startResolveTime = Date.now();
     let cleanServer = server.trim();
     if (!cleanServer.startsWith('http://') && !cleanServer.startsWith('https://')) {
         cleanServer = 'http://' + cleanServer;
     }
     cleanServer = cleanServer.replace(/\/+$/, '');
 
+    // 0. Query Capability Profile
+    const profile = getPortalProfile(cleanServer);
+    const preferredFormat = profile ? profile.preferred_format : null;
+    const usesDirectSource = profile ? profile.uses_direct_source : 0;
+    const lastWorkingUrl = profile ? profile.last_working_url : null;
+
     const candidates = [];
 
     // 1. Direct Source (Method A) takes absolute priority if present
-    if (directSourceUrl) {
+    if (directSourceUrl && (usesDirectSource === 1 || candidates.length === 0)) {
         candidates.push(decodeURIComponent(directSourceUrl));
+    }
+
+    // 2. Pre-evaluate working cache
+    if (lastWorkingUrl && !candidates.includes(lastWorkingUrl)) {
+        // Confirm it matches this streamId to avoid crossover channel leaks
+        if (lastWorkingUrl.includes(`/${streamId}.`) || lastWorkingUrl.endsWith(`/${streamId}`)) {
+            candidates.push(lastWorkingUrl);
+        }
     }
 
     if (type === 'live') {
         const ext = extension || 'ts';
-        candidates.push(`${cleanServer}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${ext}`);
-        if (ext !== 'm3u8') {
-            candidates.push(`${cleanServer}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.m3u8`);
+        const hlsUrl = `${cleanServer}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.m3u8`;
+        const tsUrl = `${cleanServer}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.ts`;
+        const customUrl = `${cleanServer}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${ext}`;
+        
+        if (preferredFormat === 'hls') {
+            if (!candidates.includes(hlsUrl)) candidates.push(hlsUrl);
+            if (ext !== 'm3u8' && !candidates.includes(customUrl)) candidates.push(customUrl);
+            if (ext !== 'ts' && !candidates.includes(tsUrl)) candidates.push(tsUrl);
+        } else {
+            if (!candidates.includes(tsUrl)) candidates.push(tsUrl);
+            if (ext !== 'ts' && !candidates.includes(customUrl)) candidates.push(customUrl);
+            if (ext !== 'm3u8' && !candidates.includes(hlsUrl)) candidates.push(hlsUrl);
         }
-        if (ext !== 'ts') {
-            candidates.push(`${cleanServer}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.ts`);
-        }
-    } else if (type === 'movie') {
+    } else {
         const ext = extension || 'mp4';
-        candidates.push(`${cleanServer}/movie/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${ext}`);
-        for (const fallback of ['mp4', 'mkv', 'avi']) {
-            if (fallback !== ext) {
-                candidates.push(`${cleanServer}/movie/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${fallback}`);
-            }
+        const primaryUrl = `${cleanServer}/${type === 'movie' ? 'movie' : 'series'}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${ext}`;
+        if (!candidates.includes(primaryUrl)) candidates.push(primaryUrl);
+        
+        const formats = ['mp4', 'mkv', 'avi'];
+        if (preferredFormat && formats.includes(preferredFormat) && preferredFormat !== ext) {
+            const prefUrl = `${cleanServer}/${type === 'movie' ? 'movie' : 'series'}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${preferredFormat}`;
+            if (!candidates.includes(prefUrl)) candidates.push(prefUrl);
         }
-    } else if (type === 'series') {
-        const ext = extension || 'mp4';
-        candidates.push(`${cleanServer}/series/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${ext}`);
-        for (const fallback of ['mp4', 'mkv', 'avi']) {
-            if (fallback !== ext) {
-                candidates.push(`${cleanServer}/series/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${fallback}`);
+        for (const fallback of formats) {
+            if (fallback !== ext && fallback !== preferredFormat) {
+                const fallUrl = `${cleanServer}/${type === 'movie' ? 'movie' : 'series'}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${fallback}`;
+                if (!candidates.includes(fallUrl)) candidates.push(fallUrl);
             }
         }
     }
@@ -2687,6 +2770,24 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
                     format = 'mkv';
                 }
 
+                const elapsed = Date.now() - startResolveTime;
+                console.log(`[TELEMETRY] Stream resolved in ${elapsed}ms.`);
+
+                // Update portal capability profile
+                const existingResolves = profile ? (profile.link_resolves || 0) : 0;
+                const newResolves = existingResolves + 1;
+                const existingAvg = profile ? (profile.avg_resolve_ms || 0) : 0;
+                const newAvg = ((existingAvg * existingResolves) + elapsed) / newResolves;
+
+                updatePortalProfile(cleanServer, {
+                    uses_direct_source: (directSourceUrl && urlCandidate === decodeURIComponent(directSourceUrl)) ? 1 : 0,
+                    requires_headers: 1,
+                    preferred_format: format,
+                    last_working_url: currentUrl,
+                    link_resolves: newResolves,
+                    avg_resolve_ms: parseFloat(newAvg.toFixed(2))
+                });
+
                 return {
                     url: currentUrl,
                     headers: customHeaders,
@@ -2702,6 +2803,12 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
 
     // Absolute fallback: return the primary candidate if validation completely timed out or errored out
     console.log(`[XTREAM RESOLVER] All probes failed or timed out. Returning primary candidate as fallback.`);
+    
+    const newFailures = (profile ? (profile.token_failures || 0) : 0) + 1;
+    updatePortalProfile(cleanServer, {
+        token_failures: newFailures
+    });
+
     return {
         url: candidates[0],
         headers: customHeaders,
@@ -3887,6 +3994,17 @@ ipcMain.handle('get-xtream-episodes', async (event, { server, username, password
     } catch (e) {
         console.error('[XTREAM EPISODES ERR] Fail:', e.message);
         return [];
+    }
+});
+ipcMain.handle('get-telemetry-diagnostics', async (event, portalUrl) => {
+    try {
+        if (!portalUrl) {
+            return db.prepare('SELECT * FROM portal_profiles').all();
+        }
+        return getPortalProfile(portalUrl);
+    } catch (e) {
+        console.error('[TELEMETRY IPC ERR] Fail:', e.message);
+        return null;
     }
 });
 
