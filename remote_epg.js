@@ -201,7 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             channelsHtml += `
             <div class="epg-play-channel" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' style="position: absolute; top: ${topPos}px; left: 0; width: 120px; height: 45px; background: #1e1e1e; border-bottom: 1px solid rgba(255, 255, 255, 0.15); border-top: 1px solid rgba(255, 255, 255, 0.15); border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 3px; box-sizing: border-box; text-align: center;">
-                <img src="${imgSrc}" style="height: 18px; max-width: 100%; object-fit: contain; margin-bottom: 2px; border-radius: 2px; background: #fff; padding: 2px;">
+                <img src="${imgSrc}" style="height: 18px; max-width: 100%; object-fit: contain; margin-bottom: 2px; border-radius: 2px; background: #2A2A2A; padding: 2px;">
                 <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.65em; font-weight: bold; color: #e0e0e0; width: 100%;" title="${safeTitle}">${safeTitle}</span>
             </div>`;
             

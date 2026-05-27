@@ -290,7 +290,7 @@ aeroStyles.textContent = `
         height: 32px !important;
         min-width: 32px !important;
         border-radius: 6px !important;
-        background: rgba(0, 0, 0, 0.4) !important;
+        background: #2A2A2A !important;
         border: 1px solid rgba(255, 255, 255, 0.06) !important;
         padding: 4px !important;
         object-fit: contain !important;
@@ -303,7 +303,7 @@ aeroStyles.textContent = `
     }
     .channel-item.active img {
         border-color: rgba(187, 134, 252, 0.25) !important;
-        background: rgba(0, 0, 0, 0.6) !important;
+        background: #303030 !important;
     }
 
     /* General Modern buttons */
@@ -990,7 +990,7 @@ aeroStyles.textContent = `
         height: 32px !important;
         min-width: 32px !important;
         border-radius: 6px !important;
-        background: rgba(0, 0, 0, 0.4) !important;
+        background: #2A2A2A !important;
         border: 1px solid rgba(255, 255, 255, 0.06) !important;
         padding: 4px !important;
         object-fit: contain !important;
@@ -3855,7 +3855,7 @@ function renderChannels() {
                     const safeTitle = rawTitle.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                     const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.ico';
                     
-                    const logoHtml = `<img src="${imgSrc}" style="width: 40px; height: 40px; min-width: 40px; object-fit: contain; margin-right: 10px; border-radius: 4px; background: #ffffff;">`;
+                    const logoHtml = `<img src="${imgSrc}" style="width: 40px; height: 40px; min-width: 40px; object-fit: contain; margin-right: 10px; border-radius: 4px; background: #2A2A2A;">`;
                     
                     const favClass = channel.favourite ? 'fav-btn active' : 'fav-btn';
                     const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
@@ -4738,7 +4738,8 @@ function renderVisibleLiveEpgRows(force = false) {
         
         channelsHtml += `
         <div class="epg-play-channel" tabindex="0" data-index="${globalIdx}" style="position: absolute; top: ${topPos}px; left: 0; width: 250px; height: 45px; background: #1e1e1e; border-bottom: 1px solid rgba(255, 255, 255, 0.15); border-top: 1px solid rgba(255, 255, 255, 0.15); border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; padding: 4px 8px; box-sizing: border-box; cursor: pointer; outline: none;">
-            <img src="${imgSrc}" data-eh="0" style="width: 32px; height: 32px; min-width: 32px; object-fit: contain; margin-right: 10px; background: #ffffff; border-radius: 4px;">
+            <img src="${imgSrc}" data-eh="0" style="width: 32px; height: 32px; min-width: 32px; object-fit: contain; margin-right: 10px; background: #2A2A2A; border-radius: 4px;">
+            <img src="${imgSrc}" data-eh="0" style="width: 32px; height: 32px; min-width: 32px; object-fit: contain; margin-right: 10px; background: #2A2A2A; border-radius: 4px;">
             <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif; color: #e0e0e0;" title="${safeTitle}">${safeTitle}</span>
         </div>`;
         
@@ -5719,7 +5720,7 @@ async function embedStream(channel) {
                 if (playerOverlay) {
                     playerOverlay.innerHTML = `
                         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
-                            <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
+                            <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #2A2A2A;">
                             <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Channel currently not available</span>
                         </div>
                     `;
@@ -5747,7 +5748,7 @@ async function embedStream(channel) {
                 if (playerOverlay) {
                     playerOverlay.innerHTML = `
                         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
-                            <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
+                            <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #2A2A2A;">
                             <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Channel currently not available</span>
                         </div>
                     `;
@@ -5805,7 +5806,7 @@ async function embedStream(channel) {
                 if (playerOverlay) {
                     playerOverlay.innerHTML = `
                         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
-                            <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
+                            <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #2A2A2A;">
                             <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Stream currently not available</span>
                         </div>
                     `;
@@ -5999,7 +6000,7 @@ async function embedStream(channel) {
             if (playerOverlay) {
                 playerOverlay.innerHTML = `
                     <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
-                        <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
+                        <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #2A2A2A;">
                         <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Channel currently not available</span>
                     </div>
                 `;
@@ -6202,7 +6203,7 @@ window.iptvAPI.onMpvExit((code) => {
         if (playerOverlay) {
             playerOverlay.innerHTML = `
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
-                    <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
+                    <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #2A2A2A;">
                     <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Channel currently not available</span>
                 </div>
             `;
@@ -6244,7 +6245,7 @@ window.iptvAPI.onMpvStopped(() => {
         if (playerOverlay) {
             playerOverlay.innerHTML = `
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
-                    <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
+                    <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #2A2A2A;">
                     <span style="color: #a1a1aa; font-size: 1.2em; font-weight: bold;">Playback Stopped</span>
                 </div>
             `;
