@@ -297,7 +297,7 @@ aeroStyles.textContent = `
         height: 34px !important;
         min-width: 34px !important;
         border-radius: 8px !important;
-        background: #232328 !important;
+        background: rgba(15, 15, 18, 0.45) !important;
         border: 1px solid rgba(255, 255, 255, 0.08) !important;
         padding: 3px !important;
         object-fit: contain !important;
@@ -311,7 +311,7 @@ aeroStyles.textContent = `
     }
     .channel-item.active img {
         border-color: rgba(187, 134, 252, 0.35) !important;
-        background: #2a2533 !important;
+        background: rgba(187, 134, 252, 0.1) !important;
     }
 
     /* Premium Bouncing Mini Equalizer for Currently Playing Channel */
@@ -636,7 +636,7 @@ aeroStyles.textContent = `
     }
     
     #detail-logo {
-        background: #232328 !important;
+        background: rgba(15, 15, 18, 0.45) !important;
         border: 1px solid rgba(255, 255, 255, 0.08) !important;
         border-radius: 10px !important;
         padding: 6px !important;

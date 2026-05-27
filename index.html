@@ -753,8 +753,8 @@
         </button>
     </div>
     <div id="sidebar" style="display: none;">
-        <div style="padding: 10px; border-bottom: 1px solid #333; background: #1a1a1a;">
-            <select id="playlist-filter" style="width: 100%; padding: 8px; background: #2d2d2d; border: 1px solid #444; color: white; border-radius: 4px; outline: none; cursor: pointer;">
+        <div style="padding: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: rgba(15, 15, 18, 0.45);">
+            <select id="playlist-filter" style="width: 100%; padding: 8px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); color: white; border-radius: 4px; outline: none; cursor: pointer;">
                 <option value="all">All Merged</option>
                 <option value="favs">Favourites</option>
             </select>
@@ -764,10 +764,10 @@
     
     <div id="main-view" style="display: none;">
         <div id="live-top-half" style="display: flex; height: 50%; width: 100%; gap: 12px;">
-            <div id="channel-details" style="flex: 1; background: #1a1a1a; padding: 20px; box-sizing: border-box; display: flex; flex-direction: row; gap: 20px; align-items: stretch; justify-content: flex-start; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden;">
+            <div id="channel-details" style="flex: 1; background: rgba(15, 15, 18, 0.45); padding: 20px; box-sizing: border-box; display: flex; flex-direction: row; gap: 20px; align-items: stretch; justify-content: flex-start; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; overflow: hidden;">
                 <!-- Centered column: channel logo and channel name below it -->
                 <div style="display: flex; flex-direction: column; align-items: center; width: 120px; flex-shrink: 0; min-width: 0;">
-                    <img id="detail-logo" src="assets/logo.ico" style="width: 110px; height: 110px; object-fit: contain; background: #2A2A2A; border-radius: 8px; padding: 10px; margin-bottom: 10px; align-self: center;" onerror="this.onerror=null; this.src='assets/logo.ico';">
+                    <img id="detail-logo" src="assets/logo.ico" style="width: 110px; height: 110px; object-fit: contain; background: rgba(15, 15, 18, 0.45); border-radius: 8px; padding: 10px; margin-bottom: 10px; align-self: center;" onerror="this.onerror=null; this.src='assets/logo.ico';">
                     <h2 id="detail-name" style="margin: 0; color: #bb86fc; font-family: 'Outfit', 'Inter', sans-serif; font-size: 0.95em; font-weight: bold; width: 100%; white-space: normal; word-break: break-word; text-align: center;">Select a Channel</h2>
                 </div>
                 <!-- Right aligned column: Now playing details, with full details of the program along with name and time slot -->
