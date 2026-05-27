@@ -2644,12 +2644,21 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
             let headResponse = null;
 
             while (redirects < 10) {
-                headResponse = await fetch(currentUrl, {
-                    method: 'HEAD',
-                    redirect: 'manual',
-                    headers: customHeaders,
-                    signal: AbortSignal.timeout(5000)
-                });
+                try {
+                    headResponse = await fetch(currentUrl, {
+                        method: 'HEAD',
+                        redirect: 'manual',
+                        headers: customHeaders,
+                        signal: AbortSignal.timeout(5000)
+                    });
+                } catch (fetchErr) {
+                    if (currentUrl.startsWith('https://')) {
+                        console.warn('[XTREAM RESOLVER] TLS / network error on HTTPS. Retrying on HTTP fallback...', fetchErr.message);
+                        currentUrl = currentUrl.replace('https://', 'http://');
+                        continue;
+                    }
+                    throw fetchErr;
+                }
 
                 if (headResponse.status >= 300 && headResponse.status < 400) {
                     const location = headResponse.headers.get('location');

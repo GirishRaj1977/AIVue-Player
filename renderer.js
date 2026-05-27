@@ -5924,7 +5924,7 @@ async function embedStream(channel) {
 }
 
 // Hook Stalker query / header fallback retries when MPV triggers unrecognized format error
-window.iptvAPI.onStreamFailedRetry(() => {
+window.iptvAPI.onStreamFailedRetry(async () => {
     if (!streamActive || !window.currentPlaybackChannel) return;
     
     window.playbackFallbackCount = (window.playbackFallbackCount || 0) + 1;
@@ -5935,7 +5935,91 @@ window.iptvAPI.onStreamFailedRetry(() => {
         return;
     }
     
-    console.log(`[MPV FALLBACK SYSTEM] Stream failed. Triggering fallback attempt #${window.playbackFallbackCount}`);
+    console.log(`[MPV FALLBACK SYSTEM] Stream failed. Triggering recovery and fallback attempt #${window.playbackFallbackCount}`);
+    
+    // Rerun the resolver dynamically to get a fresh PlaybackSource if it's an Xtream Codes or Stalker stream
+    let freshUrl = '';
+    let freshHeaders = null;
+    
+    const channel = window.currentPlaybackChannel;
+    const playlist = savedPlaylists.find(p => String(p.id) === String(channel.playlistId));
+    
+    if (channel.url.startsWith('xtream-stream:') && playlist && playlist.source.startsWith('xtream-credentials:')) {
+        try {
+            console.log('[MPV FALLBACK SYSTEM] Running dynamic Xtream Codes link re-resolver...');
+            const parts = channel.url.substring(14).split('|');
+            const type = parts[0];
+            const streamId = parts[1];
+            let extension = null;
+            let directSourceUrl = null;
+            
+            if (type === 'live') {
+                extension = null;
+                if (parts[2]) directSourceUrl = decodeURIComponent(parts[2]);
+            } else if (type === 'movie') {
+                extension = parts[2] || null;
+                if (parts[3]) directSourceUrl = decodeURIComponent(parts[3]);
+            }
+            
+            const credParts = playlist.source.substring(19).split('|');
+            const server = credParts[0];
+            const username = credParts[1];
+            const password = credParts[2];
+            
+            const resolvedSource = await window.iptvAPI.resolveXtreamLink({ 
+                server, 
+                username, 
+                password, 
+                streamId, 
+                type, 
+                extension,
+                directSourceUrl
+            });
+            
+            if (resolvedSource && resolvedSource.url) {
+                freshUrl = resolvedSource.url;
+                freshHeaders = resolvedSource.headers || null;
+                console.log('[MPV FALLBACK SYSTEM] Xtream Codes stream re-resolved successfully:', freshUrl);
+            }
+        } catch (err) {
+            console.error('[MPV FALLBACK SYSTEM] Xtream Codes re-resolution failed:', err.message);
+        }
+    } else if (channel.url.startsWith('stalker-') || (playlist && playlist.epg && playlist.epg.startsWith('stalker:'))) {
+        try {
+            console.log('[MPV FALLBACK SYSTEM] Running dynamic Stalker link re-resolver...');
+            let stalkerUrl = channel.url;
+            if (playlist && playlist.epg && playlist.epg.startsWith('stalker:') && !stalkerUrl.startsWith('stalker-cmd:')) {
+                stalkerUrl = `stalker-cmd:${channel.type === 'live' ? 'itv' : 'vod'}|${stalkerUrl}`;
+            }
+            
+            if (stalkerUrl.startsWith('stalker-series-ep:')) {
+                const parts = stalkerUrl.substring(18).split('|');
+                const cmd = parts[0];
+                const seriesNum = parts[1];
+                const mac = playlist.epg.substring(8);
+                freshUrl = await window.iptvAPI.resolveStalkerLink({ url: playlist.source, mac, type: 'vod', cmd, series: seriesNum });
+            } else if (stalkerUrl.startsWith('stalker-cmd:')) {
+                const parts = stalkerUrl.substring(12).split('|');
+                const type = parts[0];
+                const cmd = parts.slice(1).join('|');
+                const mac = playlist.epg.substring(8);
+                freshUrl = await window.iptvAPI.resolveStalkerLink({ url: playlist.source, mac, type, cmd });
+            }
+            if (freshUrl) {
+                console.log('[MPV FALLBACK SYSTEM] Stalker stream re-resolved successfully:', freshUrl);
+            }
+        } catch (err) {
+            console.error('[MPV FALLBACK SYSTEM] Stalker re-resolution failed:', err.message);
+        }
+    }
+    
+    if (freshUrl) {
+        url = freshUrl;
+        window.currentPlaybackFinalUrl = freshUrl;
+        if (freshHeaders) {
+            window.currentPlaybackHeaders = freshHeaders;
+        }
+    }
     
     // Strategy 1: If there is a play_token parameter in URL, strip it out or alter query formats
     if (window.playbackFallbackCount === 1) {
@@ -5992,6 +6076,7 @@ window.iptvAPI.onStreamFailedRetry(() => {
     window.iptvAPI.playMpvEmbedded({
         url: url,
         title: window.currentPlaybackChannel.title,
+        headers: window.currentPlaybackHeaders || null,
         bounds: {
             x: Math.round(rect.x),
             y: Math.round(rect.y),
