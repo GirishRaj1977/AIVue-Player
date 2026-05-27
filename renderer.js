@@ -6948,13 +6948,13 @@ function injectPremiumStyles() {
         }
         
         #top-header {
-            background: rgba(15, 6, 25, 0.45) !important;
+            background: rgba(12, 5, 20, 0.65) !important;
             backdrop-filter: blur(30px) !important;
             -webkit-backdrop-filter: blur(30px) !important;
-            border-bottom: 1px solid rgba(187, 134, 252, 0.15) !important;
+            border-bottom: 1.5px solid rgba(187, 134, 252, 0.25) !important;
             border-bottom-left-radius: 20px !important;
             border-bottom-right-radius: 20px !important;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 4px 20px rgba(187, 134, 252, 0.08) !important;
         }
 
         #movies-view, #vod-view, #playlist-view, #recording-view, #epg-view, #settings-view, #main-view {
