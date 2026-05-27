@@ -6948,10 +6948,12 @@ function injectPremiumStyles() {
         }
         
         #top-header {
-            background: rgba(14, 7, 24, 0.45) !important;
+            background: transparent !important;
             backdrop-filter: blur(30px) !important;
             -webkit-backdrop-filter: blur(30px) !important;
             border-bottom: 1px solid rgba(187, 134, 252, 0.15) !important;
+            border-bottom-left-radius: 20px !important;
+            border-bottom-right-radius: 20px !important;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
         }
 
