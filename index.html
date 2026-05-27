@@ -24,8 +24,8 @@
             margin: 0; 
             display: flex; 
             height: 100vh; 
-            background: linear-gradient(135deg, #1d0933 0%, #0b0314 40%, #000000 100%); 
-            background-attachment: fixed;
+            background: linear-gradient(180deg, #3c096c 0%, #240046 35%, #10002b 70%, #03001e 100%) !important; 
+            background-attachment: fixed !important;
             color: #e0e0e0; 
             font-family: 'Inter', sans-serif; 
             padding: 60px 12px 12px 12px;
@@ -421,6 +421,12 @@
             pointer-events: auto !important; /* Enable clicks! */
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
             box-sizing: border-box !important;
+            -webkit-app-region: drag !important; /* Support hidden titlebar dragging */
+        }
+
+        /* Non-draggable interactive elements inside the header */
+        .header-left img, .header-center, .header-right {
+            -webkit-app-region: no-drag !important;
         }
 
         /* Left side container with logo */
@@ -443,13 +449,12 @@
             transform: scale(1.03) !important;
         }
 
-        /* Center container with elongated buttons */
+        /* Center container with elongated buttons pushed to the left, starting right next to the logo */
         .header-center {
             position: absolute !important;
-            left: 50% !important;
-            transform: translateX(-50%) !important;
+            left: 200px !important;
             display: flex !important;
-            justify-content: center !important;
+            justify-content: flex-start !important;
             align-items: center !important;
             gap: 16px !important;
             height: 100% !important;
@@ -511,19 +516,24 @@
         /* Right side container: Clock + Action Buttons under it */
         .header-right {
             display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-            align-items: flex-end !important;
-            gap: 6px !important;
+            flex-direction: row !important;
+            justify-content: flex-end !important;
+            align-items: center !important;
+            gap: 16px !important;
             height: 100% !important;
+            margin-right: 8px !important; /* Move it close to the right margin to maximize space and avoid overlap */
+            padding-top: 34px !important; /* Shift it down vertically so it sits below the 38px native window control bar */
         }
         #header-time-date {
-            font-size: 0.72rem !important;
+            font-size: 0.76rem !important;
             font-weight: 700 !important;
-            color: rgba(255, 255, 255, 0.6) !important;
+            color: rgba(255, 255, 255, 0.65) !important;
             letter-spacing: 0.08em !important;
             text-transform: uppercase !important;
             font-family: 'Inter', sans-serif !important;
+            height: 20px !important;
+            display: flex !important;
+            align-items: center !important;
         }
         .header-actions {
             display: flex !important;
@@ -531,58 +541,21 @@
             align-items: center !important;
         }
 
-        /* Rounded SVG Button style override */
-        .header-action-btn {
-            width: 32px !important;
-            height: 32px !important;
-            min-width: 32px !important;
-            border-radius: 50% !important;
-            background: rgba(255, 255, 255, 0.04) !important;
-            border: 1px solid rgba(255, 255, 255, 0.06) !important;
-            color: #a1a1aa !important;
-            cursor: pointer !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
-            outline: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-        }
-        .header-action-btn svg {
-            width: 16px !important;
-            height: 16px !important;
-            fill: currentColor !important;
-        }
-        .header-action-btn:hover {
-            background: rgba(255, 255, 255, 0.1) !important;
-            border-color: rgba(255, 255, 255, 0.2) !important;
-            color: #ffffff !important;
-            transform: scale(1.08) !important;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
-        }
-        .header-action-btn.active {
+         .header-action-btn.active {
             background: rgba(187, 134, 252, 0.12) !important;
             border-color: rgba(187, 134, 252, 0.3) !important;
             color: #bb86fc !important;
-            box-shadow: 0 0 12px rgba(187, 134, 252, 0.2) !important;
-        }
-        #btn-exit.header-action-btn {
+            box-shadow: 0 0 16px rgba(187, 134, 252, 0.2) !important;
+         }
+         #btn-exit {
             color: #cf6679 !important;
-            background: rgba(207, 102, 121, 0.05) !important;
-            border-color: rgba(207, 102, 121, 0.15) !important;
-        }
-        #btn-exit.header-action-btn:hover {
+         }
+         #btn-exit:hover {
             color: #ffb4c1 !important;
             background: rgba(207, 102, 121, 0.15) !important;
             border-color: rgba(207, 102, 121, 0.3) !important;
-            box-shadow: 0 4px 12px rgba(207, 102, 121, 0.2) !important;
-        }
-        .header-action-btn:focus {
-            outline: 1.5px solid #bb86fc !important;
-            outline-offset: 1px !important;
-        }
+            box-shadow: 0 6px 18px rgba(207, 102, 121, 0.2) !important;
+         }
 
         /* Adjust main body structure to prevent overlap with the new taller header */
         body {
@@ -660,6 +633,22 @@
             margin-left: 0 !important;
             padding-top: 0 !important;
         }
+
+        /* Smooth, hardware-accelerated transitions for a crisp return from fullscreen */
+        body.fullscreen-transitioning #sidebar,
+        body.fullscreen-transitioning #channel-details,
+        body.fullscreen-transitioning #live-bottom-half,
+        body.fullscreen-transitioning #top-header,
+        body.fullscreen-transitioning #player-wrapper {
+            opacity: 0 !important;
+            transform: scale(0.99) !important;
+            transition: none !important;
+        }
+
+        #sidebar, #channel-details, #live-bottom-half, #top-header, #player-wrapper {
+            transition: opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1), transform 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            will-change: opacity, transform;
+        }
     </style>
 </head>
 <body>
@@ -681,9 +670,9 @@
                 <svg viewBox="0 0 24 24"><path d="M18 4v1h-2V4c0-.55-.45-1-1-1H9c-.55 0-1 .45-1 1v1H6V4c0-.55-.45-1-1-1s-1 .45-1 1v16c0 .55.45 1 1 1s1-.45 1-1v-1h2v1c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-1h2v1c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1s-1 .45-1 1zM8 17H6v-2h2v2zm0-4H6v-2h2v2zm0-4H6V7h2v2zm10 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z"/></svg>
                 <span>Movies</span>
             </button>
-            <button class="nav-btn nav-btn-elongated" title="Videos" id="btn-vod">
+            <button class="nav-btn nav-btn-elongated" title="Series" id="btn-vod">
                 <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>
-                <span>Videos</span>
+                <span>Series</span>
             </button>
             <button class="nav-btn nav-btn-elongated" title="Recording" id="btn-recording">
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm4-8c0 2.21-1.79 4-4 4s-4-1.79-4-4 1.79-4 4-4 4 1.79 4 4z"/></svg>
@@ -693,19 +682,19 @@
                 <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
                 <span>Playlist</span>
             </button>
+            <button class="nav-btn nav-btn-elongated" title="Settings" id="btn-settings">
+                <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.73 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                <span>Settings</span>
+            </button>
+            <button class="nav-btn nav-btn-elongated" title="Exit" id="btn-exit">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" style="display:none;"/><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M11,7.5V13.5H13V7.5H11Z"/></svg>
+                <span>Power</span>
+            </button>
         </div>
         
         <div class="header-right">
             <div id="header-time-date">
                 <!-- Hydrated dynamically by JS -->
-            </div>
-            <div class="header-actions">
-                <button class="nav-btn header-action-btn" title="Settings" id="btn-settings">
-                    <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.73 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
-                </button>
-                <button class="nav-btn header-action-btn" title="Exit" id="btn-exit">
-                    <svg viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>
-                </button>
             </div>
         </div>
     </div>
@@ -747,12 +736,12 @@
     </div>
     
     <div id="main-view" style="display: none;">
-        <div id="live-top-half" style="display: flex; height: 50%; width: 100%; transition: all 0.2s; gap: 12px;">
+        <div id="live-top-half" style="display: flex; height: 50%; width: 100%; gap: 12px;">
             <div id="channel-details" style="flex: 1; background: #1a1a1a; padding: 20px; box-sizing: border-box; display: flex; flex-direction: row; gap: 20px; align-items: stretch; justify-content: flex-start; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden;">
-                <!-- Left aligned column: channel logo and channel name below it -->
-                <div style="display: flex; flex-direction: column; align-items: flex-start; width: 120px; flex-shrink: 0; min-width: 0;">
-                    <img id="detail-logo" src="assets/logo.ico" style="width: 110px; height: 110px; object-fit: contain; background: #2A2A2A; border-radius: 8px; padding: 10px; margin-bottom: 10px; align-self: flex-start;" onerror="this.onerror=null; this.src='assets/logo.ico';">
-                    <h2 id="detail-name" style="margin: 0; color: #bb86fc; font-family: 'Outfit', 'Inter', sans-serif; font-size: 0.95em; font-weight: bold; width: 100%; white-space: normal; word-break: break-word; text-align: left;">Select a Channel</h2>
+                <!-- Centered column: channel logo and channel name below it -->
+                <div style="display: flex; flex-direction: column; align-items: center; width: 120px; flex-shrink: 0; min-width: 0;">
+                    <img id="detail-logo" src="assets/logo.ico" style="width: 110px; height: 110px; object-fit: contain; background: #2A2A2A; border-radius: 8px; padding: 10px; margin-bottom: 10px; align-self: center;" onerror="this.onerror=null; this.src='assets/logo.ico';">
+                    <h2 id="detail-name" style="margin: 0; color: #bb86fc; font-family: 'Outfit', 'Inter', sans-serif; font-size: 0.95em; font-weight: bold; width: 100%; white-space: normal; word-break: break-word; text-align: center;">Select a Channel</h2>
                 </div>
                 <!-- Right aligned column: Now playing details, with full details of the program along with name and time slot -->
                 <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; min-width: 0; border-left: 1px solid rgba(255, 255, 255, 0.08); padding-left: 20px;">
@@ -876,8 +865,9 @@
 
     <!-- Movies View -->
     <div id="movies-view" style="display: none; flex-grow: 1; flex-direction: column; overflow-y: auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; gap: 20px;">
-            <h2 style="color: #bb86fc; margin: 0; font-family: 'Inter', sans-serif !important;">Movies</h2>
+        <div id="movies-back-btn-container" style="display: none; margin-bottom: 4px; align-self: flex-start;"></div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 20px;">
+            <h2 id="movies-title-header" style="color: #bb86fc; margin: 0; font-family: 'Inter', sans-serif !important;">Movies</h2>
             <div style="position: relative; width: 300px;">
                 <input type="text" id="movies-search" placeholder="Search movies..." style="width: 100%; padding: 10px 15px 10px 40px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 20px; outline: none; font-size: 0.95em; transition: 0.3s; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);">
                 <svg viewBox="0 0 24 24" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; fill: rgba(255,255,255,0.5);"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
@@ -893,8 +883,9 @@
 
     <!-- VOD / Series View -->
     <div id="vod-view" style="display: none; flex-grow: 1; flex-direction: column; overflow-y: auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; gap: 20px;">
-            <h2 style="color: #bb86fc; margin: 0; font-family: 'Inter', sans-serif !important;">TV Series</h2>
+        <div id="vod-back-btn-container" style="display: none; margin-bottom: 4px; align-self: flex-start;"></div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 20px;">
+            <h2 id="vod-title-header" style="color: #bb86fc; margin: 0; font-family: 'Inter', sans-serif !important;">TV Series</h2>
             <div style="position: relative; width: 300px;">
                 <input type="text" id="vod-search" placeholder="Search series..." style="width: 100%; padding: 10px 15px 10px 40px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 20px; outline: none; font-size: 0.95em; transition: 0.3s; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);">
                 <svg viewBox="0 0 24 24" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; fill: rgba(255,255,255,0.5);"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>

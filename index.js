@@ -528,6 +528,12 @@ function createWindow() {
         title: 'AIVue Player',
         icon: path.join(__dirname, 'assets', 'logo.ico'),
         show: false, // Hide initially until fully loaded
+        titleBarStyle: 'hidden',
+        titleBarOverlay: {
+            color: '#08080a',
+            symbolColor: '#ffffff',
+            height: 38
+        },
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true
@@ -1476,6 +1482,7 @@ function connectIPC() {
         localConnected = true;
         ipcConnectionAttempts = 0;
         console.log('[MPV IPC] Connection established. Sending initial commands.');
+        ipcClient.write(JSON.stringify({ command: ["set_property", "mute", "no"] }) + '\n'); // Ensure unmuted on startup
         ipcClient.write(JSON.stringify({ command: ["keybind", "f", "script-message electron-fullscreen-toggle"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["observe_property", 1, "fullscreen"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["observe_property", 8, "window-maximized"] }) + '\n');
@@ -1665,6 +1672,10 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
             
             ipcClient.write(JSON.stringify({ command: ["set_property", "user-agent", ua] }) + '\n');
             ipcClient.write(JSON.stringify({ command: ["set_property", "http-header-fields", headersVal.join(',')] }) + '\n');
+            
+            // Ensure player always starts unmuted
+            console.log('[MPV IPC SEND] Unmuting stream');
+            ipcClient.write(JSON.stringify({ command: ["set_property", "mute", "no"] }) + '\n');
             
             console.log('[MPV IPC SEND]', JSON.stringify({ command: ["loadfile", data.url, "replace"] }));
             ipcClient.write(JSON.stringify({ command: ["loadfile", data.url, "replace"] }) + '\n');

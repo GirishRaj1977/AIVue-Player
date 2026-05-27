@@ -246,39 +246,47 @@ aeroStyles.textContent = `
         padding: 2px 0 !important;
     }
 
-    /* Channel List selection styles */
+    /* Channel List selection styles (Premium Glass Cards) */
     .channel-item {
-        padding: 2px 6px !important;
-        margin: 4px 10px !important;
-        width: calc(100% - 20px) !important;
-        border-radius: 8px !important;
-        border-bottom: none !important;
-        border-left: 3px solid transparent !important;
-        background: transparent !important;
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        padding: 6px 12px !important;
+        margin: 6px 12px !important;
+        width: calc(100% - 24px) !important;
+        border-radius: 10px !important;
+        border: 1px solid rgba(255, 255, 255, 0.03) !important;
+        border-left: 4px solid transparent !important;
+        background: rgba(255, 255, 255, 0.01) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+        transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        display: flex !important;
+        align-items: center !important;
+        box-sizing: border-box !important;
     }
     .channel-item:hover {
-        background: rgba(255, 255, 255, 0.02) !important;
-        border-left-color: rgba(255, 255, 255, 0.2) !important;
-        transform: translateX(3px) !important;
+        background: rgba(255, 255, 255, 0.04) !important;
+        border-color: rgba(255, 255, 255, 0.1) !important;
+        border-left-color: rgba(255, 255, 255, 0.3) !important;
+        transform: translateX(4px) scale(1.015) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
     }
     .channel-item.active {
         background: rgba(187, 134, 252, 0.08) !important;
-        border-left: 3px solid var(--primary-accent) !important;
-        box-shadow: 0 4px 16px rgba(187, 134, 252, 0.06) !important;
+        border-color: rgba(187, 134, 252, 0.25) !important;
+        border-left: 4px solid var(--primary-accent) !important;
+        box-shadow: 0 4px 20px rgba(187, 134, 252, 0.12), inset 0 0 10px rgba(187, 134, 252, 0.04) !important;
     }
     
     .channel-item span {
-        font-weight: 500 !important;
-        font-size: 0.72rem !important;
+        font-weight: 600 !important;
+        font-size: 0.76rem !important;
         letter-spacing: -0.01em !important;
         color: #a1a1aa !important;
+        font-family: 'Inter', sans-serif !important;
         transition: color 0.2s ease !important;
     }
     .channel-item.active span {
         color: var(--primary-accent) !important;
-        font-weight: 600 !important;
-        text-shadow: 0 0 10px rgba(187, 134, 252, 0.3) !important;
+        font-weight: 700 !important;
+        text-shadow: 0 0 12px rgba(187, 134, 252, 0.25) !important;
     }
     .channel-item:hover span {
         color: #ffffff !important;
@@ -286,24 +294,57 @@ aeroStyles.textContent = `
 
     /* Channel list logo enhancements */
     .channel-item img {
-        width: 32px !important;
-        height: 32px !important;
-        min-width: 32px !important;
-        border-radius: 6px !important;
-        background: #2A2A2A !important;
-        border: 1px solid rgba(255, 255, 255, 0.06) !important;
-        padding: 4px !important;
+        width: 34px !important;
+        height: 34px !important;
+        min-width: 34px !important;
+        border-radius: 8px !important;
+        background: #232328 !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        padding: 3px !important;
         object-fit: contain !important;
         margin-right: 12px !important;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.3) !important;
-        transition: all 0.2s ease !important;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.3) !important;
+        transition: all 0.25s ease !important;
     }
     .channel-item:hover img {
-        border-color: rgba(255, 255, 255, 0.2) !important;
+        border-color: rgba(255, 255, 255, 0.25) !important;
+        transform: scale(1.05) !important;
     }
     .channel-item.active img {
-        border-color: rgba(187, 134, 252, 0.25) !important;
-        background: #303030 !important;
+        border-color: rgba(187, 134, 252, 0.35) !important;
+        background: #2a2533 !important;
+    }
+
+    /* Premium Bouncing Mini Equalizer for Currently Playing Channel */
+    .mini-equalizer {
+        display: flex !important;
+        align-items: flex-end !important;
+        gap: 2px !important;
+        width: 14px !important;
+        height: 12px !important;
+        margin-left: 8px !important;
+        flex-shrink: 0 !important;
+    }
+    .mini-equalizer span {
+        display: block !important;
+        width: 2px !important;
+        height: 100% !important;
+        background-color: var(--primary-accent) !important;
+        animation: eq-bounce 0.8s ease-in-out infinite alternate !important;
+        transform-origin: bottom !important;
+        border-radius: 1px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .mini-equalizer span:nth-child(2) {
+        animation-delay: -0.25s !important;
+    }
+    .mini-equalizer span:nth-child(3) {
+        animation-delay: -0.5s !important;
+    }
+    @keyframes eq-bounce {
+        0% { transform: scaleY(0.25); }
+        100% { transform: scaleY(1); }
     }
 
     /* General Modern buttons */
@@ -596,24 +637,29 @@ aeroStyles.textContent = `
     }
     
     #detail-logo {
-        background: rgba(0, 0, 0, 0.35) !important;
-        border: 1px solid rgba(255, 255, 255, 0.07) !important;
+        background: #232328 !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
         border-radius: 10px !important;
-        padding: 8px !important;
-        box-shadow: inset 0 2px 6px rgba(0,0,0,0.4) !important;
+        padding: 6px !important;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.4) !important;
         margin-bottom: 10px !important;
         width: 100px !important;
         height: 100px !important;
         max-width: 100px !important;
         max-height: 100px !important;
         object-fit: contain !important;
-        align-self: flex-start !important;
-        transition: all 0.3s ease !important;
+        align-self: center !important;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+    }
+    #detail-logo:hover {
+        border-color: rgba(255, 255, 255, 0.25) !important;
+        transform: scale(1.05) !important;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.5) !important;
     }
     
     #detail-name {
         color: #ffffff !important;
-        text-align: left !important;
+        text-align: center !important;
         font-size: 0.92rem !important;
         font-weight: 700 !important;
         letter-spacing: -0.01em !important;
@@ -3855,19 +3901,26 @@ function renderChannels() {
                     const safeTitle = rawTitle.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                     const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.ico';
                     
-                    const logoHtml = `<img src="${imgSrc}" style="width: 40px; height: 40px; min-width: 40px; object-fit: contain; margin-right: 10px; border-radius: 4px; background: #2A2A2A;">`;
-                    
                     const favClass = channel.favourite ? 'fav-btn active' : 'fav-btn';
                     const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
 
                     const playlist = savedPlaylists.find(p => String(p.id) === String(channel.playlistId));
                     const playlistName = playlist ? playlist.name : '';
-                    const playlistBadge = (filterVal === 'all' && playlistName) ? ` <span style="color: #888; font-size: 0.85em; font-weight: normal; margin-left: 5px;">[${playlistName}]</span>` : '';
+                    const playlistBadge = (filterVal === 'all' && playlistName) ? ` <span style="color: #666; font-size: 0.8em; font-weight: 500; margin-left: 4px;">[${playlistName}]</span>` : '';
 
                     const activeClass = (index === currentPlayingChannelIndex) ? ' active' : '';
-                    html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}" style="display: flex; align-items: center; width: 100%; box-sizing: border-box; padding: 2px 6px; border-bottom: 1px solid #1e1e1e; cursor: pointer; outline: none;">
-                        ${logoHtml}
-                        <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; color: #e0e0e0; font-size: 0.72rem; font-weight: bold; font-family: 'Inter', sans-serif;">${safeTitle}${playlistBadge}</span>
+                    const eqHtml = (index === currentPlayingChannelIndex) ? `
+                        <div class="mini-equalizer" title="Playing">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    ` : '';
+
+                    html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}">
+                        <img src="${imgSrc}">
+                        <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px;">${safeTitle}${playlistBadge}</span>
+                        ${eqHtml}
                         ${favBtnHtml}
                     </div>`;
                 });
@@ -4719,7 +4772,7 @@ function renderVisibleLiveEpgRows(force = false) {
                     
                     const startTimeIso = pStart.toISOString();
                     const isScheduled = clientScheduledRecordings.some(s => s.channelName === channel.title && s.programName === prog.title && s.startTime === startTimeIso && s.status === 'pending');
-                    const isRecording = clientActiveRecordings.some(r => r.channelName === channel.title && r.status === 'recording');
+                    const isRecording = clientActiveRecordings.some(r => r.channelName === channel.title && r.status === 'recording' && isCurrent);
                     const recordStyle = (isRecording || isScheduled) ? 'color: #ef4444; opacity: 1; filter: drop-shadow(0 0 4px #ef4444);' + (isRecording ? ' animation: pulse 1.5s infinite;' : '') : 'opacity: 0.4;';
                     const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isScheduled ? 'Cancel Scheduled Recording' : 'Schedule Recording'}">🔴</span>` : '';
 
@@ -4738,7 +4791,6 @@ function renderVisibleLiveEpgRows(force = false) {
         
         channelsHtml += `
         <div class="epg-play-channel" tabindex="0" data-index="${globalIdx}" style="position: absolute; top: ${topPos}px; left: 0; width: 250px; height: 45px; background: #1e1e1e; border-bottom: 1px solid rgba(255, 255, 255, 0.15); border-top: 1px solid rgba(255, 255, 255, 0.15); border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; padding: 4px 8px; box-sizing: border-box; cursor: pointer; outline: none;">
-            <img src="${imgSrc}" data-eh="0" style="width: 32px; height: 32px; min-width: 32px; object-fit: contain; margin-right: 10px; background: #2A2A2A; border-radius: 4px;">
             <img src="${imgSrc}" data-eh="0" style="width: 32px; height: 32px; min-width: 32px; object-fit: contain; margin-right: 10px; background: #2A2A2A; border-radius: 4px;">
             <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif; color: #e0e0e0;" title="${safeTitle}">${safeTitle}</span>
         </div>`;
@@ -5292,7 +5344,7 @@ function renderVisibleEpgRows(force = false) {
                     
                     const startTimeIso = pStart.toISOString();
                     const isScheduled = clientScheduledRecordings.some(s => s.channelName === channel.title && s.programName === prog.title && s.startTime === startTimeIso && s.status === 'pending');
-                    const isRecording = clientActiveRecordings.some(r => r.channelName === channel.title && r.status === 'recording');
+                    const isRecording = clientActiveRecordings.some(r => r.channelName === channel.title && r.status === 'recording' && isCurrent);
                     const recordStyle = (isRecording || isScheduled) ? 'color: #ef4444; opacity: 1; filter: drop-shadow(0 0 4px #ef4444);' + (isRecording ? ' animation: pulse 1.5s infinite;' : '') : 'opacity: 0.4;';
                     const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isScheduled ? 'Cancel Scheduled Recording' : 'Schedule Recording'}">🔴</span>` : '';
 
@@ -5311,7 +5363,7 @@ function renderVisibleEpgRows(force = false) {
         
         channelsHtml += `
         <div class="epg-play-channel" tabindex="0" data-index="${globalIdx}" style="position: absolute; top: ${topPos}px; left: 0; width: 250px; height: 45px; background: #1e1e1e; border-bottom: 1px solid rgba(255, 255, 255, 0.15); border-top: 1px solid rgba(255, 255, 255, 0.15); border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; padding: 4px 8px; box-sizing: border-box; cursor: pointer; outline: none;">
-            <img src="${imgSrc}" data-eh="0" style="width: 32px; height: 32px; min-width: 32px; object-fit: contain; margin-right: 10px; background: #ffffff; border-radius: 4px;">
+            <img src="${imgSrc}" data-eh="0" style="width: 32px; height: 32px; min-width: 32px; object-fit: contain; margin-right: 10px; background: #2A2A2A; border-radius: 4px;">
             <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8em; font-weight: bold; font-family: 'Inter', sans-serif; color: #e0e0e0;" title="${safeTitle}">${safeTitle}</span>
         </div>`;
         
@@ -5381,21 +5433,11 @@ async function renderFullEpg() {
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
                 <button id="epg-now-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 8px 16px; border-radius: 4px;">Now</button>
-                <button id="btn-playlist-epg-temp" class="header-action-btn" title="Playlist" style="width: 32px !important; height: 32px !important; border-radius: 50% !important; display: flex !important; align-items: center; justify-content: center; background: rgba(187,134,252,0.12) !important; border: 1px solid rgba(187,134,252,0.3) !important; color: #bb86fc !important; box-shadow: 0 0 10px rgba(187,134,252,0.15) !important;">
-                    <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: currentColor;"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
-                </button>
             </div>
         </div>
     `;
     
     epgView.innerHTML = topBarHtml + '<div id="epg-content-area" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;"><div style="color: #888; text-align: center; margin-top: 50px;">Loading Guide Data...</div></div>';
-    
-    const tempPlaylistBtn = document.getElementById('btn-playlist-epg-temp');
-    if (tempPlaylistBtn) {
-        tempPlaylistBtn.addEventListener('click', () => {
-            switchTab('playlist', document.getElementById('btn-playlist'));
-        });
-    }
     
     document.getElementById('epg-playlist-filter').addEventListener('change', (e) => {
         epgSelectedPlaylist = e.target.value;
@@ -5872,7 +5914,21 @@ async function embedStream(channel) {
 
     if (isMovieOrEpisode) {
         loadAndRenderTmdbSynopsis(channel);
+        if (!window.activeDetailsStreamInfo) {
+            if (channel.type === 'episode') {
+                window.activeDetailsStreamInfo = {
+                    title: channel.seriesTitle || channel.title.split(' - ')[0],
+                    logo: channel.logo,
+                    playlistId: channel.playlistId,
+                    type: 'series',
+                    tmdbId: channel.tmdbId
+                };
+            } else {
+                window.activeDetailsStreamInfo = channel;
+            }
+        }
     } else {
+        window.activeDetailsStreamInfo = null;
         const mappedId = channelMappings[channel.title];
         const epgIds = [mappedId, channel.tvg_id, channel.tvg_name].filter(Boolean);
         console.log('[API] Calling getEpg for current stream.');
@@ -6255,10 +6311,27 @@ window.iptvAPI.onMpvStopped(() => {
         if (fsBtn) fsBtn.style.display = 'none';
     }
     
-    // Switch to live TV view when stopped
-    const btnLiveTv = document.getElementById('btn-live-tv');
-    if (btnLiveTv) {
-        switchTab('live-tv', btnLiveTv);
+    // Switch back to origin VOD details view if stopped from a movie or series
+    if (window.activeDetailsStreamInfo) {
+        const streamInfo = window.activeDetailsStreamInfo;
+        const originTab = streamInfo.type === 'series' ? 'vod' : 'movies';
+        const tabBtnId = originTab === 'series' || originTab === 'vod' ? 'btn-vod' : 'btn-movies';
+        const tabBtn = document.getElementById(tabBtnId);
+        
+        if (tabBtn) {
+            switchTab(originTab, tabBtn);
+            // Re-open the movie details modal!
+            setTimeout(() => {
+                openMovieDetailsModal(streamInfo);
+            }, 100);
+        }
+        window.activeDetailsStreamInfo = null;
+    } else {
+        // Switch to live TV view when stopped
+        const btnLiveTv = document.getElementById('btn-live-tv');
+        if (btnLiveTv) {
+            switchTab('live-tv', btnLiveTv);
+        }
     }
 });
 
@@ -6741,7 +6814,7 @@ document.getElementById('btn-exit').addEventListener('click', () => {
 });
 
 // Setup Tab Navigation Logic
-const navButtons = document.querySelectorAll('.nav-btn:not(#btn-exit)');
+const navButtons = document.querySelectorAll('.nav-btn');
 const sidebar = document.getElementById('sidebar');
 const mainView = document.getElementById('main-view');
 
@@ -6758,6 +6831,10 @@ function switchTab(tabId, clickedBtn) {
     if (detailsModal) detailsModal.style.display = 'none';
     const episodesModal = document.getElementById('episodes-modal');
     if (episodesModal) episodesModal.style.display = 'none';
+
+    if (tabId === 'live-tv' && !streamActive) {
+        window.activeDetailsStreamInfo = null;
+    }
 
     // Reset Movies and VOD category selection on tab entry to open into the initial folder load views
     if (tabId === 'movies') {
@@ -6786,6 +6863,13 @@ function switchTab(tabId, clickedBtn) {
 
     if (sidebar) sidebar.style.setProperty('display', isLive ? 'flex' : 'none', 'important');
     if (mainView) mainView.style.setProperty('display', isLive ? 'flex' : 'none', 'important');
+    
+    if (isLive) {
+        setTimeout(() => {
+            renderLiveEpgGrid();
+            renderChannels();
+        }, 50);
+    }
     
     const playlistView = document.getElementById('playlist-view');
     if (playlistView) playlistView.style.setProperty('display', isPlaylist ? 'flex' : 'none', 'important');
@@ -6860,7 +6944,7 @@ function injectPremiumStyles() {
     style.innerHTML = `
         /* Premium Global Purple to Black Seamless Background Gradient */
         body {
-            background: linear-gradient(135deg, #1d0933 0%, #0b0314 40%, #000000 100%) !important;
+            background: linear-gradient(180deg, #3c096c 0%, #240046 35%, #10002b 70%, #03001e 100%) !important;
             background-attachment: fixed !important;
         }
         
@@ -7732,6 +7816,8 @@ async function openMovieDetailsModal(streamInfo) {
     const modal = document.getElementById('premium-details-modal');
     if (!modal) return;
     
+    window.activeDetailsStreamInfo = streamInfo;
+    
     document.getElementById('details-title').textContent = streamInfo.title;
     document.getElementById('details-rating').textContent = '★ --';
     document.getElementById('details-year').textContent = '----';
@@ -8250,6 +8336,11 @@ async function renderMovies() {
     if (empty) empty.style.display = 'none';
     
     if (!currentMovieCategory) {
+        const backContainer = document.getElementById('movies-back-btn-container');
+        if (backContainer) backContainer.style.display = 'none';
+        const titleHeader = document.getElementById('movies-title-header');
+        if (titleHeader) titleHeader.textContent = 'Movies';
+
         grid.style.display = 'grid';
         grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(180px, 1fr))';
         grid.style.gap = '20px';
@@ -8313,30 +8404,28 @@ async function renderMovies() {
             });
         }
     } else {
+        const backContainer = document.getElementById('movies-back-btn-container');
+        if (backContainer) {
+            backContainer.style.display = 'block';
+            backContainer.innerHTML = `
+                <button class="playlist-btn category-back-btn" style="background: #2a2a2a; color: white; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    Back
+                </button>
+            `;
+            const backBtn = backContainer.querySelector('button');
+            backBtn.addEventListener('click', () => {
+                currentMovieCategory = null;
+                renderMovies();
+            });
+        }
+        const titleHeader = document.getElementById('movies-title-header');
+        if (titleHeader) titleHeader.textContent = `Movies - ${currentMovieCategory.title}`;
+
         grid.style.display = 'grid';
         grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(160px, 1fr))';
         grid.style.gap = '20px';
         grid.style.padding = '20px';
-
-        const backBtnContainer = document.createElement('div');
-        backBtnContainer.style.gridColumn = '1 / -1';
-        backBtnContainer.style.display = 'flex';
-        backBtnContainer.style.alignItems = 'center';
-        backBtnContainer.style.gap = '15px';
-        backBtnContainer.style.marginBottom = '10px';
-        backBtnContainer.innerHTML = `
-            <button class="playlist-btn category-back-btn" style="background: #2a2a2a; color: white; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                Back
-            </button>
-            <h3 style="margin: 0; color: #bb86fc; font-family: 'Outfit', 'Inter', sans-serif;">${currentMovieCategory.title}</h3>
-        `;
-        const backBtn = backBtnContainer.querySelector('button');
-        backBtn.addEventListener('click', () => {
-            currentMovieCategory = null;
-            renderMovies();
-        });
-        grid.appendChild(backBtnContainer);
 
         const renderItems = async (items) => {
             await loadAllPlaybackProgress();
@@ -8513,6 +8602,11 @@ async function renderVod() {
     if (empty) empty.style.display = 'none';
     
     if (!currentVodCategory) {
+        const backContainer = document.getElementById('vod-back-btn-container');
+        if (backContainer) backContainer.style.display = 'none';
+        const titleHeader = document.getElementById('vod-title-header');
+        if (titleHeader) titleHeader.textContent = 'TV Series';
+
         grid.style.display = 'grid';
         grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(180px, 1fr))';
         grid.style.gap = '20px';
@@ -8576,30 +8670,28 @@ async function renderVod() {
             });
         }
     } else {
+        const backContainer = document.getElementById('vod-back-btn-container');
+        if (backContainer) {
+            backContainer.style.display = 'block';
+            backContainer.innerHTML = `
+                <button class="playlist-btn category-back-btn" style="background: #2a2a2a; color: white; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    Back
+                </button>
+            `;
+            const backBtn = backContainer.querySelector('button');
+            backBtn.addEventListener('click', () => {
+                currentVodCategory = null;
+                renderVod();
+            });
+        }
+        const titleHeader = document.getElementById('vod-title-header');
+        if (titleHeader) titleHeader.textContent = `TV Series - ${currentVodCategory.title}`;
+
         grid.style.display = 'grid';
         grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(160px, 1fr))';
         grid.style.gap = '20px';
         grid.style.padding = '20px';
-
-        const backBtnContainer = document.createElement('div');
-        backBtnContainer.style.gridColumn = '1 / -1';
-        backBtnContainer.style.display = 'flex';
-        backBtnContainer.style.alignItems = 'center';
-        backBtnContainer.style.gap = '15px';
-        backBtnContainer.style.marginBottom = '10px';
-        backBtnContainer.innerHTML = `
-            <button class="playlist-btn category-back-btn" style="background: #2a2a2a; color: white; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                Back
-            </button>
-            <h3 style="margin: 0; color: #bb86fc; font-family: 'Outfit', 'Inter', sans-serif;">${currentVodCategory.title}</h3>
-        `;
-        const backBtn = backBtnContainer.querySelector('button');
-        backBtn.addEventListener('click', () => {
-            currentVodCategory = null;
-            renderVod();
-        });
-        grid.appendChild(backBtnContainer);
 
         const renderItems = async (items) => {
             await loadAllPlaybackProgress();
@@ -8965,20 +9057,29 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
             document.body.style.setProperty('gap', '0', 'important');
             if (liveTopHalf) liveTopHalf.style.setProperty('gap', '0', 'important');
         } else {
+            // Add transitioning state to mask layout jumps
+            document.body.classList.add('fullscreen-transitioning');
+
             playerWrapper.style.setProperty('padding', '1px', 'important');
             playerWrapper.style.setProperty('background-color', '#050507', 'important');
             playerWrapper.style.setProperty('border-radius', '24px', 'important');
             playerWrapper.style.setProperty('flex', 'none', 'important');
             playerWrapper.style.setProperty('aspect-ratio', '16 / 9', 'important');
             playerWrapper.style.setProperty('width', 'auto', 'important');
-            playerWrapper.style.setProperty('margin-left', '24px', 'important');
-            document.body.style.setProperty('padding', '82px 12px 12px 12px', 'important');
-            document.body.style.setProperty('gap', '12px', 'important');
-            if (liveTopHalf) liveTopHalf.style.setProperty('gap', '12px', 'important');
             playerWrapper.style.setProperty('margin-left', '0', 'important');
             document.body.style.setProperty('padding', '82px 4px 4px 4px', 'important');
             document.body.style.setProperty('gap', '4px', 'important');
             if (liveTopHalf) liveTopHalf.style.setProperty('gap', '4px', 'important');
+
+            // Force a DOM style reflow to ensure styles are updated before starting transition
+            document.body.offsetHeight;
+
+            // Fade the layout back in cleanly
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    document.body.classList.remove('fullscreen-transitioning');
+                }, 40);
+            });
         }
     }
 
@@ -9085,46 +9186,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     updateHeaderTime();
     setInterval(updateHeaderTime, 1000);
 
-    // Shift Settings and Power button to header
-    const topHeader = document.getElementById('top-header');
-    const settingsBtn = document.getElementById('btn-settings');
-    const exitBtn = document.getElementById('btn-exit');
-    const headerTimeDate = document.getElementById('header-time-date');
-
-    if (topHeader && settingsBtn && exitBtn && headerTimeDate) {
-        let rightContainer = document.getElementById('header-right-container');
-        if (!rightContainer) {
-            rightContainer = document.createElement('div');
-            rightContainer.id = 'header-right-container';
-            rightContainer.style.cssText = 'display: flex; flex-direction: column; align-items: flex-end; pointer-events: auto; align-self: flex-start; margin-top: 14px;';
-            rightContainer.style.cssText = 'display: flex; flex-direction: column; align-items: flex-end; pointer-events: auto; align-self: flex-start; margin-top: 4px;';
-            headerTimeDate.parentNode.insertBefore(rightContainer, headerTimeDate);
-            rightContainer.appendChild(headerTimeDate);
-        }
-
-        let actionContainer = document.getElementById('header-actions');
-        if (!actionContainer) {
-            actionContainer = document.createElement('div');
-            actionContainer.id = 'header-actions';
-            actionContainer.style.cssText = 'display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px;';
-            actionContainer.style.cssText = 'display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px;';
-            rightContainer.appendChild(actionContainer);
-        }
-        
-        actionContainer.appendChild(settingsBtn);
-        actionContainer.appendChild(exitBtn);
-        
-        settingsBtn.classList.remove('nav-btn');
-        settingsBtn.classList.add('header-round-btn');
-        exitBtn.classList.remove('nav-btn');
-        exitBtn.classList.add('header-round-btn');
-        
-        settingsBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
-        exitBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>';
-        
-        settingsBtn.title = "Settings";
-        exitBtn.title = "Exit App";
-    }
+    // Settings and Power button are now defined directly in index.html in the central header navigation row.
+    // They maintain their capsule styles, alignment, and hover physics perfectly.
 
     // Hide all main view containers initially to prevent UI flash before data loads
     ['sidebar', 'main-view', 'playlist-view', 'epg-view', 'settings-view'].forEach(id => {
@@ -9825,10 +9888,17 @@ async function renderRecordings() {
     let activeRecs = [];
     try {
         activeRecs = await window.iptvAPI.getActiveRecordings();
-        clientActiveRecordings = activeRecs.map(r => ({
-            ...r,
-            status: 'recording'
-        }));
+        // Safe merge instead of wholesale overwrite to prevent blocking starting toast notifications
+        activeRecs.forEach(r => {
+            if (!clientActiveRecordings.some(x => x.id === r.id)) {
+                clientActiveRecordings.push({
+                    ...r,
+                    status: 'recording'
+                });
+            }
+        });
+        // Clean out stale items
+        clientActiveRecordings = clientActiveRecordings.filter(r => r.status !== 'recording' || activeRecs.some(x => x.id === r.id));
     } catch (e) {
         console.error('Error fetching active recordings:', e);
     }
@@ -9908,9 +9978,9 @@ async function renderRecordings() {
         });
         
         savedList.querySelectorAll('.delete-rec-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
+            btn.addEventListener('click', (e) => {
                 const filename = btn.getAttribute('data-filename');
-                if (confirm(`Are you sure you want to delete recording: ${filename}?`)) {
+                showConfirmToast(`Are you sure you want to delete recording: ${filename}?`, async () => {
                     const deleted = await window.iptvAPI.deleteRecording(filename);
                     if (deleted) {
                         showToast('Recording deleted.');
@@ -9918,7 +9988,7 @@ async function renderRecordings() {
                     } else {
                         showToast('Failed to delete recording.', true);
                     }
-                }
+                });
             });
         });
     } else {
@@ -9944,6 +10014,10 @@ try {
                     bytesWritten: data.bytesWritten,
                     startTime: data.startTime || Date.now()
                 });
+                
+                // Show notification when a new recording starts
+                const startInfo = data.programName ? `"${data.programName}" on ` : '';
+                showToast(`Recording Started: ${startInfo}${data.channelName || 'Stream'}`);
             }
             
             const progressEl = document.getElementById(`active-progress-${data.id}`);
@@ -9952,9 +10026,11 @@ try {
                 progressEl.innerHTML = `Size: ${formatBytes(data.bytesWritten)} &bull; ${elapsedMin} min elapsed`;
             }
         } else if (data.status === 'completed' || data.status === 'error' || data.status === 'stopped') {
+            const finished = clientActiveRecordings.find(r => r.id === data.id);
             clientActiveRecordings = clientActiveRecordings.filter(r => r.id !== data.id);
             if (data.status === 'completed') {
-                showToast(`Recording Completed: ${data.filename}`);
+                const finishedInfo = finished && finished.programName ? `"${finished.programName}"` : data.filename;
+                showToast(`Recording Completed: ${finishedInfo}`);
             } else if (data.status === 'error') {
                 showToast(`Recording Failed: ${data.error || 'Connection Lost'}`, true);
             }
