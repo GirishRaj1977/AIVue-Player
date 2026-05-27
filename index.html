@@ -651,6 +651,31 @@
             transition: opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1), transform 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
             will-change: opacity, transform;
         }
+
+        /* Premium, theme-matching style overrides for select and option dropdown lists */
+        select {
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 8px !important;
+            color: #ffffff !important;
+            font-family: 'Inter', sans-serif !important;
+            outline: none !important;
+            cursor: pointer !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+            transition: all 0.25s ease !important;
+        }
+        select:hover, select:focus {
+            background: rgba(255, 255, 255, 0.08) !important;
+            border-color: rgba(187, 134, 252, 0.3) !important;
+            box-shadow: 0 0 12px rgba(187, 134, 252, 0.15) !important;
+        }
+        select option {
+            background-color: #240046 !important; /* Rich deep indigo-purple matching the body gradient */
+            color: #ffffff !important;
+            font-family: 'Inter', sans-serif !important;
+            padding: 10px !important;
+        }
     </style>
 </head>
 <body>

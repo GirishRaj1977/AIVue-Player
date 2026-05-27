@@ -4916,28 +4916,28 @@ async function renderLiveEpgGrid() {
     }
 
     let html = `
-    <div id="live-epg-layout-wrapper" style="display: flex; flex-direction: column; flex-grow: 1; width: 100%; height: 100%; overflow: hidden; background: #121212; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 0;">
+    <div id="live-epg-layout-wrapper" style="display: flex; flex-direction: column; flex-grow: 1; width: 100%; height: 100%; overflow: hidden; background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px;">
         <!-- Header Row -->
-        <div style="display: flex; width: 100%; background: #121212; z-index: 20;">
-            <div style="width: 250px; min-width: 250px; background: #121212; border-bottom: 2px solid #333; border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; justify-content: center; font-weight: normal; font-size: 0.9em; color: #fff; box-sizing: border-box; height: 30px;">Channels</div>
+        <div style="display: flex; width: 100%; background: rgba(255, 255, 255, 0.03); z-index: 20;">
+            <div style="width: 250px; min-width: 250px; background: rgba(255, 255, 255, 0.04); border-bottom: 2px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.12); display: flex; align-items: center; justify-content: center; font-weight: normal; font-size: 0.9em; color: #fff; box-sizing: border-box; height: 30px;">Channels</div>
             <div id="live-epg-header-scroll" style="flex-grow: 1; overflow: hidden; position: relative; height: 30px;">
                 <div style="width: ${totalWidth}px; height: 100%; position: relative;">
                     ${headerHtml}
                 </div>
             </div>
             <!-- Scrollbar Spacer -->
-            <div id="live-epg-header-spacer" style="width: 14px; min-width: 14px; background: #121212; border-bottom: 2px solid #333; flex-shrink: 0; box-sizing: border-box;"></div>
+            <div id="live-epg-header-spacer" style="width: 14px; min-width: 14px; background: rgba(255, 255, 255, 0.03); border-bottom: 2px solid rgba(255, 255, 255, 0.08); flex-shrink: 0; box-sizing: border-box;"></div>
         </div>
         
         <!-- Content Area -->
         <div style="display: flex; flex-grow: 1; overflow: hidden; width: 100%;">
             <!-- Left Pinned Channels -->
-            <div id="live-epg-channels-col" style="width: 250px; min-width: 250px; background: #1a1a1a; overflow: hidden; border-right: 1px solid rgba(255, 255, 255, 0.15); z-index: 10; position: relative;">
+            <div id="live-epg-channels-col" style="width: 250px; min-width: 250px; background: rgba(255, 255, 255, 0.025); overflow: hidden; border-right: 1px solid rgba(255, 255, 255, 0.12); z-index: 10; position: relative;">
                 <div id="live-epg-channels-inner" style="position: relative; width: 100%; height: ${liveEpgChannelsToRender.length * 45}px;"></div>
             </div>
             
             <!-- Right Scrolling Grid -->
-            <div id="live-epg-scroll-container" style="flex-grow: 1; overflow-y: scroll; overflow-x: auto; position: relative; background: #121212;">
+            <div id="live-epg-scroll-container" style="flex-grow: 1; overflow-y: scroll; overflow-x: auto; position: relative; background: transparent;">
                 <div id="live-epg-grid-inner" style="width: ${totalWidth}px; height: ${liveEpgChannelsToRender.length * 45}px; position: relative;">
                     <div id="live-epg-rows-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
                     ${redLineHtml}
@@ -5494,28 +5494,28 @@ async function renderFullEpg() {
     }
 
     let html = `
-    <div id="epg-layout-wrapper" style="display: flex; flex-direction: column; flex-grow: 1; width: 100%; height: 100%; overflow: hidden; background: #121212; border: 1px solid #333; border-radius: 8px;">
+    <div id="epg-layout-wrapper" style="display: flex; flex-direction: column; flex-grow: 1; width: 100%; height: 100%; overflow: hidden; background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px;">
         <!-- Header Row -->
-        <div style="display: flex; width: 100%; background: #bb86fc; z-index: 20;">
-            <div style="width: 250px; min-width: 250px; background: #bb86fc; border-bottom: 2px solid #333; border-right: 1px solid rgba(255, 255, 255, 0.15); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000; box-sizing: border-box; height: 30px;">Channels</div>
+        <div style="display: flex; width: 100%; background: rgba(187, 134, 252, 0.15); z-index: 20;">
+            <div style="width: 250px; min-width: 250px; background: rgba(187, 134, 252, 0.2); border-bottom: 2px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.12); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; box-sizing: border-box; height: 30px;">Channels</div>
             <div id="epg-header-scroll" style="flex-grow: 1; overflow: hidden; position: relative; height: 30px;">
                 <div style="width: ${totalWidth}px; height: 100%; position: relative;">
                     ${headerHtml}
                 </div>
             </div>
             <!-- Scrollbar Spacer -->
-            <div id="epg-header-spacer" style="width: 14px; min-width: 14px; background: #bb86fc; border-bottom: 2px solid #333; flex-shrink: 0; box-sizing: border-box;"></div>
+            <div id="epg-header-spacer" style="width: 14px; min-width: 14px; background: rgba(187, 134, 252, 0.15); border-bottom: 2px solid rgba(255, 255, 255, 0.08); flex-shrink: 0; box-sizing: border-box;"></div>
         </div>
         
         <!-- Content Area -->
         <div style="display: flex; flex-grow: 1; overflow: hidden; width: 100%;">
             <!-- Left Pinned Channels -->
-            <div id="epg-channels-col" style="width: 250px; min-width: 250px; background: #1a1a1a; overflow: hidden; border-right: 1px solid rgba(255, 255, 255, 0.15); z-index: 10; position: relative;">
+            <div id="epg-channels-col" style="width: 250px; min-width: 250px; background: rgba(255, 255, 255, 0.025); overflow: hidden; border-right: 1px solid rgba(255, 255, 255, 0.12); z-index: 10; position: relative;">
                 <div id="epg-channels-inner" style="position: relative; width: 100%; height: ${epgChannelsToRender.length * 45}px;"></div>
             </div>
             
             <!-- Right Scrolling Grid -->
-            <div id="epg-scroll-container" style="flex-grow: 1; overflow-y: scroll; overflow-x: auto; position: relative; background: #121212;">
+            <div id="epg-scroll-container" style="flex-grow: 1; overflow-y: scroll; overflow-x: auto; position: relative; background: transparent;">
                 <div id="epg-grid-inner" style="width: ${totalWidth}px; height: ${epgChannelsToRender.length * 45}px; position: relative;">
                     <div id="epg-rows-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
                     ${redLineHtml}
