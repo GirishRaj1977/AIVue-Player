@@ -44,6 +44,8 @@
 * **Precise EPG Recording Isolator**: Isolates active recording flags (`🔴`) exclusively on the currently active EPG cell, leaving future blocks untouched.
 
 ### 🎬 Movies & TV Series VOD Catalog
+* **TMDB Automated Metadata Scraper**: Dynamically integrates with **The Movie Database (TMDB) API** to fetch high-fidelity metadata (synopsis, ratings, release year, cast & crew) for imported VOD movies and series.
+* **Rich Poster & Fanart Presentation**: Automatically scrapes and renders high-definition backdrops, movie posters, and high-fidelity network logo overlays inside the media details view.
 * **Vertical Space Saver Grid**: Category back-navigation moves above the grids in the Movies & Series pages to maximize grid card visibility. Shows a double-row list of titles immediately on load.
 * **Smart Back-tracking**: Memorizes active VOD stream information. Stopping a movie or TV show automatically returns you to the active directory modal without resetting your catalog search.
 
