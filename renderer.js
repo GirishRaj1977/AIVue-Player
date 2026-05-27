@@ -4079,6 +4079,59 @@ if (importSubmitBtn) {
                 return;
             }
             epgSource = importEpgInput ? importEpgInput.value.trim() : '';
+            
+            // Auto-detect Xtream Codes URL pasted in the M3U box
+            const urlPattern = /^(https?:\/\/[^/]+)\/(?:get|player_api)\.php\?(?:.*&)?username=([^&]+)(?:.*&)?password=([^&]+)/i;
+            const match = source.match(urlPattern);
+            if (match) {
+                const server = match[1];
+                const username = match[2];
+                const password = match[3];
+                console.log('[AUTO FALLBACK] Detected Xtream Codes URL in M3U box! Parsing as Xtream Codes portal in background:', server, username);
+                
+                const loading = document.getElementById('loading');
+                if (loading) loading.style.display = 'block';
+                
+                try {
+                    const result = await window.iptvAPI.parseXtream({ name, server, username, password });
+                    if (loading) loading.style.display = 'none';
+                    
+                    if (result && result.error) {
+                        showToast(`Fallback authentication failed.\nReason: ${result.error}`);
+                        return;
+                    }
+                    
+                    let channels = result.channels;
+                    channels.forEach(newCh => {
+                        const isVod = newCh.type === 'movie' || newCh.type === 'series';
+                        newCh.disabled = isVod ? false : true;
+                        if (!isVod) newCh.isNew = true;
+                    });
+                    
+                    const tempPlaylist = {
+                        id: Date.now() + Math.random(),
+                        source: `xtream-credentials:${server}|${username}|${password}`,
+                        name: name,
+                        channels: channels,
+                        epg: result.epg_url || ('xtream-epg:' + server),
+                        disabled: false,
+                        editIndex: -1,
+                        exp_date: result.exp_date || null
+                    };
+                    
+                    // Clear inputs
+                    importNameInput.value = '';
+                    importUrlPath.value = '';
+                    if (importEpgInput) importEpgInput.value = '';
+                    
+                    openManageChannelsModal(-1, tempPlaylist);
+                    return;
+                } catch (err) {
+                    if (loading) loading.style.display = 'none';
+                    showToast(`Fallback failed:\n${err.message}`);
+                    return;
+                }
+            }
         }
         
         const originalText = importSubmitBtn.textContent;
