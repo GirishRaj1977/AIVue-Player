@@ -90,13 +90,12 @@ aeroStyles.textContent = `
         font-style: normal;
     }
 
-    /* Global Typography & Deep Obsidian Background with Neon Glows */
+    /* Global Typography & Rich Heavy Purple Gradient Background */
     body { 
         font-family: 'Inter', sans-serif; 
         font-weight: normal; 
-        background: radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.05) 0%, transparent 40%),
-                    radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.04) 0%, transparent 40%),
-                    #08080a !important;
+        background: linear-gradient(180deg, #3c096c 0%, #240046 35%, #10002b 70%, #03001e 100%) !important;
+        background-attachment: fixed !important;
     }
 
     /* Headings and Titles */
