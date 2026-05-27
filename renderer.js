@@ -2920,7 +2920,10 @@ function updateState(skipSave = false) {
         channelSearch.style.border = '1px solid #333';
         channelSearch.style.boxSizing = 'border-box';
         filterSelect.parentNode.insertBefore(channelSearch, filterSelect.nextSibling);
-        channelSearch.addEventListener('input', () => renderChannels());
+        channelSearch.addEventListener('input', () => {
+            renderChannels();
+            renderLiveEpgGrid();
+        });
     }
 
     renderChannels();
@@ -3901,6 +3904,7 @@ if (filterElement) {
         if (document.getElementById('epg-view') && document.getElementById('epg-view').style.display === 'flex') {
             renderFullEpg();
         }
+        renderLiveEpgGrid();
     });
 }
 
@@ -4671,26 +4675,27 @@ async function renderLiveEpgGrid() {
 
     const topBarHtml = `
         <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 6px 10px 4px 10px; box-sizing: border-box; flex-shrink: 0;">
-            <div style="display: flex; gap: 10px;">
-                <select id="player-epg-playlist-filter" style="background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; cursor: pointer;">
-                    ${playlistOptionsHtml}
-                </select>
-                <select id="player-epg-group-filter" style="background: #121212; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; outline: none; cursor: pointer;">
-                    ${groupOptionsHtml}
-                </select>
-            </div>
             <div style="display: flex; gap: 8px;">
                 <button id="player-epg-now-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 8px 16px; border-radius: 4px; cursor: pointer; border: none;">Now</button>
                 <button id="player-epg-full-btn" class="playlist-btn" style="background: #333; color: white; font-weight: bold; padding: 8px 16px; border-radius: 8px; cursor: pointer; border: 1px solid #555;">Full EPG</button>
             </div>
+            <div></div>
         </div>
     `;
 
+    const sidebarFilterSelect = document.getElementById('playlist-filter');
+    const sidebarFilterVal = sidebarFilterSelect ? sidebarFilterSelect.value : 'all';
+
+    const sidebarChannelSearch = document.getElementById('channel-search');
+    const sidebarSearchVal = sidebarChannelSearch ? sidebarChannelSearch.value.toLowerCase() : '';
+
     liveEpgChannelsToRender = allChannels.filter(channel => {
-        if (playerEpgSelectedPlaylist === 'favs' && !channel.favourite) return false;
-        if (playerEpgSelectedPlaylist !== 'all' && playerEpgSelectedPlaylist !== 'favs' && String(channel.playlistId) !== String(playerEpgSelectedPlaylist)) return false;
-        const channelGroup = channel.group || 'Uncategorized';
-        if (playerEpgSelectedGroup !== 'all' && channelGroup !== playerEpgSelectedGroup) return false;
+        if (sidebarFilterVal === 'favs' && !channel.favourite) return false;
+        if (sidebarFilterVal !== 'all' && sidebarFilterVal !== 'favs' && String(channel.playlistId) !== String(sidebarFilterVal)) return false;
+        
+        const rawTitle = channel.title || 'Unknown Channel';
+        if (sidebarSearchVal && !rawTitle.toLowerCase().includes(sidebarSearchVal)) return false;
+        
         return true;
     });
 
