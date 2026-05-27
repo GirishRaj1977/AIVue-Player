@@ -70,5 +70,8 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     scheduleRecording: (channelUrl, channelName, programName, startTime, endTime, headers) => ipcRenderer.invoke('schedule-recording', channelUrl, channelName, programName, startTime, endTime, headers),
     getScheduledRecordings: () => ipcRenderer.invoke('get-scheduled-recordings'),
     cancelScheduledRecording: (scheduleId) => ipcRenderer.invoke('cancel-scheduled-recording', scheduleId),
+    minimizeWindow: () => ipcRenderer.send('window-minimize'),
+    maximizeWindow: () => ipcRenderer.send('window-maximize'),
+    closeWindow: () => ipcRenderer.send('window-close'),
     log: (category, level, message) => ipcRenderer.send('write-log', { category, level, message })
 });

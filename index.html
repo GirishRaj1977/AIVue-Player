@@ -515,27 +515,71 @@
             outline-offset: 2px !important;
         }
 
-        /* Right side container: Clock + Action Buttons under it */
+        /* Right side container: Window Controls + Clock stacked vertically */
         .header-right {
             display: flex !important;
-            flex-direction: row !important;
-            justify-content: flex-end !important;
-            align-items: center !important;
-            gap: 16px !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            align-items: flex-end !important;
+            gap: 8px !important;
             height: 100% !important;
-            margin-right: 8px !important; /* Move it close to the right margin to maximize space and avoid overlap */
-            padding-top: 34px !important; /* Shift it down vertically so it sits below the 38px native window control bar */
+            margin-right: 12px !important;
+            padding-top: 0 !important;
+            -webkit-app-region: no-drag !important; /* Make sure elements inside are clickable */
         }
         #header-time-date {
-            font-size: 0.76rem !important;
+            font-size: 0.74rem !important;
             font-weight: 700 !important;
             color: rgba(255, 255, 255, 0.65) !important;
             letter-spacing: 0.08em !important;
             text-transform: uppercase !important;
             font-family: 'Inter', sans-serif !important;
-            height: 20px !important;
+            height: 16px !important;
             display: flex !important;
             align-items: center !important;
+            margin-right: 4px !important;
+        }
+        .window-controls {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 6px !important;
+            -webkit-app-region: no-drag !important;
+        }
+        .win-btn {
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            color: rgba(255, 255, 255, 0.55) !important;
+            width: 28px !important;
+            height: 22px !important;
+            border-radius: 4px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            cursor: pointer !important;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            outline: none !important;
+            -webkit-app-region: no-drag !important;
+        }
+        .win-btn svg {
+            width: 9px !important;
+            height: 9px !important;
+            fill: none !important;
+            stroke: currentColor !important;
+            stroke-width: 1.5 !important;
+            transition: transform 0.2s ease !important;
+        }
+        .win-btn:hover {
+            background: rgba(187, 134, 252, 0.15) !important;
+            border-color: rgba(187, 134, 252, 0.3) !important;
+            color: #bb86fc !important;
+        }
+        .win-btn:hover svg {
+            transform: scale(1.08) !important;
+        }
+        .win-btn.win-close:hover {
+            background: rgba(207, 102, 121, 0.22) !important;
+            border-color: rgba(207, 102, 121, 0.4) !important;
+            color: #cf6679 !important;
         }
         .header-actions {
             display: flex !important;
@@ -720,6 +764,17 @@
         </div>
         
         <div class="header-right">
+            <div class="window-controls">
+                <button class="win-btn win-minimize" id="win-btn-minimize" title="Minimize">
+                    <svg viewBox="0 0 10.2 10.2"><line x1="1" y1="5.1" x2="9.2" y2="5.1"></line></svg>
+                </button>
+                <button class="win-btn win-maximize" id="win-btn-maximize" title="Maximize / Restore">
+                    <svg viewBox="0 0 10.2 10.2"><rect x="1" y="1" width="8.2" height="8.2" rx="1"></rect></svg>
+                </button>
+                <button class="win-btn win-close" id="win-btn-close" title="Close App">
+                    <svg viewBox="0 0 10.2 10.2"><line x1="1" y1="1" x2="9.2" y2="9.2"></line><line x1="9.2" y1="1" x2="1" y2="9.2"></line></svg>
+                </button>
+            </div>
             <div id="header-time-date">
                 <!-- Hydrated dynamically by JS -->
             </div>

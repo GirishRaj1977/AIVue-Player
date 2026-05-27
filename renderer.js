@@ -8979,6 +8979,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // Custom Window Control actions
+    const winMinimize = document.getElementById('win-btn-minimize');
+    const winMaximize = document.getElementById('win-btn-maximize');
+    const winClose = document.getElementById('win-btn-close');
+
+    if (winMinimize) {
+        winMinimize.addEventListener('click', () => {
+            window.iptvAPI.minimizeWindow();
+        });
+    }
+    if (winMaximize) {
+        winMaximize.addEventListener('click', () => {
+            window.iptvAPI.maximizeWindow();
+        });
+    }
+    if (winClose) {
+        winClose.addEventListener('click', () => {
+            window.iptvAPI.closeWindow();
+        });
+    }
+    
     // Autoplay Overlay buttons setup
     const playNowBtn = document.getElementById('autoplay-play-now-btn');
     const cancelBtn = document.getElementById('autoplay-cancel-btn');

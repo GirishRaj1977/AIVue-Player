@@ -528,12 +528,7 @@ function createWindow() {
         title: 'AIVue Player',
         icon: path.join(__dirname, 'assets', 'logo.ico'),
         show: false, // Hide initially until fully loaded
-        titleBarStyle: 'hidden',
-        titleBarOverlay: {
-            color: '#08080a',
-            symbolColor: '#ffffff',
-            height: 38
-        },
+        frame: false,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true
@@ -1731,6 +1726,28 @@ ipcMain.on('toggle-fullscreen', () => {
 ipcMain.on('hide-splash', () => {
     console.log('[IPC RECV] hide-splash');
     showMainWindowAndHideSplash();
+});
+
+ipcMain.on('window-minimize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.minimize();
+    }
+});
+
+ipcMain.on('window-maximize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMaximized()) {
+            mainWindow.unmaximize();
+        } else {
+            mainWindow.maximize();
+        }
+    }
+});
+
+ipcMain.on('window-close', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.close();
+    }
 });
 
 // Ensure the Cache directory exists within the OS-specific User Data folder
