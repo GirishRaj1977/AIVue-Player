@@ -5574,6 +5574,7 @@ async function renderFullEpg() {
 async function embedStream(channel) {
     console.log('[STREAM] Embedding stream for channel:', channel.title);
     streamActive = true;
+    window.currentPlaybackHeaders = null;
     
     if (window.activeEpgTrackingInterval) {
         clearInterval(window.activeEpgTrackingInterval);
@@ -5676,7 +5677,20 @@ async function embedStream(channel) {
         const parts = finalStreamUrl.substring(14).split('|');
         const type = parts[0];
         const streamId = parts[1];
-        const extension = parts[2] || null;
+        let extension = null;
+        let directSourceUrl = null;
+        
+        if (type === 'live') {
+            extension = null;
+            if (parts[2]) {
+                directSourceUrl = decodeURIComponent(parts[2]);
+            }
+        } else if (type === 'movie') {
+            extension = parts[2] || null;
+            if (parts[3]) {
+                directSourceUrl = decodeURIComponent(parts[3]);
+            }
+        }
         
         if (playlist && playlist.source && playlist.source.startsWith('xtream-credentials:')) {
             const credParts = playlist.source.substring(19).split('|');
@@ -5684,9 +5698,20 @@ async function embedStream(channel) {
             const username = credParts[1];
             const password = credParts[2];
             
-            const resolved = await window.iptvAPI.resolveXtreamLink({ server, username, password, streamId, type, extension });
-            if (resolved) {
-                finalStreamUrl = resolved;
+            const resolvedSource = await window.iptvAPI.resolveXtreamLink({ 
+                server, 
+                username, 
+                password, 
+                streamId, 
+                type, 
+                extension,
+                directSourceUrl
+            });
+            
+            if (resolvedSource && resolvedSource.url) {
+                finalStreamUrl = resolvedSource.url;
+                window.currentPlaybackHeaders = resolvedSource.headers || null;
+                console.log(`[XTREAM PLAYBACKSOURCE] Resolved playable URL: ${finalStreamUrl}, Format: ${resolvedSource.streamFormat}`);
             } else {
                 showToast("Failed to resolve Xtream Codes stream URL.");
                 const playerOverlay = document.getElementById('player-overlay');
@@ -5862,6 +5887,7 @@ async function embedStream(channel) {
     window.iptvAPI.playMpvEmbedded({
         url: finalStreamUrl,
         title: channel.title,
+        headers: window.currentPlaybackHeaders || null,
         bounds: {
             x: Math.round(rect.x),
             y: Math.round(rect.y),

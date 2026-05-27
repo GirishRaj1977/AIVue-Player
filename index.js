@@ -1614,7 +1614,15 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
             let ua = 'VLC/3.0.9 LibVLC/3.0.9'; // Premium default User-Agent to prevent 403 / I/O reconnect errors
             let headersVal = [];
             
-            if (mac) {
+            if (data.headers) {
+                if (data.headers['User-Agent']) ua = data.headers['User-Agent'];
+                for (const [k, v] of Object.entries(data.headers)) {
+                    if (k !== 'User-Agent') {
+                        headersVal.push(`${k}: ${v}`);
+                    }
+                }
+                console.log('[MPV HEADER INJECT] Injecting custom headers from PlaybackSource:', JSON.stringify(headersVal));
+            } else if (mac) {
                 ua = 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
                 let referer = '';
                 if (portalUrl) {
@@ -1638,7 +1646,7 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
             }
             
             ipcClient.write(JSON.stringify({ command: ["set_property", "user-agent", ua] }) + '\n');
-            ipcClient.write(JSON.stringify({ command: ["set_property", "http-header-fields", headersVal] }) + '\n');
+            ipcClient.write(JSON.stringify({ command: ["set_property", "http-header-fields", headersVal.join(',')] }) + '\n');
             
             console.log('[MPV IPC SEND]', JSON.stringify({ command: ["loadfile", data.url, "replace"] }));
             ipcClient.write(JSON.stringify({ command: ["loadfile", data.url, "replace"] }) + '\n');
@@ -2579,7 +2587,7 @@ async function xtreamFetch(server, username, password, action = null, extraParam
     return await response.json();
 }
 
-async function resolveXtreamLink(server, username, password, streamId, type, extension = null) {
+async function resolveXtreamLink(server, username, password, streamId, type, extension = null, directSourceUrl = null) {
     let cleanServer = server.trim();
     if (!cleanServer.startsWith('http://') && !cleanServer.startsWith('https://')) {
         cleanServer = 'http://' + cleanServer;
@@ -2587,6 +2595,11 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
     cleanServer = cleanServer.replace(/\/+$/, '');
 
     const candidates = [];
+
+    // 1. Direct Source (Method A) takes absolute priority if present
+    if (directSourceUrl) {
+        candidates.push(decodeURIComponent(directSourceUrl));
+    }
 
     if (type === 'live') {
         const ext = extension || 'ts';
@@ -2617,9 +2630,14 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
 
     console.log(`[XTREAM RESOLVER] Probing playback URL for streamId: ${streamId}, type: ${type}`);
 
+    const customHeaders = {
+        'User-Agent': 'IPTV Smarters Pro',
+        'Referer': cleanServer
+    };
+
     for (const urlCandidate of candidates) {
         try {
-            console.log('[XTREAM RESOLVER] Trying candidate URL:', urlCandidate.replace(/\/[^/]+\/[^/]+\/(\d+)/, '/****/****/$1'));
+            console.log('[XTREAM RESOLVER] Probing candidate URL:', urlCandidate.replace(/\/[^/]+\/[^/]+\/(\d+)/, '/****/****/$1'));
             
             let currentUrl = urlCandidate;
             let redirects = 0;
@@ -2629,7 +2647,7 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
                 headResponse = await fetch(currentUrl, {
                     method: 'HEAD',
                     redirect: 'manual',
-                    headers: { 'User-Agent': 'AIVue-Player/1.0' },
+                    headers: customHeaders,
                     signal: AbortSignal.timeout(5000)
                 });
 
@@ -2647,8 +2665,24 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
 
             const status = headResponse.status;
             if (status === 200 || status === 206 || status === 302) {
-                console.log(`[XTREAM RESOLVER] Success! Verified stream url with HTTP ${status}:`, currentUrl.replace(/\/[^/]+\/[^/]+\/(\d+)/, '/****/****/$1'));
-                return currentUrl;
+                console.log(`[XTREAM RESOLVER] Success! Verified stream URL with HTTP ${status}`);
+                
+                // Determine format dynamically from Content-Type
+                const contentType = (headResponse.headers.get('content-type') || '').toLowerCase();
+                let format = 'ts';
+                if (contentType.includes('mpegurl') || contentType.includes('x-mpegurl') || currentUrl.includes('.m3u8')) {
+                    format = 'hls';
+                } else if (contentType.includes('mp4') || currentUrl.includes('.mp4')) {
+                    format = 'mp4';
+                } else if (contentType.includes('mkv') || currentUrl.includes('.mkv')) {
+                    format = 'mkv';
+                }
+
+                return {
+                    url: currentUrl,
+                    headers: customHeaders,
+                    streamFormat: format
+                };
             } else {
                 console.warn(`[XTREAM RESOLVER] Candidate URL returned HTTP ${status}. Trying fallback...`);
             }
@@ -2659,7 +2693,11 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
 
     // Absolute fallback: return the primary candidate if validation completely timed out or errored out
     console.log(`[XTREAM RESOLVER] All probes failed or timed out. Returning primary candidate as fallback.`);
-    return candidates[0];
+    return {
+        url: candidates[0],
+        headers: customHeaders,
+        streamFormat: type === 'live' ? 'ts' : 'mp4'
+    };
 }
 
 const stalkerTokens = new Map();
@@ -3746,13 +3784,14 @@ ipcMain.handle('parse-xtream', async (event, { name, server, username, password 
         if (Array.isArray(liveStreams)) {
             liveStreams.forEach(item => {
                 const grp = liveCatMap.get(String(item.category_id)) || 'Live TV';
+                const directSourceSuffix = item.direct_source ? `|${encodeURIComponent(item.direct_source)}` : '';
                 allParsed.push({
                     tvg_id: item.epg_channel_id || String(item.stream_id),
                     tvg_name: trimCountryPrefix(item.name || ''),
                     title: trimCountryPrefix(item.name || ''),
                     logo: item.stream_icon || '',
                     group: grp,
-                    url: `xtream-stream:live|${item.stream_id}`,
+                    url: `xtream-stream:live|${item.stream_id}${directSourceSuffix}`,
                     type: 'live'
                 });
             });
@@ -3761,13 +3800,14 @@ ipcMain.handle('parse-xtream', async (event, { name, server, username, password 
         if (Array.isArray(movieStreams)) {
             movieStreams.forEach(item => {
                 const grp = movieCatMap.get(String(item.category_id)) || 'Movies';
+                const directSourceSuffix = item.direct_source ? `|${encodeURIComponent(item.direct_source)}` : '';
                 allParsed.push({
                     tvg_id: String(item.stream_id),
                     tvg_name: trimCountryPrefix(item.name || ''),
                     title: trimCountryPrefix(item.name || ''),
                     logo: item.stream_icon || '',
                     group: grp,
-                    url: `xtream-stream:movie|${item.stream_id}|${item.container_extension || 'mp4'}`,
+                    url: `xtream-stream:movie|${item.stream_id}|${item.container_extension || 'mp4'}${directSourceSuffix}`,
                     type: 'movie'
                 });
             });
@@ -3800,9 +3840,9 @@ ipcMain.handle('parse-xtream', async (event, { name, server, username, password 
     }
 });
 
-ipcMain.handle('resolve-xtream-link', async (event, { server, username, password, streamId, type, extension }) => {
+ipcMain.handle('resolve-xtream-link', async (event, { server, username, password, streamId, type, extension, directSourceUrl }) => {
     try {
-        return await resolveXtreamLink(server, username, password, streamId, type, extension);
+        return await resolveXtreamLink(server, username, password, streamId, type, extension, directSourceUrl);
     } catch (e) {
         console.error('[XTREAM RESOLVE ERR] Fail:', e.message);
         return null;
