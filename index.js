@@ -4636,6 +4636,7 @@ async function checkScheduledRecordings() {
                 let cleanHeaders = [];
                 let stalkerMeta = null;
                 let sourceType = 'm3u';
+                let xtreamMeta = null;
                 
                 if (meta.headers && Array.isArray(meta.headers)) {
                     meta.headers.forEach(h => {
@@ -4646,10 +4647,46 @@ async function checkScheduledRecordings() {
                                     sourceType = stalkerMeta.sourceType;
                                 }
                             } catch (e) {}
+                        } else if (h.startsWith('XTREAM-METADATA:')) {
+                            try {
+                                xtreamMeta = JSON.parse(h.substring(16));
+                                if (xtreamMeta && xtreamMeta.sourceType) {
+                                    sourceType = xtreamMeta.sourceType;
+                                }
+                            } catch (e) {}
                         } else {
                             cleanHeaders.push(h);
                         }
                     });
+                }
+                
+                // Dynamically resolve Xtream Codes stream URL to fresh validated PlaybackSource at START time!
+                if (sourceType === 'xtream' && xtreamMeta) {
+                    try {
+                        console.log(`[DVR SCHEDULER] Resolving fresh Xtream Codes link for scheduled recording:`, xtreamMeta);
+                        const resolvedSource = await resolveXtreamLink(
+                            xtreamMeta.server,
+                            xtreamMeta.username,
+                            xtreamMeta.password,
+                            xtreamMeta.streamId,
+                            xtreamMeta.type || 'live',
+                            xtreamMeta.extension || null,
+                            xtreamMeta.directSourceUrl || null
+                        );
+                        if (resolvedSource && resolvedSource.url) {
+                            activeUrl = resolvedSource.url;
+                            if (resolvedSource.headers) {
+                                Object.entries(resolvedSource.headers).forEach(([k, v]) => {
+                                    cleanHeaders.push(`${k}: ${v}`);
+                                });
+                            }
+                            console.log('[DVR SCHEDULER] Xtream Codes link resolved successfully to fresh URL:', activeUrl);
+                        } else {
+                            console.warn('[DVR SCHEDULER] Failed to resolve Xtream Codes link, falling back to original url.');
+                        }
+                    } catch (err) {
+                        console.error('[DVR SCHEDULER] Error resolving Xtream Codes link on schedule start:', err);
+                    }
                 }
                 
                 // Dynamically resolve Stalker command to fresh absolute stream link at START time!

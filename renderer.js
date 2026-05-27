@@ -4942,6 +4942,40 @@ async function renderLiveEpgGrid() {
                                         `STALKER-METADATA:${JSON.stringify({ portalUrl, mac, sourceType: 'stalker' })}`
                                     ];
                                 }
+                            } else if (targetChannel && targetChannel.url && targetChannel.url.startsWith('xtream-stream:')) {
+                                const playlist = savedPlaylists.find(p => p.id === targetChannel.playlist_id || p.id === targetChannel.playlistId);
+                                if (playlist && playlist.source && playlist.source.startsWith('xtream-credentials:')) {
+                                    const credParts = playlist.source.substring(19).split('|');
+                                    const server = credParts[0];
+                                    const username = credParts[1];
+                                    const password = credParts[2];
+                                    const parts = targetChannel.url.substring(14).split('|');
+                                    const type = parts[0];
+                                    const streamId = parts[1];
+                                    let extension = null;
+                                    let directSourceUrl = null;
+                                    if (type === 'live') {
+                                        extension = null;
+                                        if (parts[2]) directSourceUrl = decodeURIComponent(parts[2]);
+                                    } else if (type === 'movie') {
+                                        extension = parts[2] || null;
+                                        if (parts[3]) directSourceUrl = decodeURIComponent(parts[3]);
+                                    }
+                                    customHeaders = [
+                                        `User-Agent: IPTV Smarters Pro`,
+                                        `Referer: ${server}`,
+                                        `XTREAM-METADATA:${JSON.stringify({
+                                            server,
+                                            username,
+                                            password,
+                                            streamId,
+                                            type,
+                                            extension,
+                                            directSourceUrl,
+                                            sourceType: 'xtream'
+                                        })}`
+                                    ];
+                                }
                             } else {
                                 customHeaders = [
                                     `STALKER-METADATA:${JSON.stringify({ sourceType: 'm3u' })}`
