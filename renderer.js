@@ -3888,13 +3888,13 @@ function renderChannels() {
             const expandIcon = isExpanded ? '▼' : '▶';
             
             const attrGroupName = String(groupName).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            html += `<div class="group-item" data-group="${attrGroupName}" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; padding: 10px; background: #252525; border-bottom: 1px solid #1e1e1e; cursor: pointer; outline: none; font-weight: bold; color: #bb86fc;">
+            html += `<div class="group-item" data-group="${attrGroupName}" tabindex="0" style="cursor: pointer; outline: none;">
                 <span>${safeGroupName} <span style="color:#888;font-size:0.8em;font-weight:normal;">(${channelsInGroup.length})</span></span>
                 <span class="group-expand-icon" style="color:#888;font-size:0.8em;">${expandIcon}</span>
             </div>`;
             
             if (isExpanded) {
-                html += `<div class="group-channels-container" style="background: #1a1a1a;">`;
+                html += `<div class="group-channels-container" style="background: transparent;">`;
                 channelsInGroup.forEach(({channel, index}) => {
                     const rawTitle = channel.title || 'Unknown Channel';
                     const safeTitle = rawTitle.replace(/</g, "&lt;").replace(/>/g, "&gt;");
