@@ -1877,7 +1877,61 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
     const env = Object.assign({}, process.env, { AIVUE_CACHE_DIR: cacheDir, AIVUE_FORCE_REFRESH: forceRefresh ? '1' : '0' });
 
     for (const source of sources) {
-        if (source.startsWith('stalker:')) {
+        if (source.startsWith('xtream-epg:')) {
+            console.log(`[XTREAM EPG] Fetching EPG for: ${source}`);
+            try {
+                const playlistRow = db.prepare('SELECT source_url FROM playlists WHERE epg_url = ?').get(source);
+                if (playlistRow) {
+                    const credParts = playlistRow.source_url.substring(19).split('|');
+                    const server = credParts[0];
+                    const username = credParts[1];
+                    const password = credParts[2];
+                    
+                    const res = await xtreamFetch(server, username, password, 'get_simple_data_table');
+                    if (res && res.epg_data) {
+                        const deleteOld = db.prepare('DELETE FROM epg WHERE source_url = ?');
+                        const insert = db.prepare(`
+                            INSERT INTO epg (channel_id, start_time, stop_time, title, description, source_url)
+                            VALUES (@channel_id, @start, @stop, @title, @desc, @source)
+                        `);
+                        
+                        const saveTx = db.transaction((epgDict) => {
+                            deleteOld.run(source);
+                            let insertCount = 0;
+                            for (const [streamId, epList] of Object.entries(epgDict)) {
+                                if (Array.isArray(epList)) {
+                                    for (const ep of epList) {
+                                        if (!ep.start || !ep.end) continue;
+                                        // Convert "YYYY-MM-DD HH:MM:SS" to ISO format
+                                        let startIso = '';
+                                        let endIso = '';
+                                        try {
+                                            startIso = new Date(ep.start.trim().replace(' ', 'T')).toISOString();
+                                            endIso = new Date(ep.end.trim().replace(' ', 'T')).toISOString();
+                                        } catch (dateErr) {
+                                            continue;
+                                        }
+                                        insert.run({
+                                            channel_id: String(streamId),
+                                            start: startIso,
+                                            stop: endIso,
+                                            title: ep.title || 'No Title',
+                                            desc: ep.description || '',
+                                            source: source
+                                        });
+                                        insertCount++;
+                                    }
+                                }
+                            }
+                            console.log(`[XTREAM EPG] Saved ${insertCount} EPG entries to database.`);
+                        });
+                        saveTx(res.epg_data);
+                    }
+                }
+            } catch (err) {
+                console.error('[XTREAM EPG ERR] Failed to fetch EPG table:', err.message);
+            }
+        } else if (source.startsWith('stalker:')) {
             const mac = source.substring(8);
             console.log(`[STALKER EPG] Fetching EPG for MAC: ${mac}`);
             
@@ -2491,6 +2545,121 @@ async function runInChunks(items, chunkSize, asyncFn) {
         const chunk = items.slice(i, i + chunkSize);
         await Promise.all(chunk.map(asyncFn));
     }
+}
+
+// =========================================================================
+// --- XTREAM CODES (XC API) ENGINE SUPPORT ---
+// =========================================================================
+
+async function xtreamFetch(server, username, password, action = null, extraParams = {}) {
+    let cleanServer = server.trim();
+    if (!cleanServer.startsWith('http://') && !cleanServer.startsWith('https://')) {
+        cleanServer = 'http://' + cleanServer;
+    }
+    // Remove trailing slashes
+    cleanServer = cleanServer.replace(/\/+$/, '');
+
+    let url = `${cleanServer}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+    if (action) {
+        url += `&action=${encodeURIComponent(action)}`;
+    }
+    for (const [k, v] of Object.entries(extraParams)) {
+        url += `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`;
+    }
+
+    console.log('[XTREAM API] Requesting:', url.replace(/password=[^&]+/, 'password=******'));
+    const response = await fetch(url, {
+        headers: { 'User-Agent': 'AIVue-Player/1.0' },
+        signal: AbortSignal.timeout(15000)
+    });
+
+    if (!response.ok) {
+        throw new Error(`Server returned status code: ${response.status}`);
+    }
+    return await response.json();
+}
+
+async function resolveXtreamLink(server, username, password, streamId, type, extension = null) {
+    let cleanServer = server.trim();
+    if (!cleanServer.startsWith('http://') && !cleanServer.startsWith('https://')) {
+        cleanServer = 'http://' + cleanServer;
+    }
+    cleanServer = cleanServer.replace(/\/+$/, '');
+
+    const candidates = [];
+
+    if (type === 'live') {
+        const ext = extension || 'ts';
+        candidates.push(`${cleanServer}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${ext}`);
+        if (ext !== 'm3u8') {
+            candidates.push(`${cleanServer}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.m3u8`);
+        }
+        if (ext !== 'ts') {
+            candidates.push(`${cleanServer}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.ts`);
+        }
+    } else if (type === 'movie') {
+        const ext = extension || 'mp4';
+        candidates.push(`${cleanServer}/movie/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${ext}`);
+        for (const fallback of ['mp4', 'mkv', 'avi']) {
+            if (fallback !== ext) {
+                candidates.push(`${cleanServer}/movie/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${fallback}`);
+            }
+        }
+    } else if (type === 'series') {
+        const ext = extension || 'mp4';
+        candidates.push(`${cleanServer}/series/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${ext}`);
+        for (const fallback of ['mp4', 'mkv', 'avi']) {
+            if (fallback !== ext) {
+                candidates.push(`${cleanServer}/series/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${fallback}`);
+            }
+        }
+    }
+
+    console.log(`[XTREAM RESOLVER] Probing playback URL for streamId: ${streamId}, type: ${type}`);
+
+    for (const urlCandidate of candidates) {
+        try {
+            console.log('[XTREAM RESOLVER] Trying candidate URL:', urlCandidate.replace(/\/[^/]+\/[^/]+\/(\d+)/, '/****/****/$1'));
+            
+            let currentUrl = urlCandidate;
+            let redirects = 0;
+            let headResponse = null;
+
+            while (redirects < 10) {
+                headResponse = await fetch(currentUrl, {
+                    method: 'HEAD',
+                    redirect: 'manual',
+                    headers: { 'User-Agent': 'AIVue-Player/1.0' },
+                    signal: AbortSignal.timeout(5000)
+                });
+
+                if (headResponse.status >= 300 && headResponse.status < 400) {
+                    const location = headResponse.headers.get('location');
+                    if (location) {
+                        currentUrl = new URL(location, currentUrl).toString();
+                        redirects++;
+                        console.log(`[XTREAM RESOLVER] Following redirect #${redirects} to:`, currentUrl.replace(/\/[^/]+\/[^/]+\/(\d+)/, '/****/****/$1'));
+                        continue;
+                    }
+                }
+                break;
+            }
+
+            const status = headResponse.status;
+            if (status === 200 || status === 206 || status === 302) {
+                console.log(`[XTREAM RESOLVER] Success! Verified stream url with HTTP ${status}:`, currentUrl.replace(/\/[^/]+\/[^/]+\/(\d+)/, '/****/****/$1'));
+                return currentUrl;
+            } else {
+                console.warn(`[XTREAM RESOLVER] Candidate URL returned HTTP ${status}. Trying fallback...`);
+            }
+        } catch (e) {
+            console.warn(`[XTREAM RESOLVER] Failed to probe candidate:`, e.message);
+        }
+    }
+
+    // Absolute fallback: return the primary candidate if validation completely timed out or errored out
+    console.log(`[XTREAM RESOLVER] All probes failed or timed out. Returning primary candidate as fallback.`);
+    return candidates[0];
 }
 
 const stalkerTokens = new Map();
@@ -3520,6 +3689,154 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
         return mapped;
     } catch (e) {
         console.error(`[PERF FAILURE] Error loading stalker episodes:`, e);
+        return [];
+    }
+});
+
+ipcMain.handle('parse-xtream', async (event, { name, server, username, password }) => {
+    try {
+        console.log('[XTREAM IPC] Starting Xtream Codes parsing for:', server, 'user:', username);
+        
+        // 1. Verify Credentials
+        const loginInfo = await xtreamFetch(server, username, password);
+        if (!loginInfo || !loginInfo.user_info || loginInfo.user_info.auth !== 1) {
+            console.error('[XTREAM IPC] Authentication failed or account expired.');
+            return { error: 'Authentication failed or account has expired.' };
+        }
+
+        const userInfo = loginInfo.user_info;
+        const serverInfo = loginInfo.server_info;
+        console.log('[XTREAM IPC] Auth successful. Expire:', userInfo.exp_date);
+
+        // 2. Fetch categories
+        let liveCats = [], movieCats = [], seriesCats = [];
+        try {
+            liveCats = await xtreamFetch(server, username, password, 'get_live_categories');
+        } catch (e) { console.error('[XTREAM] Failed to load live categories:', e.message); }
+        
+        try {
+            movieCats = await xtreamFetch(server, username, password, 'get_vod_categories');
+        } catch (e) { console.error('[XTREAM] Failed to load movie categories:', e.message); }
+        
+        try {
+            seriesCats = await xtreamFetch(server, username, password, 'get_series_categories');
+        } catch (e) { console.error('[XTREAM] Failed to load series categories:', e.message); }
+
+        const liveCatMap = new Map((liveCats || []).map(c => [String(c.category_id), c.category_name]));
+        const movieCatMap = new Map((movieCats || []).map(c => [String(c.category_id), c.category_name]));
+        const seriesCatMap = new Map((seriesCats || []).map(c => [String(c.category_id), c.category_name]));
+
+        const allParsed = [];
+
+        // 3. Fetch streams
+        let liveStreams = [], movieStreams = [], seriesStreams = [];
+        try {
+            liveStreams = await xtreamFetch(server, username, password, 'get_live_streams');
+        } catch (e) { console.error('[XTREAM] Failed to load live streams:', e.message); }
+        
+        try {
+            movieStreams = await xtreamFetch(server, username, password, 'get_vod_streams');
+        } catch (e) { console.error('[XTREAM] Failed to load movie streams:', e.message); }
+        
+        try {
+            seriesStreams = await xtreamFetch(server, username, password, 'get_series');
+        } catch (e) { console.error('[XTREAM] Failed to load series streams:', e.message); }
+
+        // 4. Map streams
+        if (Array.isArray(liveStreams)) {
+            liveStreams.forEach(item => {
+                const grp = liveCatMap.get(String(item.category_id)) || 'Live TV';
+                allParsed.push({
+                    tvg_id: item.epg_channel_id || String(item.stream_id),
+                    tvg_name: trimCountryPrefix(item.name || ''),
+                    title: trimCountryPrefix(item.name || ''),
+                    logo: item.stream_icon || '',
+                    group: grp,
+                    url: `xtream-stream:live|${item.stream_id}`,
+                    type: 'live'
+                });
+            });
+        }
+
+        if (Array.isArray(movieStreams)) {
+            movieStreams.forEach(item => {
+                const grp = movieCatMap.get(String(item.category_id)) || 'Movies';
+                allParsed.push({
+                    tvg_id: String(item.stream_id),
+                    tvg_name: trimCountryPrefix(item.name || ''),
+                    title: trimCountryPrefix(item.name || ''),
+                    logo: item.stream_icon || '',
+                    group: grp,
+                    url: `xtream-stream:movie|${item.stream_id}|${item.container_extension || 'mp4'}`,
+                    type: 'movie'
+                });
+            });
+        }
+
+        if (Array.isArray(seriesStreams)) {
+            seriesStreams.forEach(item => {
+                const grp = seriesCatMap.get(String(item.category_id)) || 'Series';
+                allParsed.push({
+                    tvg_id: String(item.series_id),
+                    tvg_name: trimCountryPrefix(item.name || ''),
+                    title: trimCountryPrefix(item.name || ''),
+                    logo: item.cover || '',
+                    group: grp,
+                    url: `xtream-stream:series|${item.series_id}`,
+                    type: 'series'
+                });
+            });
+        }
+
+        console.log(`[XTREAM IPC] Finished parsing. Loaded total channels: ${allParsed.length}`);
+        return {
+            channels: allParsed,
+            epg_url: 'xtream-epg:' + server,
+            exp_date: userInfo.exp_date ? new Date(parseInt(userInfo.exp_date) * 1000).toISOString() : null
+        };
+    } catch (e) {
+        console.error('[XTREAM IPC ERR] Parser failed:', e);
+        return { error: e.message };
+    }
+});
+
+ipcMain.handle('resolve-xtream-link', async (event, { server, username, password, streamId, type, extension }) => {
+    try {
+        return await resolveXtreamLink(server, username, password, streamId, type, extension);
+    } catch (e) {
+        console.error('[XTREAM RESOLVE ERR] Fail:', e.message);
+        return null;
+    }
+});
+
+ipcMain.handle('get-xtream-episodes', async (event, { server, username, password, seriesId }) => {
+    try {
+        console.log(`[XTREAM EPISODES] Loading episodes for Series ID: ${seriesId}`);
+        const res = await xtreamFetch(server, username, password, 'get_series_info', { series_id: seriesId });
+        
+        const episodes = [];
+        if (res && res.episodes) {
+            for (const [seasonNum, epList] of Object.entries(res.episodes)) {
+                if (Array.isArray(epList)) {
+                    epList.forEach((ep, idx) => {
+                        const epTitle = ep.title || `Episode ${ep.episode_num || (idx + 1)}`;
+                        const ext = ep.container_extension || 'mp4';
+                        episodes.push({
+                            id: String(ep.id || ep.stream_id),
+                            name: epTitle,
+                            season: parseInt(seasonNum) || 1,
+                            episodeNum: parseInt(ep.episode_num) || (idx + 1),
+                            url: `xtream-stream:series|${ep.id || ep.stream_id}|${ext}`,
+                            logo: ep.info?.movie_image || ''
+                        });
+                    });
+                }
+            }
+        }
+        console.log(`[XTREAM EPISODES SUCCESS] Found ${episodes.length} episodes.`);
+        return episodes;
+    } catch (e) {
+        console.error('[XTREAM EPISODES ERR] Fail:', e.message);
         return [];
     }
 });

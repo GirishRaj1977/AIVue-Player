@@ -4160,9 +4160,90 @@ if (importStalkerSubmitBtn) {
 }
 
 if (importXtremeSubmitBtn) {
-    importXtremeSubmitBtn.addEventListener('click', (e) => {
+    importXtremeSubmitBtn.addEventListener('click', async (e) => {
         e.preventDefault();
-        showToast('Coming in Next Version');
+        
+        const name = importXtremeName.value.trim();
+        const rawUrl = importXtremeUrl.value.trim();
+        const user = importXtremeUser.value.trim();
+        const pass = importXtremePass.value.trim();
+        
+        if (!name) {
+            showToast('Please enter a playlist name.');
+            return;
+        }
+        if (!rawUrl) {
+            showToast('Please enter the server URL.');
+            return;
+        }
+        
+        let server = rawUrl;
+        let username = user;
+        let password = pass;
+        
+        // Method B auto-extract regex
+        const urlPattern = /^(https?:\/\/[^/]+)\/(?:get|player_api)\.php\?(?:.*&)?username=([^&]+)(?:.*&)?password=([^&]+)/i;
+        const match = rawUrl.match(urlPattern);
+        if (match) {
+            server = match[1];
+            username = match[2];
+            password = match[3];
+            console.log('[XTREAM IMPORT] Auto-extracted credentials from M3U URL:', server, username);
+        }
+        
+        if (!username || !password) {
+            showToast('Username and password are required.');
+            return;
+        }
+        
+        const loading = document.getElementById('loading');
+        if (loading) loading.style.display = 'block';
+        
+        try {
+            console.log('[API] Calling parseXtream for new playlist.');
+            const result = await window.iptvAPI.parseXtream({ name, server, username, password });
+            
+            if (loading) loading.style.display = 'none';
+            
+            if (result && result.error) {
+                showToast(`Failed to import Xtream Codes.\nReason: ${result.error}`);
+                return;
+            }
+            
+            if (!result || !result.channels) {
+                showToast(`Failed to import.\nReason: Received invalid data from server.`);
+                return;
+            }
+            
+            let channels = result.channels;
+            channels.forEach(newCh => {
+                const isVod = newCh.type === 'movie' || newCh.type === 'series';
+                newCh.disabled = isVod ? false : true;
+                if (!isVod) newCh.isNew = true;
+            });
+            
+            const tempPlaylist = {
+                id: Date.now() + Math.random(),
+                source: `xtream-credentials:${server}|${username}|${password}`,
+                name: name,
+                channels: channels,
+                epg: result.epg_url || ('xtream-epg:' + server),
+                disabled: false,
+                editIndex: -1,
+                exp_date: result.exp_date || null
+            };
+            
+            // Clear input fields
+            importXtremeName.value = '';
+            importXtremeUrl.value = '';
+            importXtremeUser.value = '';
+            importXtremePass.value = '';
+            
+            openManageChannelsModal(-1, tempPlaylist);
+        } catch (err) {
+            if (loading) loading.style.display = 'none';
+            showToast(`Error importing Xtream playlist:\n${err.message}`);
+        }
     });
 }
 
@@ -5580,6 +5661,40 @@ async function embedStream(channel) {
                         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
                             <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
                             <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Channel currently not available</span>
+                        </div>
+                    `;
+                }
+                streamActive = false;
+                currentPlayingChannelIndex = -1;
+                document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+                const fsBtn = document.getElementById('fullscreen-btn');
+                if (fsBtn) fsBtn.style.display = 'none';
+                return;
+            }
+        }
+    } else if (finalStreamUrl.startsWith('xtream-stream:')) {
+        const parts = finalStreamUrl.substring(14).split('|');
+        const type = parts[0];
+        const streamId = parts[1];
+        const extension = parts[2] || null;
+        
+        if (playlist && playlist.source && playlist.source.startsWith('xtream-credentials:')) {
+            const credParts = playlist.source.substring(19).split('|');
+            const server = credParts[0];
+            const username = credParts[1];
+            const password = credParts[2];
+            
+            const resolved = await window.iptvAPI.resolveXtreamLink({ server, username, password, streamId, type, extension });
+            if (resolved) {
+                finalStreamUrl = resolved;
+            } else {
+                showToast("Failed to resolve Xtream Codes stream URL.");
+                const playerOverlay = document.getElementById('player-overlay');
+                if (playerOverlay) {
+                    playerOverlay.innerHTML = `
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
+                            <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #fff;">
+                            <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Stream currently not available</span>
                         </div>
                     `;
                 }
@@ -7200,6 +7315,15 @@ async function getEpisodesForSeries(streamInfo) {
             const mac = playlist.epg.substring(8);
             const seriesId = streamInfo.tvg_id || streamInfo.id;
             episodes = await window.iptvAPI.getStalkerEpisodes({ url, mac, seriesId });
+        } else if (playlist.epg && playlist.epg.startsWith('xtream-epg:')) {
+            if (playlist.source && playlist.source.startsWith('xtream-credentials:')) {
+                const credParts = playlist.source.substring(19).split('|');
+                const server = credParts[0];
+                const username = credParts[1];
+                const password = credParts[2];
+                const seriesId = streamInfo.tvg_id || streamInfo.id;
+                episodes = await window.iptvAPI.getXtreamEpisodes({ server, username, password, seriesId });
+            }
         } else {
             const parsedClicked = parseM3uSeriesName(streamInfo.seriesTitle || streamInfo.title || streamInfo.name || '');
             if (playlist.channels) {

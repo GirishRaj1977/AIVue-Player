@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     getStalkerEpisodes: (params) => ipcRenderer.invoke('get-stalker-episodes', params),
     resolveStalkerLink: (params) => ipcRenderer.invoke('resolve-stalker-link', params),
     loadStalkerCategory: (params) => ipcRenderer.invoke('load-stalker-category', params),
+    parseXtream: (params) => ipcRenderer.invoke('parse-xtream', params),
+    resolveXtreamLink: (params) => ipcRenderer.invoke('resolve-xtream-link', params),
     getTmdbConfig: () => ipcRenderer.invoke('get-tmdb-config'),
     saveTmdbConfig: (config) => ipcRenderer.invoke('save-tmdb-config', config),
     fetchTmdbByTitle: (params) => ipcRenderer.invoke('fetch-tmdb-by-title', params),
