@@ -6948,7 +6948,7 @@ function injectPremiumStyles() {
         }
         
         #top-header {
-            background: transparent !important;
+            background: rgba(15, 6, 25, 0.45) !important;
             backdrop-filter: blur(30px) !important;
             -webkit-backdrop-filter: blur(30px) !important;
             border-bottom: 1px solid rgba(187, 134, 252, 0.15) !important;
