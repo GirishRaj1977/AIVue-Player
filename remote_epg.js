@@ -185,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const isReminderSet = savedReminders.some(r => r.progTitle === prog.title && r.startTime === prog.start && r.channelTitle === channel.title);
                         const reminderStyle = isReminderSet ? 'opacity: 1; filter: drop-shadow(0 0 4px #bb86fc);' : 'opacity: 0.3; filter: grayscale(100%);';
                         const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' data-prog='${JSON.stringify(prog).replace(/'/g, "&apos;")}' style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
+                        const borderCol = isCurrent ? '#bb86fc' : 'transparent';
 
                         programsHtml += `
                         <div class="epg-play-channel epg-program-cell" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' data-program='${JSON.stringify(progData).replace(/'/g, "&apos;")}' style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${isCurrent ? '#2c2c2c' : '#1e1e1e'}; border-right: 1px solid rgba(255, 255, 255, 0.15); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; padding: 2px 4px; overflow: hidden;">

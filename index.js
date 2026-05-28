@@ -709,10 +709,9 @@ function initRemoteServer() {
             }
 
             if (!remoteSettings.activeDeviceId) {
-                console.log(`[REMOTE API] No active device found. Auto-pairing with: ${deviceId}`);
-                remoteSettings.activeDeviceId = deviceId;
-                try { fs.writeFileSync(remoteSettingsPath, JSON.stringify(remoteSettings)); } catch(e) {}
-                if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-settings-updated');
+                console.log(`[REMOTE API] No active device found. Requiring pairing via login.`);
+                res.clearCookie('aivue_auth');
+                return res.redirect('/login');
             } else if (remoteSettings.activeDeviceId !== deviceId) {
                 console.log(`[REMOTE API] Device mismatch detected. (Current: ${deviceId}, Active: ${remoteSettings.activeDeviceId})`);
                 if (pendingDevicePrompt) {
@@ -785,13 +784,26 @@ function initRemoteServer() {
         });
 
         app.get('/login', (req, res) => {
-            if (remoteSettings.username && remoteSettings.password) {
-                const expectedAuth = Buffer.from(remoteSettings.username + ':' + remoteSettings.password).toString('base64');
-                if (getCookie(req, 'aivue_auth') === expectedAuth) {
-                    console.log(`[REMOTE API] User already authenticated. Redirecting /login to /remote`);
-                    return res.redirect('/remote');
+            if (!remoteSettings.username || !remoteSettings.password) {
+                // Auto-pair on connect if password protection is disabled!
+                let deviceId = getCookie(req, 'aivue_device_id');
+                if (deviceId) {
+                    remoteSettings.activeDeviceId = deviceId;
+                    try { fs.writeFileSync(remoteSettingsPath, JSON.stringify(remoteSettings)); } catch(e) {}
+                    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-settings-updated');
                 }
+                return res.redirect('/remote');
             }
+
+            const expectedAuth = Buffer.from(remoteSettings.username + ':' + remoteSettings.password).toString('base64');
+            let deviceId = getCookie(req, 'aivue_device_id');
+            
+            // If already logged in AND activeDeviceId matches, redirect directly to remote
+            if (getCookie(req, 'aivue_auth') === expectedAuth && remoteSettings.activeDeviceId === deviceId) {
+                console.log(`[REMOTE API] User already authenticated. Redirecting /login to /remote`);
+                return res.redirect('/remote');
+            }
+
             res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -831,6 +843,14 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                 console.log(`[REMOTE API] Login successful. Redirecting to /remote`);
                 const token = Buffer.from(username + ':' + password).toString('base64');
                 res.cookie('aivue_auth', token, { maxAge: 31536000000, httpOnly: true });
+                
+                // Pair the device!
+                let deviceId = getCookie(req, 'aivue_device_id');
+                if (deviceId) {
+                    remoteSettings.activeDeviceId = deviceId;
+                    try { fs.writeFileSync(remoteSettingsPath, JSON.stringify(remoteSettings)); } catch(e) {}
+                    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-settings-updated');
+                }
                 return res.redirect('/remote');
             }
             console.log(`[REMOTE API] Login failed (invalid credentials). Redirecting back to /login.`);
@@ -941,9 +961,9 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
         });
 
         app.post('/api/play', (req, res) => {
-            const { url, title } = req.body;
+            const { url, title, position, type, tmdbId, season, episodeNum } = req.body;
             if (mainWindow && !mainWindow.isDestroyed() && url && title) {
-                mainWindow.webContents.send('remote-play-channel', { url, title });
+                mainWindow.webContents.send('remote-play-channel', { url, title, position, type, tmdbId, season, episodeNum });
             }
             res.send('OK');
         });
@@ -962,6 +982,124 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             res.json(movies);
         });
 
+        app.get('/api/series', (req, res) => {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+            const playlists = loadChannelsFromDb();
+            let series = [];
+            playlists.forEach(p => {
+                if (p.channels && !p.disabled) {
+                    series.push(...p.channels.filter(c => !c.disabled && (c.type === 'series' || c.type === 'series_category' || c.type === 'vod' || c.type === 'vod_category' || c.group === 'Series Categories')).map(c => ({...c, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg})));
+                }
+            });
+            res.json(series);
+        });
+
+        app.get('/api/tmdb/search', async (req, res) => {
+            const { title, type } = req.query;
+            if (!title) return res.status(400).json({ error: 'Title is required' });
+            if (!tmdbConfig.apiKey && !tmdbConfig.apiToken) {
+                return res.json({ error: 'TMDB not configured' });
+            }
+            try {
+                const { cleanTitle, year } = await cleanTitleForSearch(title);
+                const isSeries = type === 'series' || type === 'vod';
+                const tmdbType = isSeries ? 'tv' : 'movie';
+                let url = `https://api.themoviedb.org/3/search/${tmdbType}?query=${encodeURIComponent(cleanTitle)}`;
+                if (year) {
+                    url += isSeries ? `&first_air_date_year=${year}` : `&year=${year}`;
+                }
+                let headers = { 'Accept': 'application/json' };
+                if (tmdbConfig.apiToken) {
+                    headers['Authorization'] = `Bearer ${tmdbConfig.apiToken}`;
+                } else if (tmdbConfig.apiKey) {
+                    url += `&api_key=${tmdbConfig.apiKey}`;
+                }
+                const searchRes = await fetch(url, { headers });
+                if (!searchRes.ok) throw new Error(`HTTP ${searchRes.status}`);
+                const searchData = await searchRes.json();
+                if (!searchData.results || searchData.results.length === 0) {
+                    if (year) {
+                        let retryUrl = `https://api.themoviedb.org/3/search/${tmdbType}?query=${encodeURIComponent(cleanTitle)}`;
+                        if (tmdbConfig.apiToken) {
+                            // in headers
+                        } else if (tmdbConfig.apiKey) {
+                            retryUrl += `&api_key=${tmdbConfig.apiKey}`;
+                        }
+                        const retryRes = await fetch(retryUrl, { headers });
+                        if (retryRes.ok) {
+                            const retryData = await retryRes.json();
+                            if (retryData.results && retryData.results.length > 0) {
+                                const details = await fetchDetails(retryData.results[0].id, tmdbType, headers);
+                                return res.json(details);
+                            }
+                        }
+                    }
+                    return res.json({ error: 'No results' });
+                }
+                const bestMatch = searchData.results[0];
+                const details = await fetchDetails(bestMatch.id, tmdbType, headers);
+                res.json(details);
+            } catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        });
+
+        app.get('/api/tmdb/details', async (req, res) => {
+            const { id, type } = req.query;
+            if (!id) return res.status(400).json({ error: 'ID is required' });
+            if (!tmdbConfig.apiKey && !tmdbConfig.apiToken) {
+                return res.json({ error: 'TMDB not configured' });
+            }
+            try {
+                const isSeries = type === 'series' || type === 'vod';
+                const tmdbType = isSeries ? 'tv' : 'movie';
+                let headers = { 'Accept': 'application/json' };
+                if (tmdbConfig.apiToken) {
+                    headers['Authorization'] = `Bearer ${tmdbConfig.apiToken}`;
+                }
+                const details = await fetchDetails(id, tmdbType, headers);
+                res.json(details);
+            } catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        });
+
+        app.get('/api/tmdb/season', async (req, res) => {
+            const { id, season } = req.query;
+            if (!id || !season) return res.status(400).json({ error: 'ID and season required' });
+            if (!tmdbConfig.apiKey && !tmdbConfig.apiToken) {
+                return res.json({ error: 'TMDB not configured' });
+            }
+            try {
+                let url = `https://api.themoviedb.org/3/tv/${id}/season/${season}`;
+                let headers = { 'Accept': 'application/json' };
+                if (tmdbConfig.apiToken) {
+                    headers['Authorization'] = `Bearer ${tmdbConfig.apiToken}`;
+                } else if (tmdbConfig.apiKey) {
+                    url += `&api_key=${tmdbConfig.apiKey}`;
+                }
+                const response = await fetch(url, { headers });
+                const data = await response.json();
+                res.json(data);
+            } catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        });
+
+        app.get('/api/progress', (req, res) => {
+            const { id } = req.query;
+            if (!id) return res.status(400).json({ error: 'ID required' });
+            try {
+                if (!db) return res.json(null);
+                const row = db.prepare("SELECT * FROM playback_progress WHERE id = ?").get(id);
+                res.json(row || null);
+            } catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        });
+
         app.post('/api/load-stalker-category', async (req, res) => {
             try {
                 const data = await executeLoadStalkerCategory(req.body);
@@ -971,46 +1109,51 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             }
         });
 
-        app.get('/movies', (req, res) => {
+        const catalogPageHandler = (req, res) => {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+            const isSeries = req.path === '/series';
+            const pageTitle = isSeries ? 'TV Series' : 'Movies';
             res.send(`
                 <!DOCTYPE html>
                 <html lang="en">
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                    <title>Movies - AIVue Remote</title>
+                    <title>${pageTitle} - AIVue Remote</title>
                     <style>
-                        body { background:#121212; color:white; font-family:Arial,sans-serif; margin:0; }
+                        body { background:#0f172a; color:white; font-family:Arial,sans-serif; margin:0; }
                         #movies-view { display: flex; flex-direction: column; height: 100vh; }
-                        .top-bar { padding: 10px; background: #1e1e1e; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid #333; flex-wrap: wrap; }
-                        .top-bar select, .top-bar input, .top-bar button { background: #2a2a2a; color: white; border: 1px solid #444; padding: 8px; border-radius: 6px; outline: none; }
-                        .top-bar input { flex-grow: 1; min-width: 150px; }
-                        #movies-content-area { flex-grow: 1; overflow-y: auto; padding: 10px; position: relative; }
+                        .top-bar { padding: 12px; background: #1e293b; display: flex; gap: 10px; align-items: center; border-bottom: 1.5px solid rgba(255,255,255,0.06); }
+                        .top-bar input { flex-grow: 1; min-width: 150px; background: #0f172a; color: white; border: 1px solid #334155; padding: 10px 14px; border-radius: 10px; outline: none; font-size: 0.95em; }
+                        .top-bar input::placeholder { color: #64748b; }
+                        #movies-content-area { flex-grow: 1; overflow-y: auto; padding: 15px; position: relative; }
                         
-                        .movies-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px; }
-                        .movie-card { background: #1e1e1e; border: 1px solid #333; border-radius: 8px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; }
-                        .movie-poster-wrapper { position: relative; width: 100%; padding-top: 150%; background: #1a1a1a; }
-                        .movie-poster { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.3s; }
-                        .movie-info { padding: 10px; }
-                        .movie-title { font-size: 0.9em; font-weight: bold; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
+                        .movies-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 12px; }
+                        .movie-card { background: #1e293b; border: 1px solid rgba(255,255,255,0.04); border-radius: 10px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+                        .movie-poster-wrapper { position: relative; width: 100%; padding-top: 150%; background: #0f172a; }
+                        .movie-poster { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.35s ease-in-out; }
+                        .movie-info { padding: 8px; flex-grow: 1; display: flex; align-items: center; min-height: 38px; }
+                        .movie-title { font-size: 0.82em; font-weight: 600; margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; color: #f8fafc; line-height: 1.25; }
                         
-                        .folder-card { background: #1e1e1e; border: 1px solid #333; border-radius: 8px; padding: 20px 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; aspect-ratio: 1; }
-                        .folder-icon { font-size: 2.5em; color: #bb86fc; }
-                        .folder-title { font-size: 0.9em; font-weight: bold; margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+                        .folder-card { background: #1e293b; border: 1.5px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 16px 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; aspect-ratio: 1; transition: 0.15s; box-shadow: 0 4px 12px rgba(0,0,0,0.35); }
+                        .folder-icon { font-size: 2.2em; color: #bb86fc; display: flex; align-items: center; justify-content: center; }
+                        .folder-title { font-size: 0.85em; font-weight: bold; margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #e2e8f0; }
                         
-                        .loader { text-align: center; padding: 50px; color: #888; }
+                        .loader { text-align: center; padding: 50px; color: #64748b; font-weight: 600; }
                         
-                        #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(18, 18, 24, 0.85); color: #ffffff; border: 1px solid rgba(187, 134, 252, 0.45); padding: 12px 24px; border-radius: 14px; z-index: 10000; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; box-shadow: 0 10px 30px rgba(187, 134, 252, 0.15), 0 5px 15px rgba(0,0,0,0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); opacity: 0; pointer-events: none; white-space: pre-wrap; text-align: center; font-size: 0.9em; letter-spacing: -0.01em; }
+                        #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(15, 23, 42, 0.95); color: #ffffff; border: 1.5px solid rgba(187, 134, 252, 0.45); padding: 12px 24px; border-radius: 14px; z-index: 101000; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; box-shadow: 0 10px 30px rgba(187, 134, 252, 0.15), 0 5px 15px rgba(0,0,0,0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); opacity: 0; pointer-events: none; white-space: pre-wrap; text-align: center; font-size: 0.9em; letter-spacing: -0.01em; }
                     </style>
                 </head>
                 <body>
                     <div id="movies-view">
                         <div class="top-bar">
-                            <a href="/remote" style="background: #334155; color: white; padding: 8px 12px; border-radius: 6px; text-decoration: none; font-weight: bold;">&larr; Back</a>
-                            <input type="text" id="movies-search" placeholder="Search Movies...">
+                            <a href="/remote" style="background: #334155; color: white; padding: 10px 14px; border-radius: 10px; text-decoration: none; font-weight: bold; font-size: 0.9em; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">&larr; Back</a>
+                            <input type="text" id="movies-search" placeholder="Search ${pageTitle}...">
                         </div>
                         <div id="movies-content-area">
-                            <div id="movies-grid" class="movies-grid loader">Loading Movies...</div>
+                            <div id="movies-grid" class="movies-grid loader">Loading ${pageTitle}...</div>
                         </div>
                     </div>
                     
@@ -1020,9 +1163,15 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                 </body>
                 </html>
             `);
-        });
-
+        };
+ 
+        app.get('/movies', catalogPageHandler);
+        app.get('/series', catalogPageHandler);
+ 
         app.get('/epg', (req, res) => {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
             res.send(`
                 <!DOCTYPE html>
                 <html lang="en">
@@ -1117,6 +1266,9 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
 
         app.get('/epg.js', (req, res) => {
             res.setHeader('Content-Type', 'application/javascript');
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
             try {
                 res.send(fs.readFileSync(path.join(__dirname, 'remote_epg.js'), 'utf8'));
             } catch(e) {
@@ -1126,6 +1278,9 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
 
         app.get('/movies.js', (req, res) => {
             res.setHeader('Content-Type', 'application/javascript');
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
             try {
                 res.send(fs.readFileSync(path.join(__dirname, 'remote_movies.js'), 'utf8'));
             } catch(e) {
@@ -1243,11 +1398,11 @@ button:active, a.top-btn:active { transform:scale(.95); }
         <button class="top-btn" onclick="window.location.href='/movies'" style="background:#22c55e; display:flex; align-items:center; justify-content:center;" title="Movies">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M18 4v1h-2V4c0-.55-.45-1-1-1H9c-.55 0-1 .45-1 1v1H6V4c0-.55-.45-1-1-1s-1 .45-1 1v16c0 .55.45 1 1 1s1-.45 1-1v-1h2v1c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-1h2v1c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1s-1 .45-1 1zM8 17H6v-2h2v2zm0-4H6v-2h2v2zm0-4H6V7h2v2zm10 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z"/></svg>
         </button>
-        <button class="top-btn" onclick="window.location.href='/epg'" style="background:#eab308; display:flex; align-items:center; justify-content:center;">
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19,4H18V2H16V4H8V2H6V4H5C3.89,4 3.01,4.9 3.01,6L3,20A2,2 0 0,0 5,22H19A2,2 0 0,0 21,20V6A2,2 0 0,0 19,4M19,20H5V10H19V20M9,14H7V12H9V14M13,14H11V12H13V14M17,14H15V12H17V14M9,18H7V16H9V18M13,18H11V16H13V18M17,18H15V16H17V18Z"/></svg>
+        <button class="top-btn" onclick="window.location.href='/series'" style="background:#eab308; display:flex; align-items:center; justify-content:center;" title="Series">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>
         </button>
-        <button class="top-btn" data-cmd="settings" style="background:#3b82f6; display:flex; align-items:center; justify-content:center;">
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg>
+        <button class="top-btn" onclick="window.location.href='/epg'" style="background:#3b82f6; display:flex; align-items:center; justify-content:center;" title="Guide">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19,4H18V2H16V4H8V2H6V4H5C3.89,4 3.01,4.9 3.01,6L3,20A2,2 0 0,0 5,22H19A2,2 0 0,0 21,20V6A2,2 0 0,0 19,4M19,20H5V10H19V20M9,14H7V12H9V14M13,14H11V12H13V14M17,14H15V12H17V14M9,18H7V16H9V18M13,18H11V16H13V18M17,18H15V16H17V18Z"/></svg>
         </button>
         <button class="top-btn" data-cmd="home" style="background:#334155; display:flex; align-items:center; justify-content:center;">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>

@@ -2752,6 +2752,11 @@ async function renderSettings() {
                      <span style="font-family: monospace; color: #bb86fc; font-size: 1.1em; word-break: break-all; flex: 1; min-width: 200px;">${remoteUrl}</span>
                      <button id="settings-copy-remote-btn" class="playlist-btn" data-url="${remoteUrlWithAuth}" style="background: #2a2a2a; color: #e0e0e0; padding: 8px 16px; border-radius: 4px; font-weight: bold; white-space: nowrap; flex-shrink: 0;" title="Copies a link with embedded login credentials">Copy Auto-Login URL</button>
                 </div>
+
+                <div style="margin-top: 15px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 15px; background: rgba(0, 0, 0, 0.25); border: 1px solid #444; border-radius: 8px;">
+                     <span style="color: #bbb; font-size: 0.9em; font-weight: bold;">Scan to Connect on Mobile</span>
+                     <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(remoteUrlWithAuth)}" alt="QR Code" style="border: 4px solid white; border-radius: 8px; width: 150px; height: 150px; background: white;">
+                </div>
             `;
 
             // Dynamic Remote listeners
@@ -3852,80 +3857,120 @@ function renderChannels() {
 
     let html = '';
     
-    const groupedChannels = {};
-
-    allChannels.forEach((channel, index) => {
-        if (filterVal === 'favs' && !channel.favourite) return;
-        if (filterVal !== 'all' && filterVal !== 'favs' && String(channel.playlistId) !== String(filterVal)) return;
-        
-        const rawTitle = channel.title || 'Unknown Channel';
-        if (searchVal && !rawTitle.toLowerCase().includes(searchVal)) return;
-        
-        const rawGroup = channel.group || 'Uncategorized';
-        const channelGroup = rawGroup.trim();
-        let groupKey = channelGroup;
-        // Case-insensitive check to club groups from different playlists
-        const existingKey = Object.keys(groupedChannels).find(k => k.toLowerCase() === channelGroup.toLowerCase());
-        if (existingKey) {
-            groupKey = existingKey;
-        }
-        if (!groupedChannels[groupKey]) {
-            groupedChannels[groupKey] = [];
-        }
-        groupedChannels[groupKey].push({ channel, index });
-    });
-
-    const sortedGroups = Object.keys(groupedChannels).sort(sortAlphaNum);
-
-    if (sortedGroups.length === 0) {
-        html = `<div style="padding: 20px; color: #888; text-align: center;">No channels found.</div>`;
-    } else {
-        sortedGroups.forEach(groupName => {
-            const channelsInGroup = groupedChannels[groupName];
-            const safeGroupName = groupName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-            
-            const isExpanded = searchVal ? true : window.expandedGroups.has(groupName);
-            const expandIcon = isExpanded ? '▼' : '▶';
-            
-            const attrGroupName = String(groupName).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            html += `<div class="group-item" data-group="${attrGroupName}" tabindex="0" style="cursor: pointer; outline: none;">
-                <span>${safeGroupName} <span style="color:#888;font-size:0.8em;font-weight:normal;">(${channelsInGroup.length})</span></span>
-                <span class="group-expand-icon" style="color:#888;font-size:0.8em;">${expandIcon}</span>
-            </div>`;
-            
-            if (isExpanded) {
-                html += `<div class="group-channels-container" style="background: transparent;">`;
-                channelsInGroup.forEach(({channel, index}) => {
-                    const rawTitle = channel.title || 'Unknown Channel';
-                    const safeTitle = rawTitle.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                    const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.ico';
-                    
-                    const favClass = channel.favourite ? 'fav-btn active' : 'fav-btn';
-                    const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
-
-                    const playlist = savedPlaylists.find(p => String(p.id) === String(channel.playlistId));
-                    const playlistName = playlist ? playlist.name : '';
-                    const playlistBadge = (filterVal === 'all' && playlistName) ? ` <span style="color: #666; font-size: 0.8em; font-weight: 500; margin-left: 4px;">[${playlistName}]</span>` : '';
-
-                    const activeClass = (index === currentPlayingChannelIndex) ? ' active' : '';
-                    const eqHtml = (index === currentPlayingChannelIndex) ? `
-                        <div class="mini-equalizer" title="Playing">
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                        </div>
-                    ` : '';
-
-                    html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}">
-                        <img src="${imgSrc}">
-                        <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px;">${safeTitle}${playlistBadge}</span>
-                        ${eqHtml}
-                        ${favBtnHtml}
-                    </div>`;
-                });
-                html += `</div>`;
-            }
+    if (filterVal === 'favs') {
+        const favsList = [];
+        allChannels.forEach((channel, index) => {
+            if (!channel.favourite) return;
+            const rawTitle = channel.title || 'Unknown Channel';
+            if (searchVal && !rawTitle.toLowerCase().includes(searchVal)) return;
+            favsList.push({ channel, index });
         });
+
+        favsList.sort((a, b) => sortAlphaNum(a.channel.title || '', b.channel.title || ''));
+
+        if (favsList.length === 0) {
+            html = `<div style="padding: 20px; color: #888; text-align: center;">No channels found.</div>`;
+        } else {
+            favsList.forEach(({channel, index}) => {
+                const rawTitle = channel.title || 'Unknown Channel';
+                const safeTitle = rawTitle.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.ico';
+                
+                const favClass = channel.favourite ? 'fav-btn active' : 'fav-btn';
+                const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
+
+                const activeClass = (index === currentPlayingChannelIndex) ? ' active' : '';
+                const eqHtml = (index === currentPlayingChannelIndex) ? `
+                    <div class="mini-equalizer" title="Playing">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                ` : '';
+
+                html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}">
+                    <img src="${imgSrc}">
+                    <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px;">${safeTitle}</span>
+                    ${eqHtml}
+                    ${favBtnHtml}
+                </div>`;
+            });
+        }
+    } else {
+        const groupedChannels = {};
+
+        allChannels.forEach((channel, index) => {
+            if (filterVal !== 'all' && String(channel.playlistId) !== String(filterVal)) return;
+            
+            const rawTitle = channel.title || 'Unknown Channel';
+            if (searchVal && !rawTitle.toLowerCase().includes(searchVal)) return;
+            
+            const rawGroup = channel.group || 'Uncategorized';
+            const channelGroup = rawGroup.trim();
+            let groupKey = channelGroup;
+            // Case-insensitive check to club groups from different playlists
+            const existingKey = Object.keys(groupedChannels).find(k => k.toLowerCase() === channelGroup.toLowerCase());
+            if (existingKey) {
+                groupKey = existingKey;
+            }
+            if (!groupedChannels[groupKey]) {
+                groupedChannels[groupKey] = [];
+            }
+            groupedChannels[groupKey].push({ channel, index });
+        });
+
+        const sortedGroups = Object.keys(groupedChannels).sort(sortAlphaNum);
+
+        if (sortedGroups.length === 0) {
+            html = `<div style="padding: 20px; color: #888; text-align: center;">No channels found.</div>`;
+        } else {
+            sortedGroups.forEach(groupName => {
+                const channelsInGroup = groupedChannels[groupName];
+                const safeGroupName = groupName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                
+                const isExpanded = searchVal ? true : window.expandedGroups.has(groupName);
+                const expandIcon = isExpanded ? '▼' : '▶';
+                
+                const attrGroupName = String(groupName).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                html += `<div class="group-item" data-group="${attrGroupName}" tabindex="0" style="cursor: pointer; outline: none;">
+                    <span>${safeGroupName} <span style="color:#888;font-size:0.8em;font-weight:normal;">(${channelsInGroup.length})</span></span>
+                    <span class="group-expand-icon" style="color:#888;font-size:0.8em;">${expandIcon}</span>
+                </div>`;
+                
+                if (isExpanded) {
+                    html += `<div class="group-channels-container" style="background: transparent;">`;
+                    channelsInGroup.forEach(({channel, index}) => {
+                        const rawTitle = channel.title || 'Unknown Channel';
+                        const safeTitle = rawTitle.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                        const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.ico';
+                        
+                        const favClass = channel.favourite ? 'fav-btn active' : 'fav-btn';
+                        const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
+
+                        const playlist = savedPlaylists.find(p => String(p.id) === String(channel.playlistId));
+                        const playlistName = playlist ? playlist.name : '';
+                        const playlistBadge = (filterVal === 'all' && playlistName) ? ` <span style="color: #666; font-size: 0.8em; font-weight: 500; margin-left: 4px;">[${playlistName}]</span>` : '';
+
+                        const activeClass = (index === currentPlayingChannelIndex) ? ' active' : '';
+                        const eqHtml = (index === currentPlayingChannelIndex) ? `
+                            <div class="mini-equalizer" title="Playing">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        ` : '';
+
+                        html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}">
+                            <img src="${imgSrc}">
+                            <span style="flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px;">${safeTitle}${playlistBadge}</span>
+                            ${eqHtml}
+                            ${favBtnHtml}
+                        </div>`;
+                    });
+                    html += `</div>`;
+                }
+            });
+        }
     }
 
     channelList.innerHTML = html;
@@ -4585,6 +4630,13 @@ window.iptvAPI.onMpvPropChange((name, value) => {
         if (value !== null) {
             window.currentPlaybackTime = value;
             
+            if (window.pendingSeekPosition !== undefined && window.pendingSeekPosition !== null) {
+                const targetSeek = window.pendingSeekPosition;
+                window.pendingSeekPosition = null;
+                console.log('[STREAM RESUME] Executing pending seek to:', targetSeek);
+                window.iptvAPI.sendMpvCommand(['seek', targetSeek, 'absolute']);
+            }
+            
             // Throttle progress saves to once every 5 seconds
             const now = Date.now();
             if (!window.lastProgressSaveTime || (now - window.lastProgressSaveTime >= 5000)) {
@@ -4876,7 +4928,7 @@ async function renderLiveEpgGrid() {
     const sidebarChannelSearch = document.getElementById('channel-search');
     const sidebarSearchVal = sidebarChannelSearch ? sidebarChannelSearch.value.toLowerCase() : '';
 
-    if (!window.expandedGroups || window.expandedGroups.size === 0) {
+    if (sidebarFilterVal !== 'favs' && (!window.expandedGroups || window.expandedGroups.size === 0)) {
         container.innerHTML = topBarHtml + '<div style="color: #888; text-align: center; margin-top: 50px; font-family: \'Inter\', sans-serif;">Expand a group in the sidebar to view EPG schedules.</div>';
         return;
     }
@@ -4888,8 +4940,10 @@ async function renderLiveEpgGrid() {
         const rawTitle = channel.title || 'Unknown Channel';
         if (sidebarSearchVal && !rawTitle.toLowerCase().includes(sidebarSearchVal)) return false;
         
-        const channelGroup = channel.group || 'Uncategorized';
-        if (!window.expandedGroups.has(channelGroup)) return false;
+        if (sidebarFilterVal !== 'favs') {
+            const channelGroup = channel.group || 'Uncategorized';
+            if (!window.expandedGroups.has(channelGroup)) return false;
+        }
         
         return true;
     });
@@ -6334,17 +6388,33 @@ window.iptvAPI.onMpvStopped(() => {
     }
 });
 
-window.iptvAPI.onRemotePlayChannel(({ url, title }) => {
-    console.log('[REMOTE] Received play request for:', { url, title });
-    const targetChannel = allChannels.find(c => c.url === url && c.title === title);
-    if (targetChannel) {
-        switchTab('live-tv', document.getElementById('btn-live-tv'));
-        embedStream(targetChannel);
-        showToast(`Playing ${targetChannel.title}`);
-        
-        if (mainWindow && !mainWindow.isMinimized()) {
-            mainWindow.focus();
-        }
+window.iptvAPI.onRemotePlayChannel(({ url, title, position, type, tmdbId, season, episodeNum }) => {
+    console.log('[REMOTE] Received play request for:', { url, title, position, type, tmdbId });
+    let targetChannel = allChannels.find(c => c.url === url && c.title === title);
+    if (!targetChannel) {
+        targetChannel = {
+            url,
+            title,
+            type: type || 'movie',
+            playlistId: 'all',
+            tmdbId: tmdbId || null,
+            season: season || null,
+            episodeNum: episodeNum || null
+        };
+    }
+    
+    switchTab('live-tv', document.getElementById('btn-live-tv'));
+    window.currentPlaybackChannel = targetChannel;
+    
+    embedStream(targetChannel);
+    showToast(`Playing ${targetChannel.title}`);
+    
+    if (position && parseFloat(position) > 0) {
+        window.pendingSeekPosition = parseFloat(position);
+    }
+    
+    if (mainWindow && !mainWindow.isMinimized()) {
+        mainWindow.focus();
     }
 });
 
