@@ -3740,16 +3740,33 @@ function renderPlaylists() {
 
         let expInfo = '';
         if (playlist.exp_date) {
-            let expStr = playlist.exp_date;
-            if (/^\d{10}$/.test(expStr)) {
-                expStr = new Date(parseInt(expStr) * 1000).toLocaleDateString();
-            } else if (/^\d{13}$/.test(expStr)) {
-                expStr = new Date(parseInt(expStr)).toLocaleDateString();
+            const rawExp = String(playlist.exp_date).trim().toLowerCase();
+            if (rawExp === 'never' || rawExp === 'unlimited' || rawExp === 'null' || rawExp === '0' || rawExp === '') {
+                expInfo = `<span><strong>Expires:</strong> <span style="color: #43CB44; font-weight: bold;">Never</span></span>`;
             } else {
-                const parsedDate = new Date(expStr);
-                if (!isNaN(parsedDate)) expStr = parsedDate.toLocaleDateString();
+                let expStr = playlist.exp_date;
+                if (/^\d{10}$/.test(expStr)) {
+                    expStr = new Date(parseInt(expStr) * 1000).toLocaleDateString();
+                } else if (/^\d{13}$/.test(expStr)) {
+                    expStr = new Date(parseInt(expStr)).toLocaleDateString();
+                } else {
+                    const parsedDate = new Date(expStr);
+                    if (!isNaN(parsedDate)) {
+                        // Make sure we don't accidentally display 1970-01-01 or Unix epoch starting points as custom dates (often represents "Never")
+                        if (parsedDate.getTime() <= 86400000) {
+                            expStr = 'Never';
+                        } else {
+                            expStr = parsedDate.toLocaleDateString();
+                        }
+                    }
+                }
+
+                if (expStr.toLowerCase() === 'never') {
+                    expInfo = `<span><strong>Expires:</strong> <span style="color: #43CB44; font-weight: bold;">Never</span></span>`;
+                } else {
+                    expInfo = `<span><strong>Expires:</strong> <span style="color: #FFD700; font-weight: bold;">${expStr}</span></span>`;
+                }
             }
-            expInfo = `<span><strong>Expires:</strong> <span style="color: #FFD700;">${expStr}</span></span>`;
         }
 
         const isStalker = playlist.epg && playlist.epg.startsWith('stalker:');
@@ -4448,13 +4465,35 @@ if (importSubmitBtn) {
             }
             epgSource = importEpgInput ? importEpgInput.value.trim() : '';
             
-            // Auto-detect Xtream Codes URL pasted in the M3U box
-            const urlPattern = /^(https?:\/\/[^/]+)\/(?:get|player_api)\.php\?(?:.*&)?username=([^&]+)(?:.*&)?password=([^&]+)/i;
-            const match = source.match(urlPattern);
-            if (match) {
-                const server = match[1];
-                const username = match[2];
-                const password = match[3];
+            // Auto-detect Xtream Codes URL pasted in the M3U box using robust URL and URLSearchParams parsing
+            let isXtreamUrl = false;
+            let server = '';
+            let username = '';
+            let password = '';
+            try {
+                const parsedUrl = new URL(source);
+                if (parsedUrl.pathname.endsWith('/get.php') || parsedUrl.pathname.endsWith('/player_api.php')) {
+                    const params = parsedUrl.searchParams;
+                    if (params.has('username') && params.has('password')) {
+                        server = `${parsedUrl.protocol}//${parsedUrl.host}`;
+                        username = params.get('username');
+                        password = params.get('password');
+                        isXtreamUrl = true;
+                    }
+                }
+            } catch (err) {
+                // Fallback to regex pattern matching for potentially non-standard URLs
+                const urlPattern = /^(https?:\/\/[^/]+)\/(?:get|player_api)\.php\?(?:.*&)?username=([^&]+)(?:.*&)?password=([^&]+)/i;
+                const match = source.match(urlPattern);
+                if (match) {
+                    server = match[1];
+                    username = match[2];
+                    password = match[3];
+                    isXtreamUrl = true;
+                }
+            }
+
+            if (isXtreamUrl && server && username && password) {
                 console.log('[AUTO FALLBACK] Detected Xtream Codes URL in M3U box! Parsing as Xtream Codes portal in background:', server, username);
                 
                 showGlobalSpinner("Authenticating...");
@@ -4588,14 +4627,30 @@ if (importXtremeSubmitBtn) {
         let username = user;
         let password = pass;
         
-        // Method B auto-extract regex
-        const urlPattern = /^(https?:\/\/[^/]+)\/(?:get|player_api)\.php\?(?:.*&)?username=([^&]+)(?:.*&)?password=([^&]+)/i;
-        const match = rawUrl.match(urlPattern);
-        if (match) {
-            server = match[1];
-            username = match[2];
-            password = match[3];
-            console.log('[XTREAM IMPORT] Auto-extracted credentials from M3U URL:', server, username);
+        // Robust standard URL & URLSearchParams parser for extracting credentials if a full URL is pasted
+        try {
+            const parsedUrl = new URL(rawUrl);
+            if (parsedUrl.pathname.endsWith('/get.php') || parsedUrl.pathname.endsWith('/player_api.php')) {
+                const params = parsedUrl.searchParams;
+                if (params.has('username') && params.has('password')) {
+                    server = `${parsedUrl.protocol}//${parsedUrl.host}`;
+                    username = params.get('username');
+                    password = params.get('password');
+                    console.log('[XTREAM IMPORT] Auto-extracted credentials using robust URL parser:', server, username);
+                }
+            } else {
+                server = `${parsedUrl.protocol}//${parsedUrl.host}`;
+            }
+        } catch (err) {
+            // Fallback to regex pattern matching
+            const urlPattern = /^(https?:\/\/[^/]+)\/(?:get|player_api)\.php\?(?:.*&)?username=([^&]+)(?:.*&)?password=([^&]+)/i;
+            const match = rawUrl.match(urlPattern);
+            if (match) {
+                server = match[1];
+                username = match[2];
+                password = match[3];
+                console.log('[XTREAM IMPORT] Auto-extracted credentials from M3U URL regex fallback:', server, username);
+            }
         }
         
         if (!username || !password) {

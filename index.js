@@ -3306,18 +3306,18 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
 const stalkerTokens = new Map();
 const stalkerAuthPromises = new Map();
 
-async function authenticateStalker(baseUrl, mac) {
+async function authenticateStalker(baseUrl, mac, forceFresh = false) {
     const url = getStalkerUrl(baseUrl);
     const cacheKey = `${url}|${mac}`;
     
-    if (stalkerTokens.has(cacheKey)) {
+    if (!forceFresh && stalkerTokens.has(cacheKey)) {
         const cached = stalkerTokens.get(cacheKey);
         if (Date.now() - cached.timestamp < 3600000) {
             return cached;
         }
     }
 
-    if (stalkerAuthPromises.has(cacheKey)) {
+    if (!forceFresh && stalkerAuthPromises.has(cacheKey)) {
         return await stalkerAuthPromises.get(cacheKey);
     }
 
@@ -3415,8 +3415,8 @@ async function authenticateStalker(baseUrl, mac) {
     return await authPromise;
 }
 
-async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = false) {
-    const session = await authenticateStalker(baseUrl, mac);
+async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = false, forceFresh = false) {
+    const session = await authenticateStalker(baseUrl, mac, forceFresh);
     const url = session.activeUrl || getStalkerUrl(baseUrl);
     const cacheKey = `${getStalkerUrl(baseUrl)}|${mac}`;
     
@@ -3600,7 +3600,8 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
             originalCmd = originalCmd.substring(7).trim();
         }
 
-        // HEURISTIC: Direct Playback Bypass
+        // HEURISTIC: Direct Playback Bypass (Disabled to ensure play_tokens are always freshly resolved/renewed and do not result in HTTP 458 errors)
+        /*
         if (originalCmd.startsWith('http') && 
             !originalCmd.includes('localhost') && 
             !originalCmd.includes('127.0.0.1') && 
@@ -3612,8 +3613,25 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
             console.log('[STALKER IPC] Heuristic Match: Bypassing create_link for direct play URL:', originalCmd);
             return originalCmd;
         }
+        */
 
         const probes = [];
+
+        // Clean and extract standard Stalker stream ID if present
+        let streamId = '';
+        const streamMatch = originalCmd.match(/[?&]stream=(\d+)/);
+        if (streamMatch) {
+            streamId = streamMatch[1];
+        } else {
+            const chMatch = originalCmd.match(/\/ch\/(\d+)/);
+            if (chMatch) streamId = chMatch[1];
+        }
+
+        if (streamId) {
+            console.log('[STALKER IPC] Extracted Stream ID:', streamId, 'Injecting clean standard MAG commands.');
+            probes.push({ type: type || 'itv', cmd: `ffmpeg http://localhost/ch/${streamId}` });
+            probes.push({ type: type || 'itv', cmd: `ffmpeg http://localhost/ch/${streamId}_` });
+        }
 
         if (series !== undefined && series !== null) {
             probes.push({ type: 'vod', cmd, series });
@@ -3655,7 +3673,7 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
         
         for (const probe of probes) {
             console.log('[CREATE LINK PROBE]', probe);
-            const res = await stalkerRequest(url, mac, 'create_link', probe);
+            const res = await stalkerRequest(url, mac, 'create_link', probe, false, true);
             console.log('[CREATE LINK RAW]', JSON.stringify(res));
             
             const candidates = [
@@ -4431,11 +4449,26 @@ ipcMain.handle('parse-xtream', async (event, { name, server, username, password 
             });
         }
 
+        let safeExpDate = null;
+        if (userInfo.exp_date) {
+            const expStr = String(userInfo.exp_date).trim().toLowerCase();
+            if (expStr && expStr !== 'never' && expStr !== 'unlimited' && expStr !== 'null' && expStr !== '0') {
+                try {
+                    const parsedTimestamp = parseInt(expStr);
+                    if (!isNaN(parsedTimestamp) && parsedTimestamp > 0) {
+                        safeExpDate = new Date(parsedTimestamp * 1000).toISOString();
+                    }
+                } catch (err) {
+                    console.error('[XTREAM IPC] Error parsing exp_date timestamp:', err);
+                }
+            }
+        }
+
         console.log(`[XTREAM IPC] Finished parsing. Loaded total channels: ${allParsed.length}`);
         return {
             channels: allParsed,
             epg_url: 'xtream-epg:' + server,
-            exp_date: userInfo.exp_date ? new Date(parseInt(userInfo.exp_date) * 1000).toISOString() : null
+            exp_date: safeExpDate
         };
     } catch (e) {
         console.error('[XTREAM IPC ERR] Parser failed:', e);
@@ -4971,8 +5004,20 @@ ipcMain.handle('get-recordings', async () => {
     try {
         const files = fs.readdirSync(folder);
         const list = [];
+        
+        // Build a set of active recording filenames to filter them out
+        const activeFilenames = new Set();
+        for (const rec of activeRecordings.values()) {
+            if (rec.filename) {
+                activeFilenames.add(rec.filename);
+            }
+        }
+
         files.forEach(f => {
             if (f.endsWith('.ts')) {
+                if (activeFilenames.has(f)) {
+                    return; // Skip active recordings
+                }
                 const filePath = path.join(folder, f);
                 const stats = fs.statSync(filePath);
                 list.push({
