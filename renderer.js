@@ -908,6 +908,33 @@ aeroStyles.textContent = `
         font-weight: bold !important;
     }
 
+    .playlist-menu-btn {
+        background: transparent;
+        border: none;
+        color: #888;
+        padding: 10px 15px;
+        text-align: left;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 0.95em;
+        font-family: 'Outfit', 'Inter', sans-serif;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .playlist-menu-btn:hover {
+        color: #bb86fc;
+        background: rgba(187, 134, 252, 0.08);
+    }
+    .playlist-menu-btn.active {
+        color: #000 !important;
+        background: #bb86fc !important;
+        font-weight: bold !important;
+    }
+
     /* ========================================== */
     /*   EPG Guide Page Premium Redesign Overlays */
     /* ========================================== */
@@ -1133,21 +1160,13 @@ aeroStyles.textContent = `
         padding: 24px !important;
     }
 
-    #playlist-view > div > div {
-        background: rgba(18, 18, 24, 0.45) !important;
-        backdrop-filter: blur(24px) !important;
-        -webkit-backdrop-filter: blur(24px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.05) !important;
-        border-radius: 16px !important;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
-        padding: 24px !important;
-        box-sizing: border-box !important;
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    #card-add-playlist,
+    #card-my-playlists {
+        transition: border-color 0.25s ease !important;
     }
-    #playlist-view > div > div:hover {
+    #card-add-playlist:hover,
+    #card-my-playlists:hover {
         border-color: rgba(187, 134, 252, 0.2) !important;
-        transform: translateY(-4px) !important;
-        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4) !important;
     }
 
     #playlist-view input[type="text"],
@@ -3622,7 +3641,7 @@ function renderPlaylists() {
 
         card.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <h3 style="margin: 0; color: ${playlist.disabled ? '#888' : '#bb86fc'};">${playlist.name} ${playlist.disabled ? '(Disabled)' : ''}</h3>
+                <h3 style="margin: 0; color: ${playlist.disabled ? '#888' : '#e0e0e0'}; font-family: 'Outfit', 'Inter', sans-serif;">${playlist.name} ${playlist.disabled ? '<span style="color:#888; font-size: 0.8em;">(Disabled)</span>' : ''}</h3>
                 <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
                     <div style="display: flex; gap: 10px;">
                         <button class="playlist-btn edit-btn" data-index="${index}">Edit</button>
@@ -3849,6 +3868,57 @@ function renderPlaylists() {
             updateState();
         });
     });
+
+    // Playlist side-menu click handlers (smooth scroll to card)
+    const playlistView = document.getElementById('playlist-view');
+    document.querySelectorAll('.playlist-menu-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target');
+            const targetEl = document.getElementById(targetId);
+            if (targetEl && playlistView) {
+                const containerRect = playlistView.getBoundingClientRect();
+                const targetRect = targetEl.getBoundingClientRect();
+                const relativeTop = targetRect.top - containerRect.top + playlistView.scrollTop;
+                const targetScrollTop = Math.max(0, relativeTop - 30);
+                playlistView.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+            }
+        });
+    });
+
+    // Scroll-spy: update active playlist menu button based on scroll position
+    const updatePlaylistActiveMenuButton = () => {
+        if (!playlistView || playlistView.style.display === 'none') return;
+        const containerRect = playlistView.getBoundingClientRect();
+        const cards = ['card-add-playlist', 'card-my-playlists'];
+        let currentActive = 'card-add-playlist';
+        for (const cardId of cards) {
+            const el = document.getElementById(cardId);
+            if (el) {
+                const elRect = el.getBoundingClientRect();
+                const triggerPoint = containerRect.top + 150;
+                if (elRect.top <= triggerPoint) {
+                    currentActive = cardId;
+                }
+            }
+        }
+        if (playlistView.scrollHeight - playlistView.scrollTop - playlistView.clientHeight < 10) {
+            currentActive = 'card-my-playlists';
+        }
+        document.querySelectorAll('.playlist-menu-btn').forEach(btn => {
+            if (btn.getAttribute('data-target') === currentActive) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    };
+
+    if (playlistView) {
+        playlistView.removeEventListener('scroll', window.updatePlaylistActiveMenu);
+        window.updatePlaylistActiveMenu = updatePlaylistActiveMenuButton;
+        playlistView.addEventListener('scroll', window.updatePlaylistActiveMenu);
+        updatePlaylistActiveMenuButton();
+    }
 }
 
 try {
@@ -4044,9 +4114,13 @@ function renderChannels() {
     });
     
     if (!window.initialScrollLoaded) {
-        const savedScroll = parseInt(localStorage.getItem('iptv_sidebar_scroll'), 10);
-        if (!isNaN(savedScroll)) channelList.scrollTop = savedScroll;
         window.initialScrollLoaded = true;
+        // If a startup autoplay is pending, skip restoring the old scroll so the
+        // playing channel can be scrolled to the top row by embedStream.
+        if (!window.startupAutoplayPending) {
+            const savedScroll = parseInt(localStorage.getItem('iptv_sidebar_scroll'), 10);
+            if (!isNaN(savedScroll)) channelList.scrollTop = savedScroll;
+        }
     } else {
         channelList.scrollTop = previousScroll;
     }
@@ -9423,7 +9497,13 @@ window.addEventListener('DOMContentLoaded', async () => {
             if (lastUrl) {
                 const lastChannel = allChannels.find(c => c.url === lastUrl);
                 if (lastChannel) {
+                    // Signal renderChannels to skip saved-scroll restoration so we
+                    // can position the playing channel at the top of the list.
+                    window.startupAutoplayPending = true;
                     embedStream(lastChannel);
+                    window.startupAutoplayPending = false;
+                    // After the DOM settles, force the active channel to the top row.
+                    setTimeout(() => updatePlayingChannelIndicator({ scroll: true, block: 'start' }), 300);
                     startedPlayback = true;
                 }
             }

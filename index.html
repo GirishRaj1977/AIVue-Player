@@ -857,69 +857,92 @@
         </div>
     </div>
     
-    <div id="playlist-view" style="display: flex; flex-grow: 1; flex-direction: column; padding: 30px; background: transparent; overflow-y: auto; align-items: center; border: 1px solid #e0e0e0; border-radius: 12px;">
-        <div style="width: 100%; max-width: 800px; display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px;">
-            <button id="clear-btn" class="playlist-btn delete" style="display: none;">Delete All</button>
-        </div>
-        
+    <div id="playlist-view" style="display: flex; flex-grow: 1; flex-direction: column; background: transparent; overflow-y: auto; border: none; border-radius: 12px; padding: 24px;">
+
         <div id="loading" style="display: none; color: #bb86fc; font-weight: bold; text-align: center; margin-bottom: 20px;">Importing playlist...</div>
 
-        <div style="width: 100%; max-width: 800px; background: rgba(30, 30, 30, 0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; display: flex; flex-direction: column; gap: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.55); margin-bottom: 30px; box-sizing: border-box; font-family: 'Inter', sans-serif;">
-            <h3 style="margin: 0; color: #bb86fc; text-align: center; font-family: 'Outfit', sans-serif; font-size: 1.4em; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">Add Playlist</h3>
-            
-            <!-- Tab Headers -->
-            <div style="display: flex; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 5px; border: 1px solid rgba(255,255,255,0.05); gap: 6px;">
-                <button id="tab-playlist-m3u" class="playlist-tab-btn active" style="flex: 1; padding: 11px; background: transparent; color: #a1a1aa; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; transition: all 0.25s; font-size: 0.92em;">M3U Playlist</button>
-                <button id="tab-playlist-xtreme" class="playlist-tab-btn" style="flex: 1; padding: 11px; background: transparent; color: #a1a1aa; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; transition: all 0.25s; font-size: 0.92em;">Xtream Codes</button>
-                <button id="tab-playlist-stalker" class="playlist-tab-btn" style="flex: 1; padding: 11px; background: transparent; color: #a1a1aa; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; transition: all 0.25s; font-size: 0.92em;">Stalker Portal</button>
+        <!-- Two-column layout: mini side menu + right content -->
+        <div style="display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; min-width: 0; align-items: flex-start; padding: 10px 0;">
+
+            <!-- Left Sticky Mini-Menu -->
+            <div id="playlist-side-menu" style="width: 200px; flex-shrink: 0; position: sticky; top: 10px; background: rgba(30, 30, 30, 0.75); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid #333; border-radius: 12px; padding: 15px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); z-index: 10;">
+                <h3 style="color: #bb86fc; margin: 0 0 10px 0; font-size: 1.25em; font-family: 'Outfit', 'Inter', sans-serif; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">Playlists</h3>
+                <button class="playlist-menu-btn active" data-target="card-add-playlist">Add Playlist</button>
+                <button class="playlist-menu-btn" data-target="card-my-playlists">My Playlists</button>
             </div>
-            
-            <!-- Tab Content: M3U -->
-            <div id="content-playlist-m3u" class="playlist-tab-content" style="display: flex; flex-direction: column; gap: 16px;">
-                <input type="text" id="import-name" placeholder="Playlist Name (Required)" style="padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none; transition: border-color 0.2s;">
-                <div style="display: flex; gap: 10px;">
-                    <button id="btn-mode-file" class="import-mode-btn active" style="flex: 1; padding: 10px; border-radius: 8px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s;">M3U File</button>
-                    <button id="btn-mode-url" class="import-mode-btn" style="flex: 1; padding: 10px; border-radius: 8px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s;">M3U URL</button>
+
+            <!-- Right Column Cards -->
+            <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 30px;">
+
+                <!-- Add Playlist Card -->
+                <div id="card-add-playlist" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0; box-sizing: border-box;">
+                    <h3 style="margin: 0 0 5px 0; color: #e0e0e0; font-family: 'Outfit', 'Inter', sans-serif;">Add Playlist</h3>
+                    <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Import an M3U playlist, Xtream Codes portal, or Stalker IPTV portal to get started.</p>
+
+                    <!-- Tab Headers -->
+                    <div style="display: flex; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 5px; border: 1px solid rgba(255,255,255,0.05); gap: 6px; margin-bottom: 20px;">
+                        <button id="tab-playlist-m3u" class="playlist-tab-btn active" style="flex: 1; padding: 11px; background: transparent; color: #a1a1aa; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; transition: all 0.25s; font-size: 0.92em;">M3U Playlist</button>
+                        <button id="tab-playlist-xtreme" class="playlist-tab-btn" style="flex: 1; padding: 11px; background: transparent; color: #a1a1aa; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; transition: all 0.25s; font-size: 0.92em;">Xtream Codes</button>
+                        <button id="tab-playlist-stalker" class="playlist-tab-btn" style="flex: 1; padding: 11px; background: transparent; color: #a1a1aa; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; transition: all 0.25s; font-size: 0.92em;">Stalker Portal</button>
+                    </div>
+
+                    <!-- Tab Content: M3U -->
+                    <div id="content-playlist-m3u" class="playlist-tab-content" style="display: flex; flex-direction: column; gap: 16px;">
+                        <input type="text" id="import-name" placeholder="Playlist Name (Required)" style="padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none; transition: border-color 0.2s;">
+                        <div style="display: flex; gap: 10px;">
+                            <button id="btn-mode-file" class="import-mode-btn active" style="flex: 1; padding: 10px; border-radius: 8px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s;">M3U File</button>
+                            <button id="btn-mode-url" class="import-mode-btn" style="flex: 1; padding: 10px; border-radius: 8px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s;">M3U URL</button>
+                        </div>
+                        <div id="input-container-file" style="display: flex; gap: 10px;">
+                            <input type="text" id="import-file-path" readonly placeholder="Select a file location..." style="flex-grow: 1; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
+                            <button id="import-browse-btn" style="padding: 12px 24px; cursor: pointer; background: #333; color: white; border: 1px solid #444; font-weight: bold; border-radius: 8px; transition: all 0.2s; font-size: 0.95em;">Browse</button>
+                        </div>
+                        <div id="input-container-url" style="display: none;">
+                            <input type="text" id="import-url-path" placeholder="http://..." style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
+                        </div>
+                        <input type="text" id="import-epg-path" placeholder="EPG URL or Local Path (Optional)" style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
+                        <div style="display: flex; gap: 10px; margin-top: 5px;">
+                            <button id="import-submit-btn" style="flex: 1; padding: 13px; cursor: pointer; background: #bb86fc; color: #000; border: none; font-weight: bold; border-radius: 8px; font-size: 1.05em; transition: all 0.2s;">Import Playlist</button>
+                            <button id="import-cancel-btn" style="display: none; flex: 1; padding: 13px; cursor: pointer; background: #444; color: white; border: none; font-weight: bold; border-radius: 8px; font-size: 1.05em; transition: all 0.2s;">Cancel</button>
+                        </div>
+                    </div>
+
+                    <!-- Tab Content: Xtream Codes -->
+                    <div id="content-playlist-xtreme" class="playlist-tab-content" style="display: none; flex-direction: column; gap: 16px;">
+                        <input type="text" id="import-xtreme-name" placeholder="Playlist Name (Required)" style="padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
+                        <input type="text" id="import-xtreme-url" placeholder="Server URL (e.g., http://xtream-server.com:80)" style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
+                        <input type="text" id="import-xtreme-user" placeholder="Username" style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
+                        <input type="password" id="import-xtreme-pass" placeholder="Password" style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
+                        <div style="display: flex; gap: 10px; margin-top: 5px;">
+                            <button id="import-xtreme-submit-btn" style="flex: 1; padding: 13px; cursor: pointer; background: #bb86fc; color: #000; border: none; font-weight: bold; border-radius: 8px; font-size: 1.05em; transition: all 0.2s;">Import Playlist</button>
+                            <button id="import-xtreme-cancel-btn" style="display: none; flex: 1; padding: 13px; cursor: pointer; background: #444; color: white; border: none; font-weight: bold; border-radius: 8px; font-size: 1.05em; transition: all 0.2s;">Cancel</button>
+                        </div>
+                    </div>
+
+                    <!-- Tab Content: Stalker Portal -->
+                    <div id="content-playlist-stalker" class="playlist-tab-content" style="display: none; flex-direction: column; gap: 16px;">
+                        <input type="text" id="import-stalker-name" placeholder="Playlist Name (Required)" style="padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
+                        <input type="text" id="import-stalker-url" placeholder="Stalker Portal URL (e.g. http://example.com/c/)" style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
+                        <input type="text" id="import-stalker-mac" placeholder="MAC Address (e.g. 00:1A:79:XX:XX:XX)" style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
+                        <div style="display: flex; gap: 10px; margin-top: 5px;">
+                            <button id="import-stalker-submit-btn" style="flex: 1; padding: 13px; cursor: pointer; background: #bb86fc; color: #000; border: none; font-weight: bold; border-radius: 8px; font-size: 1.05em; transition: all 0.2s;">Import Playlist</button>
+                            <button id="import-stalker-cancel-btn" style="display: none; flex: 1; padding: 13px; cursor: pointer; background: #444; color: white; border: none; font-weight: bold; border-radius: 8px; font-size: 1.05em; transition: all 0.2s;">Cancel</button>
+                        </div>
+                    </div>
                 </div>
-                <div id="input-container-file" style="display: flex; gap: 10px;">
-                    <input type="text" id="import-file-path" readonly placeholder="Select a file location..." style="flex-grow: 1; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
-                    <button id="import-browse-btn" style="padding: 12px 24px; cursor: pointer; background: #333; color: white; border: 1px solid #444; font-weight: bold; border-radius: 8px; transition: all 0.2s; font-size: 0.95em;">Browse</button>
+
+                <!-- My Playlists Card -->
+                <div id="card-my-playlists" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0; box-sizing: border-box;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                        <h3 style="margin: 0; color: #e0e0e0; font-family: 'Outfit', 'Inter', sans-serif;">My Playlists</h3>
+                        <button id="clear-btn" class="playlist-btn delete" style="display: none;">Delete All</button>
+                    </div>
+                    <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Manage your imported playlists — edit, refresh, enable/disable or delete them.</p>
+                    <div id="playlist-cards" style="display: flex; flex-direction: column; gap: 15px;"></div>
                 </div>
-                <div id="input-container-url" style="display: none;">
-                    <input type="text" id="import-url-path" placeholder="http://..." style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
-                </div>
-                <input type="text" id="import-epg-path" placeholder="EPG URL or Local Path (Optional)" style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
-                <div style="display: flex; gap: 10px; margin-top: 5px;">
-                    <button id="import-submit-btn" style="flex: 1; padding: 13px; cursor: pointer; background: #bb86fc; color: #000; border: none; font-weight: bold; border-radius: 8px; font-size: 1.05em; transition: all 0.2s;">Import Playlist</button>
-                    <button id="import-cancel-btn" style="display: none; flex: 1; padding: 13px; cursor: pointer; background: #444; color: white; border: none; font-weight: bold; border-radius: 8px; font-size: 1.05em; transition: all 0.2s;">Cancel</button>
-                </div>
-            </div>
-            
-            <!-- Tab Content: Xtream Codes -->
-            <div id="content-playlist-xtreme" class="playlist-tab-content" style="display: none; flex-direction: column; gap: 16px;">
-                <input type="text" id="import-xtreme-name" placeholder="Playlist Name (Required)" style="padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
-                <input type="text" id="import-xtreme-url" placeholder="Server URL (e.g., http://xtream-server.com:80)" style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
-                <input type="text" id="import-xtreme-user" placeholder="Username" style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
-                <input type="password" id="import-xtreme-pass" placeholder="Password" style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
-                <div style="display: flex; gap: 10px; margin-top: 5px;">
-                    <button id="import-xtreme-submit-btn" style="flex: 1; padding: 13px; cursor: pointer; background: #bb86fc; color: #000; border: none; font-weight: bold; border-radius: 8px; font-size: 1.05em; transition: all 0.2s;">Import Playlist</button>
-                    <button id="import-xtreme-cancel-btn" style="display: none; flex: 1; padding: 13px; cursor: pointer; background: #444; color: white; border: none; font-weight: bold; border-radius: 8px; font-size: 1.05em; transition: all 0.2s;">Cancel</button>
-                </div>
-            </div>
-            
-            <!-- Tab Content: Stalker Portal -->
-            <div id="content-playlist-stalker" class="playlist-tab-content" style="display: none; flex-direction: column; gap: 16px;">
-                <input type="text" id="import-stalker-name" placeholder="Playlist Name (Required)" style="padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
-                <input type="text" id="import-stalker-url" placeholder="Stalker Portal URL (e.g. http://example.com/c/)" style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
-                <input type="text" id="import-stalker-mac" placeholder="MAC Address (e.g. 00:1A:79:XX:XX:XX)" style="width: 100%; padding: 12px 15px; background: #121212; border: 1px solid #3c3c3c; color: white; border-radius: 8px; box-sizing: border-box; font-size: 0.95em; outline: none;">
-                <div style="display: flex; gap: 10px; margin-top: 5px;">
-                    <button id="import-stalker-submit-btn" style="flex: 1; padding: 13px; cursor: pointer; background: #bb86fc; color: #000; border: none; font-weight: bold; border-radius: 8px; font-size: 1.05em; transition: all 0.2s;">Import Playlist</button>
-                    <button id="import-stalker-cancel-btn" style="display: none; flex: 1; padding: 13px; cursor: pointer; background: #444; color: white; border: none; font-weight: bold; border-radius: 8px; font-size: 1.05em; transition: all 0.2s;">Cancel</button>
-                </div>
-            </div>
-        </div>
-        
-        <div id="playlist-cards" style="width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 15px;"></div>
+
+            </div><!-- end right column -->
+        </div><!-- end two-column layout -->
     </div>
     
     <div id="recording-view" style="display: none; flex-grow: 1; flex-direction: column; padding: 30px; background: transparent; border: 1px solid #e0e0e0; border-radius: 12px; overflow-y: auto;">
