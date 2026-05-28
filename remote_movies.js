@@ -81,6 +81,81 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000);
     }
 
+    let tmdbObserver = null;
+    function initTmdbObserver() {
+        if (tmdbObserver) return;
+        
+        let requestQueue = [];
+        let isProcessingQueue = false;
+        
+        async function processQueue() {
+            if (requestQueue.length === 0) {
+                isProcessingQueue = false;
+                return;
+            }
+            isProcessingQueue = true;
+            const task = requestQueue.shift();
+            try {
+                await task();
+            } catch (e) {
+                console.error('[TMDB QUEUE] Scraper task failed:', e);
+            }
+            setTimeout(processQueue, 150);
+        }
+        
+        tmdbObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const card = entry.target;
+                    const title = card.dataset.originalTitle;
+                    
+                    if (title && card.dataset.tmdbLoaded !== 'true') {
+                        requestQueue.push(async () => {
+                            if (card.dataset.tmdbLoaded === 'true') return;
+                            
+                            const tmdbId = card.dataset.tmdbId;
+                            const type = isSeriesPage ? 'series' : 'movie';
+                            let url = `/api/tmdb/search?title=${encodeURIComponent(title)}&type=${type}`;
+                            
+                            if (tmdbId) {
+                                url = `/api/tmdb/details?id=${tmdbId}&type=${type}`;
+                            }
+                            
+                            try {
+                                const res = await fetch(url);
+                                const data = await res.json();
+                                
+                                if (data && !data.error) {
+                                    card.dataset.tmdbLoaded = 'true';
+                                    card.dataset.tmdbData = JSON.stringify(data);
+                                    
+                                    if (data.poster_path) {
+                                        const img = card.querySelector('.movie-poster');
+                                        if (img) {
+                                            img.src = data.poster_path;
+                                            img.style.opacity = '1';
+                                        }
+                                    }
+                                } else {
+                                    card.dataset.tmdbLoaded = 'error';
+                                }
+                            } catch (e) {
+                                card.dataset.tmdbLoaded = 'error';
+                            }
+                        });
+                        
+                        if (!isProcessingQueue) {
+                            processQueue();
+                        }
+                    }
+                    tmdbObserver.unobserve(card);
+                }
+            });
+        }, {
+            rootMargin: '0px 200px 0px 200px'
+        });
+    }
+
     const imageObserver = new IntersectionObserver((entries, observer) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
@@ -96,6 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { rootMargin: '0px 0px 200px 0px' });
 
     async function initializeApp() {
+        initTmdbObserver();
         try {
             const apiEndpoint = isSeriesPage ? '/api/series' : '/api/movies';
             const res = await fetch(apiEndpoint);
@@ -235,8 +311,13 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const title = item.name || item.title;
             const logoUrl = item.logo || '/player.png';
+            const tmdbId = item.tmdb_id || item.tmdbId || '';
             
             card.dataset.title = title.toLowerCase();
+            card.dataset.originalTitle = title;
+            if (tmdbId) {
+                card.dataset.tmdbId = tmdbId;
+            }
             
             card.innerHTML = `
                 <div class="movie-poster-wrapper">
@@ -247,11 +328,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
             
-            card.addEventListener('click', () => showDetailsModal(item));
+            card.addEventListener('click', () => {
+                if (card.dataset.tmdbData) {
+                    item.tmdbData = JSON.parse(card.dataset.tmdbData);
+                }
+                showDetailsModal(item);
+            });
             grid.appendChild(card);
             
             const img = card.querySelector('.movie-poster');
             if (img) imageObserver.observe(img);
+            if (tmdbObserver) tmdbObserver.observe(card);
         });
     }
 
@@ -297,12 +384,22 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.style.overflow = 'hidden';
 
         // 1. Fetch TMDB details
-        let tmdbData = null;
+        let tmdbData = item.tmdbData || null;
+        if (!tmdbData) {
+            try {
+                const tmdbId = item.tmdb_id || item.tmdbId;
+                let url = `/api/tmdb/search?title=${encodeURIComponent(item.name || item.title)}&type=${isSeriesPage ? 'series' : 'movie'}`;
+                if (tmdbId) {
+                    url = `/api/tmdb/details?id=${tmdbId}&type=${isSeriesPage ? 'series' : 'movie'}`;
+                }
+                const res = await fetch(url);
+                tmdbData = await res.json();
+            } catch (e) {
+                console.error('TMDB load error:', e);
+            }
+        }
+        
         try {
-            const queryParam = `title=${encodeURIComponent(item.name || item.title)}&type=${isSeriesPage ? 'series' : 'movie'}`;
-            const res = await fetch(`/api/tmdb/search?${queryParam}`);
-            tmdbData = await res.json();
-            
             if (tmdbData && !tmdbData.error) {
                 if (tmdbData.backdrop_path) {
                     document.getElementById('modal-backdrop-container').style.backgroundImage = `url(${tmdbData.backdrop_path})`;
@@ -314,9 +411,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const date = tmdbData.release_date || tmdbData.first_air_date;
                     document.getElementById('modal-year').innerText = new Date(date).getFullYear();
                 }
-                if (tmdbData.vote_average) {
+                if (tmdbData.vote_average && tmdbData.vote_average !== 'N/A') {
                     rateBadge.style.display = 'inline-block';
-                    rateBadge.innerText = `⭐ ${tmdbData.vote_average.toFixed(1)}`;
+                    rateBadge.innerText = `⭐ ${parseFloat(tmdbData.vote_average).toFixed(1)}`;
                 }
                 if (tmdbData.overview) {
                     document.getElementById('modal-overview').innerText = tmdbData.overview;
@@ -336,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         } catch (e) {
-            console.error('TMDB load error:', e);
+            console.error('TMDB rendering error:', e);
             if (!localPlot) {
                 document.getElementById('modal-overview').innerText = 'No description available.';
             }

@@ -1600,6 +1600,14 @@ function toggleReminder(channelTitle, progTitle, startTimeStr, stopTimeStr) {
 
 function showToast(message) {
     console.log(`[UI] showToast: "${message}"`);
+
+    if (window.isAppFullscreen && streamActive) {
+        if (window.iptvAPI && typeof window.iptvAPI.showNativeToast === 'function') {
+            window.iptvAPI.showNativeToast(message, 3000);
+            return;
+        }
+        window.iptvAPI.sendMpvCommand(['show-text', message, '3000']);
+    }
     let toast = document.getElementById('toast-notification');
     if (!toast) {
         toast = document.createElement('div');
@@ -1627,6 +1635,10 @@ function showToast(message) {
 
 function showConfirmToast(message, onConfirm) {
     console.log(`[UI] showConfirmToast: "${message}"`);
+
+    if (window.isAppFullscreen) {
+        window.iptvAPI.toggleFullscreen();
+    }
     let toast = document.getElementById('toast-notification');
     if (!toast) {
         toast = document.createElement('div');
@@ -2868,7 +2880,7 @@ async function applySingleMapping(channelTitle, epgId) {
         if (currentUrl) {
             const currentChannel = allChannels.find(c => c.url === currentUrl);
             if (currentChannel && currentChannel.title === channelTitle) {
-                embedStream(currentChannel);
+                embedStream(currentChannel, 'nearest');
             }
         }
     }
@@ -3845,8 +3857,68 @@ try {
     window.expandedGroups = new Set();
 }
 
+function getMiniEqualizerHtml() {
+    return `
+        <div class="mini-equalizer" title="Playing">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    `;
+}
+
+function isSamePlaybackChannel(a, b) {
+    if (!a || !b) return false;
+    const aUrl = a.url || a.stream_url || '';
+    const bUrl = b.url || b.stream_url || '';
+    return aUrl === bUrl &&
+        (a.title || 'Unknown Channel') === (b.title || 'Unknown Channel') &&
+        String(a.playlistId || a.playlist_id || '') === String(b.playlistId || b.playlist_id || '');
+}
+
+function refreshCurrentPlayingChannelIndex() {
+    if (!streamActive || !window.currentPlaybackChannel) return;
+    const resolvedIndex = allChannels.findIndex(channel => isSamePlaybackChannel(channel, window.currentPlaybackChannel));
+    if (resolvedIndex >= 0) currentPlayingChannelIndex = resolvedIndex;
+}
+
+function isPlayingChannel(channel, index) {
+    if (!streamActive || currentPlayingChannelIndex < 0) return false;
+    if (index === currentPlayingChannelIndex) return true;
+    return isSamePlaybackChannel(channel, window.currentPlaybackChannel);
+}
+
+function clearPlayingChannelIndicator() {
+    document.querySelectorAll('.channel-item.active').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.channel-item .mini-equalizer').forEach(el => el.remove());
+}
+
+function updatePlayingChannelIndicator(options = {}) {
+    refreshCurrentPlayingChannelIndex();
+    clearPlayingChannelIndicator();
+    if (!streamActive || currentPlayingChannelIndex < 0) return;
+
+    const activeEl = document.querySelector(`.channel-item[data-index="${currentPlayingChannelIndex}"]`);
+    if (!activeEl) return;
+
+    activeEl.classList.add('active');
+    const favBtn = activeEl.querySelector('.fav-btn');
+    if (favBtn) {
+        favBtn.insertAdjacentHTML('beforebegin', getMiniEqualizerHtml());
+    } else {
+        activeEl.insertAdjacentHTML('beforeend', getMiniEqualizerHtml());
+    }
+
+    if (options.scroll) {
+        setTimeout(() => {
+                activeEl.scrollIntoView({ behavior: 'smooth', block: options.block || 'nearest' });
+        }, 100);
+    }
+}
+
 function renderChannels() {
     console.log('[UI] Rendering channel list.');
+    refreshCurrentPlayingChannelIndex();
     const filterSelect = document.getElementById('playlist-filter');
     const filterVal = filterSelect ? filterSelect.value : 'all';
 
@@ -3879,14 +3951,8 @@ function renderChannels() {
                 const favClass = channel.favourite ? 'fav-btn active' : 'fav-btn';
                 const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
 
-                const activeClass = (index === currentPlayingChannelIndex) ? ' active' : '';
-                const eqHtml = (index === currentPlayingChannelIndex) ? `
-                    <div class="mini-equalizer" title="Playing">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </div>
-                ` : '';
+                const activeClass = isPlayingChannel(channel, index) ? ' active' : '';
+                const eqHtml = isPlayingChannel(channel, index) ? getMiniEqualizerHtml() : '';
 
                 html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}">
                     <img src="${imgSrc}">
@@ -3951,14 +4017,8 @@ function renderChannels() {
                         const playlistName = playlist ? playlist.name : '';
                         const playlistBadge = (filterVal === 'all' && playlistName) ? ` <span style="color: #666; font-size: 0.8em; font-weight: 500; margin-left: 4px;">[${playlistName}]</span>` : '';
 
-                        const activeClass = (index === currentPlayingChannelIndex) ? ' active' : '';
-                        const eqHtml = (index === currentPlayingChannelIndex) ? `
-                            <div class="mini-equalizer" title="Playing">
-                                <span></span>
-                                <span></span>
-                                <span></span>
-                            </div>
-                        ` : '';
+                        const activeClass = isPlayingChannel(channel, index) ? ' active' : '';
+                        const eqHtml = isPlayingChannel(channel, index) ? getMiniEqualizerHtml() : '';
 
                         html += `<div class="channel-item${activeClass}" tabindex="0" data-index="${index}" title="${safeTitle.replace(/"/g, '&quot;')}">
                             <img src="${imgSrc}">
@@ -3990,6 +4050,8 @@ function renderChannels() {
     } else {
         channelList.scrollTop = previousScroll;
     }
+
+    updatePlayingChannelIndicator();
 }
 
 const filterElement = document.getElementById('playlist-filter');
@@ -4051,7 +4113,7 @@ channelList.addEventListener('click', (e) => {
     if (item) {
         const index = item.getAttribute('data-index');
         const channel = allChannels[index];
-        if (channel) embedStream(channel);
+            if (channel) embedStream(channel, 'nearest');
     }
 });
 
@@ -4543,6 +4605,10 @@ async function saveCurrentPlaybackProgress() {
 }
 
 function showResumePromptModal(savedSeconds, onChoice) {
+    if (window.isAppFullscreen) {
+        window.iptvAPI.toggleFullscreen();
+    }
+
     let modal = document.getElementById('resume-prompt-modal');
     if (!modal) {
         modal = document.createElement('div');
@@ -5754,7 +5820,7 @@ async function renderFullEpg() {
     }, 60000);
 }
 
-async function embedStream(channel) {
+async function embedStream(channel, scrollMode = 'start') {
     console.log('[STREAM] Embedding stream for channel:', channel.title);
     streamActive = true;
     window.currentPlaybackHeaders = null;
@@ -5771,6 +5837,7 @@ async function embedStream(channel) {
     window.hasStartedPlayback = false;
     
     currentPlayingChannelIndex = allChannels.findIndex(c => c.url === channel.url && c.title === channel.title);
+    window.currentPlaybackChannel = channel;
 
     const groupName = channel.group || 'Uncategorized';
     if (!window.expandedGroups.has(groupName)) {
@@ -5779,14 +5846,7 @@ async function embedStream(channel) {
         renderChannels();
     }
 
-    document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
-    const activeEl = document.querySelector(`.channel-item[data-index="${currentPlayingChannelIndex}"]`);
-    if (activeEl) {
-        activeEl.classList.add('active');
-        setTimeout(() => {
-            activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 100);
-    }
+    updatePlayingChannelIndicator({ scroll: true, block: scrollMode });
 
     const fsBtn = document.getElementById('fullscreen-btn');
     if (fsBtn) fsBtn.style.display = 'block';
@@ -5822,7 +5882,7 @@ async function embedStream(channel) {
                 }
                 streamActive = false;
                 currentPlayingChannelIndex = -1;
-                document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+                clearPlayingChannelIndicator();
                 const fsBtn = document.getElementById('fullscreen-btn');
                 if (fsBtn) fsBtn.style.display = 'none';
                 return;
@@ -5850,7 +5910,7 @@ async function embedStream(channel) {
                 }
                 streamActive = false;
                 currentPlayingChannelIndex = -1;
-                document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+                clearPlayingChannelIndicator();
                 const fsBtn = document.getElementById('fullscreen-btn');
                 if (fsBtn) fsBtn.style.display = 'none';
                 return;
@@ -5908,7 +5968,7 @@ async function embedStream(channel) {
                 }
                 streamActive = false;
                 currentPlayingChannelIndex = -1;
-                document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+                clearPlayingChannelIndicator();
                 const fsBtn = document.getElementById('fullscreen-btn');
                 if (fsBtn) fsBtn.style.display = 'none';
                 return;
@@ -6086,7 +6146,7 @@ async function embedStream(channel) {
         title: channel.title,
         headers: window.currentPlaybackHeaders || null,
         bounds: {
-            x: Math.round(rect.x),
+            x: Math.ceil(rect.x),
             y: Math.round(rect.y),
             width: Math.round(rect.width),
             height: Math.round(rect.height)
@@ -6100,7 +6160,7 @@ async function embedStream(channel) {
             window.isSwitchingStream = false;
             streamActive = false;
             currentPlayingChannelIndex = -1;
-            document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+            clearPlayingChannelIndicator();
             
             // Stop MPV rendering
             window.iptvAPI.sendMpvCommand('stop');
@@ -6275,7 +6335,7 @@ window.iptvAPI.onStreamFailedRetry(async () => {
         title: window.currentPlaybackChannel.title,
         headers: window.currentPlaybackHeaders || null,
         bounds: {
-            x: Math.round(rect.x),
+            x: Math.ceil(rect.x),
             y: Math.round(rect.y),
             width: Math.round(rect.width),
             height: Math.round(rect.height)
@@ -6306,7 +6366,7 @@ window.iptvAPI.onMpvExit((code) => {
     if (streamActive) {
         streamActive = false;
         currentPlayingChannelIndex = -1;
-        document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+        clearPlayingChannelIndicator();
  
         const playerOverlay = document.getElementById('player-overlay');
         if (playerOverlay) {
@@ -6348,7 +6408,7 @@ window.iptvAPI.onMpvStopped(() => {
     if (streamActive) {
         streamActive = false;
         currentPlayingChannelIndex = -1;
-        document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+        clearPlayingChannelIndicator();
  
         const playerOverlay = document.getElementById('player-overlay');
         if (playerOverlay) {
@@ -6456,11 +6516,11 @@ window.iptvAPI.onPreviousChannel(() => {
 
     const idx = visibleChannels.findIndex(c => c.url === currentUrl && (c.title || 'Unknown Channel') === currentTitle);
     if (idx > 0) {
-        embedStream(visibleChannels[idx - 1]);
+        embedStream(visibleChannels[idx - 1], 'nearest');
     } else if (idx === 0 && visibleChannels.length > 0) {
-        embedStream(visibleChannels[visibleChannels.length - 1]); // Wrap around
+        embedStream(visibleChannels[visibleChannels.length - 1], 'nearest'); // Wrap around
     } else if (idx === -1 && visibleChannels.length > 0) {
-        embedStream(visibleChannels[0]);
+        embedStream(visibleChannels[0], 'nearest');
     }
 });
 
@@ -6474,11 +6534,11 @@ window.iptvAPI.onNextChannel(() => {
 
     const idx = visibleChannels.findIndex(c => c.url === currentUrl && (c.title || 'Unknown Channel') === currentTitle);
     if (idx >= 0 && idx < visibleChannels.length - 1) {
-        embedStream(visibleChannels[idx + 1]);
+        embedStream(visibleChannels[idx + 1], 'nearest');
     } else if (idx === visibleChannels.length - 1 && visibleChannels.length > 0) {
-        embedStream(visibleChannels[0]); // Wrap around
+        embedStream(visibleChannels[0], 'nearest'); // Wrap around
     } else if (idx === -1 && visibleChannels.length > 0) {
-        embedStream(visibleChannels[0]);
+        embedStream(visibleChannels[0], 'nearest');
     }
 });
 
@@ -6677,12 +6737,16 @@ window.iptvAPI.onRemoteAction((cmd) => {
             handleOkPress();
             break;
         case 'power':
+            if (window.isAppFullscreen) {
+                window.iptvAPI.toggleFullscreen();
+            }
+
             let exitToast = document.getElementById('remote-exit-toast');
             if (exitToast) exitToast.remove();
             
             exitToast = document.createElement('div');
             exitToast.id = 'remote-exit-toast';
-            exitToast.style.cssText = 'position: ' + (window.isAppFullscreen ? 'absolute' : 'fixed') + '; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1e1e1e; border: 1px solid #cf6679; color: #fff; padding: 20px; border-radius: 12px; z-index: 2147483647; box-shadow: 0 10px 30px rgba(0,0,0,0.8); text-align: center; font-family: "Inter", sans-serif; min-width: 300px; transition: opacity 0.3s; opacity: 1;';
+            exitToast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1e1e1e; border: 1px solid #cf6679; color: #fff; padding: 20px; border-radius: 12px; z-index: 2147483647; box-shadow: 0 10px 30px rgba(0,0,0,0.8); text-align: center; font-family: "Inter", sans-serif; min-width: 300px; transition: opacity 0.3s; opacity: 1;';
             exitToast.innerHTML = `
                 <div style="font-weight: bold; margin-bottom: 10px; color: #cf6679; font-size: 1.1em;">Exit Application</div>
                 <div style="margin-bottom: 20px; font-size: 0.9em; color: #ccc;">Do you want to exit?</div>
@@ -6692,11 +6756,7 @@ window.iptvAPI.onRemoteAction((cmd) => {
                 </div>
             `;
             
-            if (window.isAppFullscreen) {
-                document.getElementById('player-container').appendChild(exitToast);
-            } else {
-                document.body.appendChild(exitToast);
-            }
+            document.body.appendChild(exitToast);
             
             document.getElementById('btn-remote-exit-yes').addEventListener('click', () => {
                 window.close(); // Gracefully closes the window and terminates MPV
@@ -6814,13 +6874,19 @@ function triggerBoundsUpdate() {
     if (streamActive && isLiveViewActive && playerContainer) {
         const rect = playerContainer.getBoundingClientRect();
         window.iptvAPI.updateMpvBounds({
-            x: Math.round(rect.x),
+            x: Math.ceil(rect.x),
             y: Math.round(rect.y),
             width: Math.round(rect.width),
             height: Math.round(rect.height)
         });
     } else {
         window.iptvAPI.updateMpvBounds({ x: 0, y: 0, width: 0, height: 0 });
+    }
+}
+
+function settlePlayerBoundsAfterLayout() {
+    for (let delay of [0, 16, 50, 120]) {
+        setTimeout(triggerBoundsUpdate, delay);
     }
 }
 
@@ -6969,7 +7035,7 @@ function switchTab(tabId, clickedBtn) {
     if (isLive && streamActive && playerContainer) {
         const rect = playerContainer.getBoundingClientRect();
         window.iptvAPI.updateMpvBounds({
-            x: Math.round(rect.x),
+            x: Math.ceil(rect.x),
             y: Math.round(rect.y),
             width: Math.round(rect.width),
             height: Math.round(rect.height)
@@ -9175,9 +9241,20 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
         }
     }
 
-    // Force multiple sequential bounds updates to guarantee perfect alignment and prevent layout race conditions when exiting fullscreen
-    for (let delay of [10, 50, 100, 200, 400, 600, 1000]) {
-        setTimeout(triggerBoundsUpdate, delay);
+    // Settle native MPV bounds around Electron's fullscreen animation without late visible jumps.
+    settlePlayerBoundsAfterLayout();
+
+    if (!isFullscreen && mainView) {
+        const syncAfterMainViewSettles = (event) => {
+            if (event.target !== mainView || event.propertyName !== 'margin-left') return;
+            mainView.removeEventListener('transitionend', syncAfterMainViewSettles);
+            settlePlayerBoundsAfterLayout();
+        };
+        mainView.addEventListener('transitionend', syncAfterMainViewSettles);
+        setTimeout(() => {
+            mainView.removeEventListener('transitionend', syncAfterMainViewSettles);
+            settlePlayerBoundsAfterLayout();
+        }, 260);
     }
 });
 
@@ -9416,6 +9493,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             // Notify if starting within 1 minute or already started (up to 1 hr past)
             if (diffMs <= 1 * 60 * 1000 && diffMs > -60 * 60 * 1000) {
                 console.log('[REMINDER] Firing notification for program:', r.progTitle);
+                showToast(`Programme Reminder: ${r.progTitle}\n${r.channelTitle}`);
                 const notif = new Notification("Programme Reminder", {
                     body: `${r.progTitle} is starting soon on ${r.channelTitle}. Click to watch.`,
                     icon: 'assets/logo.ico'

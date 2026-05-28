@@ -31,9 +31,110 @@ $code = 'using System; using System.Runtime.InteropServices; public class Dwm { 
 Add-Type -TypeDefinition $code;
 [Dwm]::DwmSetWindowAttribute([IntPtr]${hwnd}, 33, [ref]${preference}, 4);
 `;
-    exec(`powershell -NoProfile -Command "${psCommand.replace(/\n/g, ' ').replace(/"/g, '\\"')}"`, (err) => {
+    exec(`powershell -NoProfile -Command "${psCommand.replace(/\n/g, ' ').replace(/"/g, '\\"')}"`, { windowsHide: true }, (err) => {
         if (err) console.error('[DWM] Failed to set rounded corners:', err);
     });
+}
+
+function applyPlayerWindowShape(hwnd, width, height, radius) {
+    if (process.platform !== 'win32' || !hwnd) return;
+    const safeWidth = Math.max(1, Math.round(width));
+    const safeHeight = Math.max(1, Math.round(height));
+    const safeRadius = Math.max(0, Math.round(radius));
+    const shapeKey = `${safeWidth}x${safeHeight}:${safeRadius}`;
+    if (lastPlayerWindowShapeKey === shapeKey) return;
+    lastPlayerWindowShapeKey = shapeKey;
+
+    sendPlayerShapeCommand({ hwnd, width: safeWidth, height: safeHeight, radius: safeRadius });
+}
+
+function ensurePlayerShapeProcess() {
+    if (process.platform !== 'win32') return;
+    if (playerShapeProcess && !playerShapeProcess.killed) return;
+
+    playerShapeReady = false;
+    pendingPlayerShapeCommands = [];
+
+    const psScript = `
+$code = @"
+using System;
+using System.Runtime.InteropServices;
+public class PlayerWindowShape {
+    [DllImport("gdi32.dll")]
+    public static extern IntPtr CreateRoundRectRgn(int left, int top, int right, int bottom, int ellipseWidth, int ellipseHeight);
+    [DllImport("user32.dll")]
+    public static extern int SetWindowRgn(IntPtr hwnd, IntPtr region, bool redraw);
+}
+"@
+Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
+Write-Output "READY"
+while ($null -ne ($line = [Console]::In.ReadLine())) {
+    try {
+        $cmd = $line | ConvertFrom-Json
+        $hwnd = [IntPtr]$cmd.hwnd
+        $radius = [int]$cmd.radius
+        if ($radius -le 0) {
+            [PlayerWindowShape]::SetWindowRgn($hwnd, [IntPtr]::Zero, $true) | Out-Null
+        } else {
+            $diameter = $radius * 2
+            $region = [PlayerWindowShape]::CreateRoundRectRgn(0, 0, ([int]$cmd.width) + 1, ([int]$cmd.height) + 1, $diameter, $diameter)
+            [PlayerWindowShape]::SetWindowRgn($hwnd, $region, $true) | Out-Null
+        }
+    } catch {
+        Write-Error $_
+    }
+}
+`;
+
+    playerShapeProcess = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psScript], { windowsHide: true });
+    playerShapeProcess.stdout.on('data', (data) => {
+        if (!data.toString().includes('READY')) return;
+        playerShapeReady = true;
+        const queued = pendingPlayerShapeCommands;
+        pendingPlayerShapeCommands = [];
+        queued.forEach(sendPlayerShapeCommand);
+    });
+    playerShapeProcess.stderr.on('data', (data) => console.error(`[WIN32 SHAPE ERR] ${data.toString().trim()}`));
+    playerShapeProcess.on('exit', () => {
+        playerShapeProcess = null;
+        playerShapeReady = false;
+    });
+}
+
+function sendPlayerShapeCommand(command) {
+    ensurePlayerShapeProcess();
+    if (!playerShapeProcess || playerShapeProcess.killed || !playerShapeProcess.stdin.writable) return;
+    if (!playerShapeReady) {
+        pendingPlayerShapeCommands = [command];
+        return;
+    }
+    playerShapeProcess.stdin.write(JSON.stringify(command) + '\n');
+}
+
+function schedulePlayerWindowShape(width, height, radius) {
+    if (playerShapeDebounceTimer) {
+        clearTimeout(playerShapeDebounceTimer);
+        playerShapeDebounceTimer = null;
+    }
+
+    if (radius <= 0) {
+        applyPlayerWindowShape(playerWindowHwnd, width, height, 0);
+        return;
+    }
+
+    playerShapeDebounceTimer = setTimeout(() => {
+        playerShapeDebounceTimer = null;
+        applyPlayerWindowShape(playerWindowHwnd, width, height, radius);
+    }, 120);
+}
+
+function clearPlayerWindowShapeForFullscreen() {
+    if (!currentDOMBounds || !playerWindowHwnd) return;
+    if (playerShapeDebounceTimer) {
+        clearTimeout(playerShapeDebounceTimer);
+        playerShapeDebounceTimer = null;
+    }
+    applyPlayerWindowShape(playerWindowHwnd, currentDOMBounds.width, currentDOMBounds.height, 0);
 }
 
 // Force all native warnings, dialogs, and popups to use the main window title
@@ -455,6 +556,15 @@ let isMpvReady = false;
 let ipcConnectionAttempts = 0;
 let reconnectTimer = null;
 let splashWindow = null;
+let nativeToastWindow = null;
+let nativeToastTimer = null;
+let remoteOverrideWindow = null;
+let playerWindowHwnd = null;
+let lastPlayerWindowShapeKey = null;
+let playerShapeProcess = null;
+let playerShapeReady = false;
+let pendingPlayerShapeCommands = [];
+let playerShapeDebounceTimer = null;
 let isMainReadyToShow = false;
 let shouldShowMainWindow = false;
 let isSplashEnded = false;
@@ -501,6 +611,10 @@ ipcMain.on('sync-remote-search', (event, text) => {
 
 ipcMain.on('focus-remote-search', (event) => {
     sseClients.forEach(c => c.write(`data: ${JSON.stringify({ type: 'focusSearch' })}\n\n`));
+});
+
+ipcMain.on('show-native-toast', (_event, message, duration) => {
+    showNativeToast(message, duration);
 });
 
 function createWindow() {
@@ -581,16 +695,20 @@ function createWindow() {
     mainWindow.on('move', () => {
         console.log('[EVENT] mainWindow move');
         syncPlayerWindow();
+        syncNativeOverlayWindows();
     });
     mainWindow.on('resize', () => {
         console.log('[EVENT] mainWindow resize');
         syncPlayerWindow();
+        syncNativeOverlayWindows();
     });
 
     // Sync MPV's internal fullscreen state when Electron enters/leaves fullscreen natively (e.g., via ESC key)
     mainWindow.on('enter-full-screen', () => {
         console.log('[EVENT] mainWindow enter-full-screen');
+        clearPlayerWindowShapeForFullscreen();
         mainWindow.webContents.send('fullscreen-state', true);
+        syncNativeOverlayWindows();
         if (ipcClient && !ipcClient.destroyed) {
             ipcClient.write(JSON.stringify({ command: ["set_property", "fullscreen", true] }) + '\n');
         }
@@ -598,6 +716,7 @@ function createWindow() {
     mainWindow.on('leave-full-screen', () => {
         console.log('[EVENT] mainWindow leave-full-screen');
         mainWindow.webContents.send('fullscreen-state', false);
+        syncNativeOverlayWindows();
         if (ipcClient && !ipcClient.destroyed) {
             ipcClient.write(JSON.stringify({ command: ["set_property", "fullscreen", false] }) + '\n');
         }
@@ -634,7 +753,180 @@ function syncPlayerWindow() {
             width: currentDOMBounds.width,
             height: currentDOMBounds.height
         });
+        schedulePlayerWindowShape(
+            currentDOMBounds.width,
+            currentDOMBounds.height,
+            mainWindow.isFullScreen() ? 0 : 24
+        );
     }
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getOverlayBounds(width, height) {
+    if (!mainWindow || mainWindow.isDestroyed()) return { x: 0, y: 0, width, height };
+    const bounds = mainWindow.getBounds();
+    return {
+        x: Math.round(bounds.x + (bounds.width - width) / 2),
+        y: Math.round(bounds.y + bounds.height - height - 30),
+        width,
+        height
+    };
+}
+
+function keepOverlayAbovePlayer(win) {
+    if (!win || win.isDestroyed()) return;
+    win.setAlwaysOnTop(true, 'screen-saver');
+    if (typeof win.moveTop === 'function') win.moveTop();
+}
+
+function syncNativeOverlayWindows() {
+    if (nativeToastWindow && !nativeToastWindow.isDestroyed()) {
+        nativeToastWindow.setBounds(getOverlayBounds(520, 96));
+        keepOverlayAbovePlayer(nativeToastWindow);
+    }
+    if (remoteOverrideWindow && !remoteOverrideWindow.isDestroyed()) {
+        remoteOverrideWindow.setBounds(getOverlayBounds(460, 190));
+        keepOverlayAbovePlayer(remoteOverrideWindow);
+    }
+}
+
+function showNativeToast(message, duration = 3000) {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+
+    if (nativeToastTimer) clearTimeout(nativeToastTimer);
+    if (nativeToastWindow && !nativeToastWindow.isDestroyed()) nativeToastWindow.destroy();
+
+    const toastWindow = new BrowserWindow({
+        parent: mainWindow,
+        ...getOverlayBounds(520, 96),
+        frame: false,
+        transparent: true,
+        resizable: false,
+        movable: false,
+        show: false,
+        focusable: false,
+        skipTaskbar: true,
+        hasShadow: false,
+        backgroundColor: '#00000000',
+        webPreferences: {
+            contextIsolation: true,
+            sandbox: true
+        }
+    });
+    nativeToastWindow = toastWindow;
+
+    toastWindow.setIgnoreMouseEvents(true);
+    const safeMessage = escapeHtml(message);
+    toastWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+<!doctype html>
+<html>
+<head>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#fff}
+.toast{position:absolute;left:50%;bottom:0;transform:translateX(-50%);box-sizing:border-box;max-width:500px;min-width:260px;padding:14px 24px;border-radius:16px;border:1px solid rgba(187,134,252,.48);background:rgba(18,18,24,.9);box-shadow:0 10px 30px rgba(187,134,252,.16),0 5px 15px rgba(0,0,0,.5);backdrop-filter:blur(20px);text-align:center;font-size:14px;font-weight:650;line-height:1.4;white-space:pre-wrap}
+</style>
+</head>
+<body><div class="toast">${safeMessage}</div></body>
+</html>
+`)}`);
+    toastWindow.once('ready-to-show', () => {
+        if (toastWindow.isDestroyed() || nativeToastWindow !== toastWindow) return;
+        toastWindow.showInactive();
+        keepOverlayAbovePlayer(toastWindow);
+    });
+    toastWindow.on('closed', () => {
+        if (nativeToastWindow !== toastWindow) return;
+        nativeToastWindow = null;
+        if (nativeToastTimer) clearTimeout(nativeToastTimer);
+        nativeToastTimer = null;
+    });
+
+    nativeToastTimer = setTimeout(() => {
+        if (nativeToastWindow === toastWindow && !toastWindow.isDestroyed()) toastWindow.destroy();
+    }, duration);
+}
+
+function showRemoteOverridePrompt() {
+    if (!mainWindow || mainWindow.isDestroyed()) return Promise.resolve(false);
+
+    if (remoteOverrideWindow && !remoteOverrideWindow.isDestroyed()) remoteOverrideWindow.destroy();
+
+    const promptWindow = new BrowserWindow({
+        parent: mainWindow,
+        ...getOverlayBounds(460, 190),
+        frame: false,
+        transparent: true,
+        resizable: false,
+        movable: false,
+        show: false,
+        skipTaskbar: true,
+        hasShadow: false,
+        backgroundColor: '#00000000',
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+    remoteOverrideWindow = promptWindow;
+
+    promptWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+<!doctype html>
+<html>
+<head>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#fff}
+.toast{position:absolute;left:50%;bottom:0;transform:translateX(-50%);box-sizing:border-box;width:430px;padding:22px 28px;border-radius:16px;border:1px solid rgba(187,134,252,.48);background:rgba(18,18,24,.92);box-shadow:0 10px 30px rgba(187,134,252,.16),0 5px 15px rgba(0,0,0,.5);backdrop-filter:blur(20px);text-align:center}
+.title{font-size:18px;font-weight:800;margin-bottom:8px}.body{font-size:14px;color:#e4e4e7;line-height:1.45;margin-bottom:18px}.actions{display:flex;gap:12px}button{flex:1;border:0;border-radius:8px;padding:10px 16px;font-weight:800;cursor:pointer;font-family:inherit}#allow{background:#bb86fc;color:#000}#deny{background:#2a2a2a;color:#fff;border:1px solid #444}
+</style>
+</head>
+<body>
+<div class="toast">
+<div class="title">New Remote Device</div>
+<div class="body">A new device is trying to connect.<br>Allow it and disconnect the old one?</div>
+<div class="actions"><button id="allow">Allow</button><button id="deny">Deny</button></div>
+</div>
+<script>
+const { ipcRenderer } = require('electron');
+document.getElementById('allow').onclick = () => ipcRenderer.send('native-remote-override-response', true);
+document.getElementById('deny').onclick = () => ipcRenderer.send('native-remote-override-response', false);
+</script>
+</body>
+</html>
+`)}`);
+
+    return new Promise(resolve => {
+        let settled = false;
+        const settle = (allow) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            ipcMain.removeListener('native-remote-override-response', responseHandler);
+            if (remoteOverrideWindow === promptWindow && !promptWindow.isDestroyed()) promptWindow.destroy();
+            resolve(!!allow);
+        };
+        const responseHandler = (_event, allow) => settle(allow);
+        const timeout = setTimeout(() => settle(false), 30000);
+
+        ipcMain.once('native-remote-override-response', responseHandler);
+        promptWindow.once('closed', () => {
+            if (remoteOverrideWindow === promptWindow) remoteOverrideWindow = null;
+            settle(false);
+        });
+        promptWindow.once('ready-to-show', () => {
+            if (promptWindow.isDestroyed() || remoteOverrideWindow !== promptWindow) return;
+            promptWindow.show();
+            promptWindow.focus();
+            keepOverlayAbovePlayer(promptWindow);
+        });
+    });
 }
 
 let expressServer = null;
@@ -722,31 +1014,9 @@ function initRemoteServer() {
                 let response = 1;
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     console.log(`[REMOTE API] Triggering new device override toast on PC.`);
-                    if (mainWindow.isFullScreen()) {
-                        console.log(`[REMOTE API] Exiting fullscreen to show toast.`);
-                        mainWindow.setFullScreen(false);
-                        // Give the window a moment to resize before showing the toast
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                    }
-                    response = await new Promise(resolve => {
-                        let responded = false;
-                        const handler = (event, res) => {
-                            if (responded) return;
-                            responded = true;
-                            console.log(`[REMOTE API] PC user responded to toast: ${res ? 'Allow' : 'Deny'}`);
-                            clearTimeout(timeout);
-                            resolve(res ? 0 : 1);
-                        };
-                        const timeout = setTimeout(() => {
-                            if (responded) return;
-                            responded = true;
-                            console.log(`[REMOTE API] Toast timed out. Defaulting to deny.`);
-                            ipcMain.removeListener('remote-override-response', handler);
-                            resolve(1);
-                        }, 30000); // 30s timeout defaults to keep old
-                        ipcMain.once('remote-override-response', handler);
-                        mainWindow.webContents.send('show-remote-override-toast', deviceId);
-                    });
+                    const allowOverride = await showRemoteOverridePrompt();
+                    console.log(`[REMOTE API] PC user responded to toast: ${allowOverride ? 'Allow' : 'Deny'}`);
+                    response = allowOverride ? 0 : 1;
                 }
                 pendingDevicePrompt = false;
 
@@ -881,7 +1151,9 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
         // ------------------ Electron Intercepts ------------------
         app.get('/fullscreen', (req, res) => {
             if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.setFullScreen(!mainWindow.isFullScreen());
+                const shouldEnterFullscreen = !mainWindow.isFullScreen();
+                if (shouldEnterFullscreen) clearPlayerWindowShapeForFullscreen();
+                mainWindow.setFullScreen(shouldEnterFullscreen);
             }
             res.send('OK');
         });
@@ -1487,6 +1759,7 @@ evtSource.onmessage = (e) => {
 
 app.whenReady().then(() => {
     createWindow();
+    ensurePlayerShapeProcess();
     initMpv();
     initRemoteServer(); // Spin up the HTTP API server
     app.on('activate', () => {
@@ -1504,6 +1777,9 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
     console.log('[APP] Shutdown completed');
+    if (playerShapeProcess && !playerShapeProcess.killed) {
+        playerShapeProcess.kill();
+    }
 });
 
 function initMpv() {
@@ -1537,6 +1813,8 @@ function initMpv() {
     
     if (process.platform === 'win32' || process.platform === 'linux') {
         wid = handle.readUInt32LE(0);
+        playerWindowHwnd = wid;
+        lastPlayerWindowShapeKey = null;
         if (process.platform === 'win32') {
             applyRoundedCorners(wid);
         }
@@ -1609,6 +1887,12 @@ function initMpv() {
             playerWindow.destroy();
         }
         playerWindow = null;
+        playerWindowHwnd = null;
+        lastPlayerWindowShapeKey = null;
+        if (playerShapeDebounceTimer) {
+            clearTimeout(playerShapeDebounceTimer);
+            playerShapeDebounceTimer = null;
+        }
         mpvProcess = null;
     });
 }
@@ -1661,6 +1945,7 @@ function connectIPC() {
                     if (msg.name === 'fullscreen') {
                         if (mainWindow && !mainWindow.isDestroyed()) {
                             if (mainWindow.isFullScreen() !== msg.data) {
+                                if (msg.data) clearPlayerWindowShapeForFullscreen();
                                 mainWindow.setFullScreen(msg.data);
                             }
                         }
@@ -1681,7 +1966,9 @@ function connectIPC() {
                 if (msg.event === 'client-message' && msg.args && mainWindow && !mainWindow.isDestroyed()) {
                     console.log('[MPV IPC RECV] client-message:', msg.args);
                     if (msg.args[0] === 'electron-fullscreen-toggle') {
-                        mainWindow.setFullScreen(!mainWindow.isFullScreen());
+                        const shouldEnterFullscreen = !mainWindow.isFullScreen();
+                        if (shouldEnterFullscreen) clearPlayerWindowShapeForFullscreen();
+                        mainWindow.setFullScreen(shouldEnterFullscreen);
                     }
                     if (msg.args[0] === 'electron-maximize-toggle') {
                         if (mainWindow.isMaximized()) mainWindow.unmaximize();
@@ -1853,7 +2140,9 @@ ipcMain.on('mpv-command', (event, command) => {
         console.trace('STOP COMMAND RECEIVED (MAIN IPC)');
     }
     if (command === 'cycle fullscreen' && mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.setFullScreen(!mainWindow.isFullScreen());
+        const shouldEnterFullscreen = !mainWindow.isFullScreen();
+        if (shouldEnterFullscreen) clearPlayerWindowShapeForFullscreen();
+        mainWindow.setFullScreen(shouldEnterFullscreen);
         return;
     }
     if (command === 'toggle-maximize' && mainWindow && !mainWindow.isDestroyed()) {
@@ -1865,7 +2154,7 @@ ipcMain.on('mpv-command', (event, command) => {
         return;
     }
     if (ipcClient && !ipcClient.destroyed) {
-        const args = command.split(' ');
+        const args = Array.isArray(command) ? command : command.split(' ');
         console.log('[MPV IPC SEND]', JSON.stringify({ command: args }));
         ipcClient.write(JSON.stringify({ command: args }) + '\n');
     }
@@ -1874,7 +2163,9 @@ ipcMain.on('mpv-command', (event, command) => {
 ipcMain.on('toggle-fullscreen', () => {
     console.log('[IPC RECV] toggle-fullscreen');
     if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.setFullScreen(!mainWindow.isFullScreen());
+        const shouldEnterFullscreen = !mainWindow.isFullScreen();
+        if (shouldEnterFullscreen) clearPlayerWindowShapeForFullscreen();
+        mainWindow.setFullScreen(shouldEnterFullscreen);
     }
 });
 

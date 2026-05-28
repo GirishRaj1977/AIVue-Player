@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     playMpvEmbedded: (data) => ipcRenderer.send('play-mpv-embedded', data),
     updateMpvBounds: (bounds) => ipcRenderer.send('update-mpv-bounds', bounds),
     sendMpvCommand: (cmd) => ipcRenderer.send('mpv-command', cmd),
+    showNativeToast: (message, duration) => ipcRenderer.send('show-native-toast', message, duration),
     toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),
     onFullscreenChange: (callback) => ipcRenderer.on('fullscreen-state', (_event, isFull) => callback(isFull)),
     onMpvPropChange: (callback) => ipcRenderer.on('mpv-prop-change', (_event, name, val) => callback(name, val)),
