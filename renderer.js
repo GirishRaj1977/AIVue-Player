@@ -1610,6 +1610,40 @@ function getWinSpinnerHtml(label = 'Loading...', options = {}) {
     return inner;
 }
 
+/**
+ * Shows a global full-screen centered loading spinner overlay.
+ * Used for background processes where the next view opens after completion.
+ * @param {string} [label='Loading...'] - Text displayed below the spinner.
+ */
+function showGlobalSpinner(label = 'Loading...') {
+    let overlay = document.getElementById('global-spinner-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'global-spinner-overlay';
+        overlay.style.cssText = 'position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgba(3, 0, 30, 0.65); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: opacity 0.25s ease; opacity: 0;';
+        document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = getWinSpinnerHtml(label, { size: 'large' });
+    overlay.style.display = 'flex';
+    // Force reflow then animate in
+    void overlay.offsetWidth;
+    overlay.style.opacity = '1';
+}
+
+/**
+ * Hides the global full-screen loading spinner overlay.
+ */
+function hideGlobalSpinner() {
+    const overlay = document.getElementById('global-spinner-overlay');
+    if (overlay) {
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+            overlay.style.display = 'none';
+            overlay.innerHTML = '';
+        }, 250);
+    }
+}
+
 function saveReminders() {
     console.log('[REMINDER] Saving reminders to localStorage');
     localStorage.setItem('iptv_reminders', JSON.stringify(savedReminders));
@@ -3129,7 +3163,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'manage-channels-modal';
-        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; align-items: center; justify-content: center;';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(3, 0, 30, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 1000; display: flex; align-items: center; justify-content: center;';
         document.body.appendChild(modal);
     }
     
@@ -3186,7 +3220,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
     let groupsHtml = '';
     if (isStalker) {
         Object.keys(stalkerParents).sort(sortAlphaNum).forEach(parent => {
-            groupsHtml += `<div style="padding: 10px; background: #1a1a1a; font-weight: bold; color: #bb86fc; font-size: 0.9em; text-transform: uppercase; border-bottom: 1px solid #333; border-top: 1px solid #333;">${parent.replace(/</g, '&lt;')}</div>`;
+            groupsHtml += `<div style="padding: 10px 16px; background: rgba(187, 134, 252, 0.06); font-weight: 700; color: rgba(187, 134, 252, 0.8); font-size: 0.76em; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid rgba(187, 134, 252, 0.08); border-top: 1px solid rgba(187, 134, 252, 0.08); font-family: 'Inter', sans-serif;">${parent.replace(/</g, '&lt;')}</div>`;
             
             stalkerParents[parent].sort(sortAlphaNum).forEach(g => {
                 const total = groupsMap[g].channels.length;
@@ -3195,15 +3229,15 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                 const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
                 
                 groupsHtml += `
-                <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 20px; cursor: pointer; border-left: 4px solid transparent; color: #e0e0e0; transition: 0.2s; font-family: 'Inter', sans-serif; font-size: 0.9em;">
-                    ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: #666; font-size: 0.85em; float: right;">${enabled} (${total})</span>
+                <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; color: #d1d5db; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'Inter', sans-serif; font-size: 0.85em; border-radius: 0 6px 6px 0; margin: 1px 6px 1px 0;">
+                    ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: rgba(255,255,255,0.3); font-size: 0.82em; float: right;">${enabled} (${total})</span>
                 </div>`;
             });
         });
         
         const looseGroups = Object.keys(groupsMap).filter(g => !Object.values(stalkerParents).flat().includes(g));
         if (looseGroups.length > 0) {
-            groupsHtml += `<div style="padding: 10px; background: #1a1a1a; font-weight: bold; color: #bb86fc; font-size: 0.9em; text-transform: uppercase; border-bottom: 1px solid #333; border-top: 1px solid #333;">Other Channels</div>`;
+            groupsHtml += `<div style="padding: 10px 16px; background: rgba(187, 134, 252, 0.06); font-weight: 700; color: rgba(187, 134, 252, 0.8); font-size: 0.76em; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid rgba(187, 134, 252, 0.08); border-top: 1px solid rgba(187, 134, 252, 0.08); font-family: 'Inter', sans-serif;">Other Channels</div>`;
             looseGroups.sort(sortAlphaNum).forEach(g => {
                 const total = groupsMap[g].channels.length;
                 const enabled = groupsMap[g].channels.filter(item => !tempDisabled.has(item.originalIndex)).length;
@@ -3211,8 +3245,8 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                 const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
                 
                 groupsHtml += `
-                <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 20px; cursor: pointer; border-left: 4px solid transparent; color: #e0e0e0; transition: 0.2s; font-family: 'Inter', sans-serif; font-size: 0.9em;">
-                    ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: #666; font-size: 0.85em; float: right;">${enabled} (${total})</span>
+                <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; color: #d1d5db; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'Inter', sans-serif; font-size: 0.85em; border-radius: 0 6px 6px 0; margin: 1px 6px 1px 0;">
+                    ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: rgba(255,255,255,0.3); font-size: 0.82em; float: right;">${enabled} (${total})</span>
                 </div>`;
             });
         }
@@ -3224,50 +3258,50 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
             
             groupsHtml += `
-            <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 20px; cursor: pointer; border-left: 4px solid transparent; color: #e0e0e0; transition: 0.2s; font-family: 'Inter', sans-serif; font-size: 0.9em;">
-                ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: #666; font-size: 0.85em; float: right;">${enabled} (${total})</span>
+            <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; color: #d1d5db; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'Inter', sans-serif; font-size: 0.85em; border-radius: 0 6px 6px 0; margin: 1px 6px 1px 0;">
+                ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: rgba(255,255,255,0.3); font-size: 0.82em; float: right;">${enabled} (${total})</span>
             </div>`;
         });
     }
 
     modal.innerHTML = `
-        <div style="background: #1e1e1e; border: 1px solid #333; border-radius: 8px; width: 90%; max-width: 1000px; height: 85%; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-            <div style="padding: 15px 20px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: #252525;">
-                <h2 style="margin: 0; color: #bb86fc; font-size: 1.2em;">Manage Channels: ${playlist.name}${newTitleStr}</h2>
+        <div style="background: rgba(18, 18, 24, 0.88); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border: 1px solid rgba(187, 134, 252, 0.2); border-radius: 20px; width: 92%; max-width: 1050px; height: 88%; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,0.7), 0 0 40px rgba(187, 134, 252, 0.08);">
+            <div style="padding: 18px 24px; border-bottom: 1px solid rgba(187, 134, 252, 0.12); display: flex; justify-content: space-between; align-items: center; background: rgba(187, 134, 252, 0.04);">
+                <h2 style="margin: 0; color: #bb86fc; font-size: 1.15em; font-family: 'Outfit', 'Inter', sans-serif; font-weight: 700; letter-spacing: -0.01em; text-shadow: 0 0 20px rgba(187, 134, 252, 0.3);">Manage Channels: ${playlist.name}${newTitleStr}</h2>
                 <div style="display: flex; gap: 10px;">
-                    <input type="text" id="modal-channel-search" placeholder="Search channels..." value="" style="background: #121212; color: #fff; border: 1px solid #444; padding: 6px 12px; border-radius: 4px; outline: none; width: 250px;">
+                    <input type="text" id="modal-channel-search" placeholder="Search channels..." value="" style="background: rgba(255, 255, 255, 0.03); color: #fff; border: 1px solid rgba(255, 255, 255, 0.08); padding: 8px 16px; border-radius: 10px; outline: none; width: 260px; font-family: 'Inter', sans-serif; font-size: 0.85em; transition: all 0.25s ease; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);">
                 </div>
             </div>
             
             <div style="display: flex; flex-grow: 1; overflow: hidden;">
                 <!-- Left Column: Groups -->
-                <div style="width: 250px; background: #121212; border-right: 1px solid #333; display: flex; flex-direction: column;">
-                    <div style="padding: 10px; background: #1a1a1a; border-bottom: 1px solid #333; font-weight: bold; color: #888; font-size: 0.9em; text-transform: uppercase;">
+                <div style="width: 260px; background: rgba(0, 0, 0, 0.15); border-right: 1px solid rgba(187, 134, 252, 0.08); display: flex; flex-direction: column;">
+                    <div style="padding: 12px 18px; background: rgba(187, 134, 252, 0.06); border-bottom: 1px solid rgba(187, 134, 252, 0.08); font-weight: 700; color: rgba(187, 134, 252, 0.7); font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.12em; font-family: 'Inter', sans-serif;">
                         Groups
                     </div>
-                    <div id="modal-groups-list" style="flex-grow: 1; overflow-y: auto; padding: 10px 0;">
+                    <div id="modal-groups-list" style="flex-grow: 1; overflow-y: auto; padding: 8px 0;">
                         ${groupsHtml}
                     </div>
                 </div>
 
                 <!-- Right Column: Channels -->
-                <div style="flex-grow: 1; display: flex; flex-direction: column; background: #1a1a1a; min-width: 0;">
-                    <div style="padding: 10px 20px; background: #252525; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 15px;">
-                        <label style="display: flex; align-items: center; cursor: pointer; color: #bb86fc; font-weight: bold; margin-right: 10px;">
-                            <input type="checkbox" id="modal-select-all" style="margin-right: 10px; width: 18px; height: 18px;">
+                <div style="flex-grow: 1; display: flex; flex-direction: column; background: rgba(0, 0, 0, 0.08); min-width: 0;">
+                    <div style="padding: 10px 20px; background: rgba(187, 134, 252, 0.04); border-bottom: 1px solid rgba(187, 134, 252, 0.08); display: flex; align-items: center; gap: 15px;">
+                        <label style="display: flex; align-items: center; cursor: pointer; color: #bb86fc; font-weight: 600; margin-right: 10px; font-family: 'Inter', sans-serif; font-size: 0.88em; gap: 8px; user-select: none;">
+                            <input type="checkbox" id="modal-select-all" style="margin: 0; width: 16px; height: 16px; accent-color: #bb86fc; cursor: pointer;">
                             Select All
                         </label>
-                        <button id="modal-enable-btn" class="playlist-btn" style="background: #43CB44; color: black; font-weight: bold; padding: 4px 12px; border-radius: 4px;">Enable</button>
-                        <button id="modal-disable-btn" class="playlist-btn" style="background: #cf6679; color: black; font-weight: bold; padding: 4px 12px; border-radius: 4px;">Disable</button>
-                        <span id="modal-channels-count" style="color: #888; font-size: 0.9em; flex-grow: 1; text-align: right;">Showing 0 channels</span>
+                        <button id="modal-enable-btn" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 700; padding: 5px 14px; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 0.82em; transition: all 0.2s ease;">Enable</button>
+                        <button id="modal-disable-btn" style="background: rgba(207, 102, 121, 0.12); color: #f0859a; border: 1px solid rgba(207, 102, 121, 0.25); font-weight: 700; padding: 5px 14px; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 0.82em; transition: all 0.2s ease;">Disable</button>
+                        <span id="modal-channels-count" style="color: rgba(255,255,255,0.4); font-size: 0.82em; flex-grow: 1; text-align: right; font-family: 'Inter', sans-serif;">Showing 0 channels</span>
                     </div>
-                    <div id="modal-channels-list" style="flex-grow: 1; overflow-y: auto; padding: 10px 20px;">
+                    <div id="modal-channels-list" style="flex-grow: 1; overflow-y: auto; padding: 8px 16px;">
                     </div>
                 </div>
             </div>
-            <div style="padding: 15px 20px; border-top: 1px solid #333; display: flex; justify-content: flex-end; gap: 10px; background: #252525;">
-                <button id="modal-cancel-btn" class="playlist-btn" style="background: #333;">Cancel</button>
-                <button id="modal-save-btn" class="playlist-btn" style="background: #bb86fc; color: #000; font-weight: bold;">${isNew ? 'Import Selected' : 'Save Changes'}</button>
+            <div style="padding: 16px 24px; border-top: 1px solid rgba(187, 134, 252, 0.12); display: flex; justify-content: flex-end; gap: 12px; background: rgba(187, 134, 252, 0.04);">
+                <button id="modal-cancel-btn" style="background: rgba(255, 255, 255, 0.04); color: #a1a1aa; border: 1px solid rgba(255, 255, 255, 0.08); padding: 8px 22px; border-radius: 10px; cursor: pointer; font-weight: 600; font-family: 'Inter', sans-serif; font-size: 0.88em; transition: all 0.25s ease;">Cancel</button>
+                <button id="modal-save-btn" style="background: linear-gradient(135deg, #bb86fc, #9b59fc); color: #000; font-weight: 700; padding: 8px 26px; border-radius: 10px; border: none; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 0.88em; box-shadow: 0 4px 18px rgba(187, 134, 252, 0.3); transition: all 0.25s ease;">${isNew ? 'Import Selected' : 'Save Changes'}</button>
             </div>
         </div>
     `;
@@ -3312,12 +3346,12 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
             
             const newLabel = isNew ? ' <span style="color: #FFD700;">(New)</span>' : '';
-            const titleColor = isDisabled ? (isNew ? '#FFD700' : '#cf6679') : '#43CB44';
+            const titleColor = isDisabled ? (isNew ? '#FFD700' : '#f0859a') : '#34d399';
 
             return `
-                <label style="display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #333; cursor: pointer; background: ${isSelected ? '#2a2a2a' : 'transparent'};">
-                    <input type="checkbox" class="channel-select-cb" data-idx="${originalIndex}" ${isSelected ? 'checked' : ''} style="margin-right: 15px; width: 18px; height: 18px;">
-                    <span style="flex-grow: 1; color: ${titleColor}; font-weight: bold; font-size: 0.85em; font-family: 'Inter', sans-serif;">${safeTitle}${newLabel}</span>
+                <label style="display: flex; align-items: center; padding: 9px 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); cursor: pointer; background: ${isSelected ? 'rgba(187, 134, 252, 0.06)' : 'transparent'}; transition: all 0.15s ease; border-radius: 6px; margin-bottom: 2px; gap: 12px;">
+                    <input type="checkbox" class="channel-select-cb" data-idx="${originalIndex}" ${isSelected ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: #bb86fc; cursor: pointer; flex-shrink: 0;">
+                    <span style="flex-grow: 1; color: ${titleColor}; font-weight: 600; font-size: 0.84em; font-family: 'Inter', sans-serif;">${safeTitle}${newLabel}</span>
                 </label>
             `;
         }).join('');
@@ -3348,7 +3382,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                 
                 const label = e.target.closest('label');
                 if (e.target.checked) {
-                    label.style.background = '#2a2a2a';
+                    label.style.background = 'rgba(187, 134, 252, 0.06)';
                 } else {
                     label.style.background = 'transparent';
                 }
@@ -3370,14 +3404,16 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
 
             if (g === currentGroupFilter) {
                 el.style.borderLeftColor = '#bb86fc';
-                el.style.background = '#2a2a2a';
+                el.style.background = 'rgba(187, 134, 252, 0.1)';
                 el.style.color = '#bb86fc';
-                el.style.fontWeight = 'bold';
+                el.style.fontWeight = '600';
+                el.style.boxShadow = 'inset 0 0 12px rgba(187, 134, 252, 0.05)';
             } else {
                 el.style.borderLeftColor = 'transparent';
                 el.style.background = 'transparent';
-                el.style.color = '#e0e0e0';
+                el.style.color = '#d1d5db';
                 el.style.fontWeight = 'normal';
+                el.style.boxShadow = 'none';
             }
         });
     };
@@ -3389,7 +3425,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             
             if (isStalker && groupsMap[g] && groupsMap[g].category && groupsMap[g].channels.length === 0) {
                 const listDiv = document.getElementById('modal-channels-list');
-                listDiv.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">Fetching channels...</div>';
+                listDiv.innerHTML = getWinSpinnerHtml('Fetching channels...');
                 
                 try {
                     const cat = groupsMap[g].category;
