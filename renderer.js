@@ -1585,6 +1585,31 @@ document.addEventListener('submit', (e) => {
     e.preventDefault();
 });
 
+/**
+ * Generates Windows-style spinning dots loading animation HTML.
+ * @param {string} [label='Loading...'] - Text displayed below the spinner.
+ * @param {object} [options] - Optional configuration.
+ * @param {'normal'|'large'|'compact'} [options.size='normal'] - Size variant.
+ * @param {boolean} [options.overlay=false] - Wrap in a full-area overlay.
+ * @returns {string} HTML string.
+ */
+function getWinSpinnerHtml(label = 'Loading...', options = {}) {
+    const size = options.size || 'normal';
+    const overlay = options.overlay || false;
+    const ringClass = size === 'large' ? 'win-loading-ring large' : 'win-loading-ring';
+    const containerClass = size === 'compact' ? 'win-loading-container compact' : 'win-loading-container';
+    const dots = '<div class="win-loading-dot"></div>'.repeat(5);
+    const inner = `
+        <div class="${containerClass}">
+            <div class="${ringClass}">${dots}</div>
+            <span class="win-loading-label">${label}</span>
+        </div>`;
+    if (overlay) {
+        return `<div class="win-loading-overlay">${inner}</div>`;
+    }
+    return inner;
+}
+
 function saveReminders() {
     console.log('[REMINDER] Saving reminders to localStorage');
     localStorage.setItem('iptv_reminders', JSON.stringify(savedReminders));
@@ -4961,7 +4986,7 @@ function renderVisibleLiveEpgRows(force = false) {
                 programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 45px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); box-sizing: border-box; color: #555; font-size: 0.9em; width: 100%; cursor: pointer;">No EPG Data</div>`;
             }
         } else {
-            programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 45px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); box-sizing: border-box; color: #888; font-size: 0.9em; width: 100%; cursor: pointer;">Loading...</div>`;
+            programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 45px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); box-sizing: border-box; color: #bb86fc; font-size: 0.9em; width: 100%; cursor: pointer;"><div class="win-loading-ring" style="width: 22px; height: 22px; margin-right: 10px;"><div class="win-loading-dot" style="width: 4px; height: 4px;"></div><div class="win-loading-dot" style="width: 4px; height: 4px;"></div><div class="win-loading-dot" style="width: 4px; height: 4px;"></div><div class="win-loading-dot" style="width: 4px; height: 4px;"></div><div class="win-loading-dot" style="width: 4px; height: 4px;"></div></div><span style="color: #bb86fc; text-shadow: 0 0 8px rgba(187,134,252,0.3);">Loading...</span></div>`;
         }
         
         channelsHtml += `
@@ -5535,7 +5560,7 @@ function renderVisibleEpgRows(force = false) {
                 programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 45px; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; color: #555; font-size: 0.9em; width: 100%; cursor: pointer;">No EPG Data</div>`;
             }
         } else {
-            programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 45px; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; color: #888; font-size: 0.9em; width: 100%; cursor: pointer;">Loading...</div>`;
+            programsHtml = `<div class="epg-play-channel" data-index="${globalIdx}" style="position: absolute; top: 0; left: 0; display: flex; align-items: center; padding-left: 20px; height: 45px; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; color: #bb86fc; font-size: 0.9em; width: 100%; cursor: pointer;"><div class="win-loading-ring" style="width: 22px; height: 22px; margin-right: 10px;"><div class="win-loading-dot" style="width: 4px; height: 4px;"></div><div class="win-loading-dot" style="width: 4px; height: 4px;"></div><div class="win-loading-dot" style="width: 4px; height: 4px;"></div><div class="win-loading-dot" style="width: 4px; height: 4px;"></div><div class="win-loading-dot" style="width: 4px; height: 4px;"></div></div><span style="color: #bb86fc; text-shadow: 0 0 8px rgba(187,134,252,0.3);">Loading...</span></div>`;
         }
         
         channelsHtml += `
@@ -5614,7 +5639,7 @@ async function renderFullEpg() {
         </div>
     `;
     
-    epgView.innerHTML = topBarHtml + '<div id="epg-content-area" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;"><div style="color: #888; text-align: center; margin-top: 50px;">Loading Guide Data...</div></div>';
+    epgView.innerHTML = topBarHtml + '<div id="epg-content-area" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">' + getWinSpinnerHtml('Loading Guide Data...', { size: 'large' }) + '</div>';
     
     document.getElementById('epg-playlist-filter').addEventListener('change', (e) => {
         epgSelectedPlaylist = e.target.value;
@@ -6166,7 +6191,7 @@ async function embedStream(channel, scrollMode = 'start') {
 
     const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const playerOverlay = document.getElementById('player-overlay');
-    if (playerOverlay) playerOverlay.innerHTML = `<span style="color: #bb86fc;">Loading...</span><br><span style="font-size: 0.6em; color: #888;">${safeTitle}</span>`;
+    if (playerOverlay) playerOverlay.innerHTML = getWinSpinnerHtml(safeTitle, { size: 'large' });
 
     // Track active fallback iterations
     window.currentPlaybackChannel = channel;
@@ -8145,7 +8170,7 @@ async function openMovieDetailsModal(streamInfo) {
         const epGrid = document.getElementById('details-episodes-grid');
         const seasonSelect = document.getElementById('details-season-select');
         
-        epGrid.innerHTML = '<div style="color: #bb86fc; padding: 20px; font-weight: bold; font-family: \'Outfit\', sans-serif;">Loading episodes...</div>';
+        epGrid.innerHTML = getWinSpinnerHtml('Loading episodes...');
         seasonSelect.innerHTML = '';
         
         // Re-clone play button to support series-specific first episode playback
@@ -8719,11 +8744,7 @@ async function renderMovies() {
         } else if (currentMovieCategory.type === 'stalker') {
             const loadingDiv = document.createElement('div');
             loadingDiv.style.gridColumn = '1 / -1';
-            loadingDiv.style.color = '#bb86fc';
-            loadingDiv.style.textAlign = 'center';
-            loadingDiv.style.padding = '40px';
-            loadingDiv.style.fontFamily = "'Outfit', 'Inter', sans-serif";
-            loadingDiv.innerHTML = '<h2>Loading movies...</h2>';
+            loadingDiv.innerHTML = getWinSpinnerHtml('Loading movies...', { size: 'large' });
             grid.appendChild(loadingDiv);
 
             try {
@@ -8985,11 +9006,7 @@ async function renderVod() {
         } else if (currentVodCategory.type === 'stalker') {
             const loadingDiv = document.createElement('div');
             loadingDiv.style.gridColumn = '1 / -1';
-            loadingDiv.style.color = '#bb86fc';
-            loadingDiv.style.textAlign = 'center';
-            loadingDiv.style.padding = '40px';
-            loadingDiv.style.fontFamily = "'Outfit', 'Inter', sans-serif";
-            loadingDiv.innerHTML = '<h2>Loading series...</h2>';
+            loadingDiv.innerHTML = getWinSpinnerHtml('Loading series...', { size: 'large' });
             grid.appendChild(loadingDiv);
 
             try {

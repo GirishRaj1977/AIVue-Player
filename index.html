@@ -402,6 +402,94 @@
             animation: spin 1s linear infinite;
         }
 
+        /* ============================================= */
+        /*  Windows-Style Spinning Dots Loading Animation */
+        /* ============================================= */
+        @keyframes winDotOrbit {
+            0%   { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes winDotPulse {
+            0%, 80%, 100% { opacity: 0.25; transform: scale(0.7); }
+            40% { opacity: 1; transform: scale(1); }
+        }
+        .win-loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            padding: 30px;
+        }
+        .win-loading-ring {
+            position: relative;
+            width: 48px;
+            height: 48px;
+            animation: winDotOrbit 2.4s cubic-bezier(0.5, 0.15, 0.25, 1) infinite;
+        }
+        .win-loading-ring.large {
+            width: 64px;
+            height: 64px;
+        }
+        .win-loading-dot {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #bb86fc;
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(187, 134, 252, 0.7), 0 0 16px rgba(187, 134, 252, 0.35);
+            animation: winDotPulse 2.4s cubic-bezier(0.5, 0.15, 0.25, 1) infinite;
+        }
+        .win-loading-ring.large .win-loading-dot {
+            width: 10px;
+            height: 10px;
+            box-shadow: 0 0 10px rgba(187, 134, 252, 0.8), 0 0 22px rgba(187, 134, 252, 0.4);
+        }
+        /* Position 5 dots evenly around the ring */
+        .win-loading-dot:nth-child(1) { top: 0; left: 50%; transform: translateX(-50%); animation-delay: 0s; }
+        .win-loading-dot:nth-child(2) { top: 20.6%; right: 2.4%; animation-delay: -0.15s; }
+        .win-loading-dot:nth-child(3) { bottom: 9.5%; right: 11.7%; animation-delay: -0.3s; }
+        .win-loading-dot:nth-child(4) { bottom: 9.5%; left: 11.7%; animation-delay: -0.45s; }
+        .win-loading-dot:nth-child(5) { top: 20.6%; left: 2.4%; animation-delay: -0.6s; }
+        .win-loading-label {
+            color: #bb86fc;
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 0.92em;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            text-shadow: 0 0 12px rgba(187, 134, 252, 0.4);
+        }
+        /* Full-screen overlay variant */
+        .win-loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(3, 0, 30, 0.75);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 500;
+            border-radius: inherit;
+        }
+        /* Compact inline variant (no padding) */
+        .win-loading-container.compact {
+            padding: 10px;
+            gap: 10px;
+        }
+        .win-loading-container.compact .win-loading-ring {
+            width: 32px;
+            height: 32px;
+        }
+        .win-loading-container.compact .win-loading-dot {
+            width: 6px;
+            height: 6px;
+            box-shadow: 0 0 6px rgba(187, 134, 252, 0.6), 0 0 12px rgba(187, 134, 252, 0.3);
+        }
+        .win-loading-container.compact .win-loading-label {
+            font-size: 0.82em;
+        }
+
         /* Fixed Premium Glass Header */
         #top-header {
             position: fixed !important;
@@ -859,7 +947,18 @@
     
     <div id="playlist-view" style="display: flex; flex-grow: 1; flex-direction: column; background: transparent; overflow-y: auto; border: none; border-radius: 12px; padding: 24px;">
 
-        <div id="loading" style="display: none; color: #bb86fc; font-weight: bold; text-align: center; margin-bottom: 20px;">Importing playlist...</div>
+        <div id="loading" style="display: none;">
+            <div class="win-loading-container">
+                <div class="win-loading-ring">
+                    <div class="win-loading-dot"></div>
+                    <div class="win-loading-dot"></div>
+                    <div class="win-loading-dot"></div>
+                    <div class="win-loading-dot"></div>
+                    <div class="win-loading-dot"></div>
+                </div>
+                <span class="win-loading-label">Importing playlist...</span>
+            </div>
+        </div>
         <!-- Two-column layout: mini side menu + right content -->
         <div style="display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; min-width: 0; align-items: flex-start; padding: 10px 0;">
 
