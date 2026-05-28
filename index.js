@@ -2190,6 +2190,19 @@ ipcMain.on('window-maximize', () => {
     }
 });
 
+ipcMain.on('set-confirm-toast-active', (event, active) => {
+    if (playerWindow && !playerWindow.isDestroyed() && mainWindow && !mainWindow.isDestroyed()) {
+        if (active) {
+            mainWindow.setAlwaysOnTop(true, 'screen-saver');
+            playerWindow.setAlwaysOnTop(false);
+        } else {
+            mainWindow.setAlwaysOnTop(false);
+            playerWindow.setAlwaysOnTop(true);
+            syncPlayerWindow();
+        }
+    }
+});
+
 ipcMain.on('window-close', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.close();

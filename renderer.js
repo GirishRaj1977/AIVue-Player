@@ -1701,7 +1701,9 @@ function showConfirmToast(message, onConfirm) {
     console.log(`[UI] showConfirmToast: "${message}"`);
 
     if (window.isAppFullscreen) {
-        window.iptvAPI.toggleFullscreen();
+        if (window.iptvAPI && typeof window.iptvAPI.setConfirmToastActive === 'function') {
+            window.iptvAPI.setConfirmToastActive(true);
+        }
     }
     let toast = document.getElementById('toast-notification');
     if (!toast) {
@@ -1711,8 +1713,8 @@ function showConfirmToast(message, onConfirm) {
     }
     if (toast.hideTimeout) clearTimeout(toast.hideTimeout);
     
-    // Style for modern premium interactive look matching the purple-obsidian-glass theme
-    toast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(18, 18, 24, 0.85); color: #ffffff; border: 1px solid rgba(187, 134, 252, 0.45); padding: 18px 26px; border-radius: 16px; z-index: 10000; font-family: "Inter", sans-serif; box-shadow: 0 10px 30px rgba(187, 134, 252, 0.15), 0 5px 15px rgba(0,0,0,0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); opacity: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; pointer-events: auto; min-width: 320px; text-align: center;';
+    // Style for modern premium interactive look matching the purple-obsidian-glass theme (Z-INDEX 2147483647 to sit on top)
+    toast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(18, 18, 24, 0.85); color: #ffffff; border: 1px solid rgba(187, 134, 252, 0.45); padding: 18px 26px; border-radius: 16px; z-index: 2147483647; font-family: "Inter", sans-serif; box-shadow: 0 10px 30px rgba(187, 134, 252, 0.15), 0 5px 15px rgba(0,0,0,0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); opacity: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; pointer-events: auto; min-width: 320px; text-align: center;';
     
     toast.innerHTML = `
         <div style="font-weight: 600; font-size: 0.95em; color: #e4e4e7; line-height: 1.45; letter-spacing: -0.01em;">${message}</div>
@@ -1728,6 +1730,11 @@ function showConfirmToast(message, onConfirm) {
     });
     
     const hideToast = () => {
+        if (window.isAppFullscreen) {
+            if (window.iptvAPI && typeof window.iptvAPI.setConfirmToastActive === 'function') {
+                window.iptvAPI.setConfirmToastActive(false);
+            }
+        }
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(-50%) translateY(20px)';
         toast.style.pointerEvents = 'none';
@@ -3060,8 +3067,69 @@ function updateState(skipSave = false) {
     updateNavLockState();
 }
 
+async function processAndImportPlaylist(tempPlaylist, result, isStalker) {
+    let channels = tempPlaylist.channels || [];
+    if (isStalker) {
+        // Find the first ITV category
+        const itvCats = channels.filter(c => c.type === 'itv_category');
+        if (itvCats.length === 0) {
+            hideGlobalSpinner();
+            showToast("Cannot fetch channels (no categories found).");
+            switchTab('playlist', document.getElementById('btn-playlist'));
+            return;
+        }
+        
+        // Sort ITV categories to get the first one
+        itvCats.sort((a, b) => sortAlphaNum(a.title, b.title));
+        const firstCat = itvCats[0];
+        const mac = tempPlaylist.epg.substring(8);
+        
+        try {
+            console.log('[PLAYLIST] Pre-fetching channels for first Stalker category:', firstCat.title);
+            const fetched = await window.iptvAPI.loadStalkerCategory({
+                url: tempPlaylist.source,
+                mac: mac,
+                categoryId: firstCat.tvg_id,
+                categoryType: 'itv',
+                categoryName: firstCat.title,
+                isSeries: false
+            });
+            
+            if (!fetched || fetched.length === 0) {
+                throw new Error("Received empty channels list from server.");
+            }
+            
+            // Add the fetched channels to tempPlaylist.channels
+            fetched.forEach(newCh => {
+                newCh.disabled = true;
+                newCh.isNew = true;
+                tempPlaylist.channels.push(newCh);
+            });
+        } catch (err) {
+            console.error('[PLAYLIST] Failed to fetch Stalker first category channels:', err);
+            hideGlobalSpinner();
+            showToast("Cannot fetch channels.");
+            switchTab('playlist', document.getElementById('btn-playlist'));
+            return;
+        }
+    } else {
+        // For M3U / Xtream, channels are already fetched.
+        const liveChannels = channels.filter(c => c.type !== 'movie' && c.type !== 'series' && c.type !== 'movie_category' && c.type !== 'vod_category' && c.type !== 'series_category');
+        if (liveChannels.length === 0) {
+            hideGlobalSpinner();
+            showToast("Cannot fetch channels.");
+            switchTab('playlist', document.getElementById('btn-playlist'));
+            return;
+        }
+    }
+    
+    hideGlobalSpinner();
+    openManageChannelsModal(-1, tempPlaylist);
+}
+
 async function addPlaylist(source, customName, epgSource, editIndex = -1) {
     console.log('[PLAYLIST] Adding/editing playlist:', { source, customName, epgSource, editIndex });
+    showGlobalSpinner("Authenticating...");
     try {
         const isStalker = epgSource && epgSource.startsWith('stalker:');
         let result;
@@ -3072,11 +3140,16 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
             console.log('[API] Calling parseM3u for new playlist.');
             result = await window.iptvAPI.parseM3u(source);
         }
+        
         if (result && result.error) {
-            showToast(`Failed to import.\nReason: ${result.error}`);
+            hideGlobalSpinner();
+            showToast(`Authentication failed.\nReason: ${result.error}`);
+            switchTab('playlist', document.getElementById('btn-playlist'));
             return false;
         } else if (!result || (!Array.isArray(result) && !result.channels)) {
-            showToast(`Failed to import.\nReason: Received invalid data from source.`);
+            hideGlobalSpinner();
+            showToast(`Authentication failed.\nReason: Received invalid data from source.`);
+            switchTab('playlist', document.getElementById('btn-playlist'));
             return false;
         } else {
             let channels = Array.isArray(result) ? result : result.channels;
@@ -3135,11 +3208,13 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                 exp_date: result.exp_date || null
             };
             
-            openManageChannelsModal(-1, tempPlaylist);
+            await processAndImportPlaylist(tempPlaylist, result, isStalker);
             return 'pending';
         }
     } catch (err) {
+        hideGlobalSpinner();
         showToast(`UI Error (${source}):\n${err.message}`);
+        switchTab('playlist', document.getElementById('btn-playlist'));
         return false;
     }
 }
@@ -3506,11 +3581,20 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         modal.style.display = 'none';
         modal.innerHTML = '';
         
+        showGlobalSpinner("Importing channels and VOD...");
+        // Yield to allow UI spinner rendering
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         originalChannels.forEach((c, idx) => {
             c.disabled = tempDisabled.has(idx);
             delete c.isNew;
         });
         playlist.channels = originalChannels;
+
+        const enabledChannels = originalChannels.filter(c => !c.disabled && c.type !== 'movie' && c.type !== 'series' && c.type !== 'movie_category' && c.type !== 'vod_category' && c.type !== 'series_category');
+        const uniqueGroups = new Set(enabledChannels.map(c => c.group || 'Ungrouped'));
+        const groupsCount = uniqueGroups.size;
+        const channelsCount = enabledChannels.length;
 
         if (isNew) {
             if (playlist.editIndex >= 0) {
@@ -3575,8 +3659,14 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                 document.getElementById('import-stalker-submit-btn').disabled = false;
             }
 
+            hideGlobalSpinner();
+            showToast(`Groups (${groupsCount}) and Channels (${channelsCount}) imported for playlist`);
+            switchTab('playlist', document.getElementById('btn-playlist'));
         } else {
             updateState();
+            hideGlobalSpinner();
+            showToast("Playlist channels updated successfully.");
+            switchTab('playlist', document.getElementById('btn-playlist'));
         }
     });
 
@@ -4367,15 +4457,22 @@ if (importSubmitBtn) {
                 const password = match[3];
                 console.log('[AUTO FALLBACK] Detected Xtream Codes URL in M3U box! Parsing as Xtream Codes portal in background:', server, username);
                 
-                const loading = document.getElementById('loading');
-                if (loading) loading.style.display = 'block';
+                showGlobalSpinner("Authenticating...");
                 
                 try {
                     const result = await window.iptvAPI.parseXtream({ name, server, username, password });
-                    if (loading) loading.style.display = 'none';
                     
                     if (result && result.error) {
+                        hideGlobalSpinner();
                         showToast(`Fallback authentication failed.\nReason: ${result.error}`);
+                        switchTab('playlist', document.getElementById('btn-playlist'));
+                        return;
+                    }
+                    
+                    if (!result || !result.channels) {
+                        hideGlobalSpinner();
+                        showToast(`Fallback failed.\nReason: Received invalid data from server.`);
+                        switchTab('playlist', document.getElementById('btn-playlist'));
                         return;
                     }
                     
@@ -4402,29 +4499,20 @@ if (importSubmitBtn) {
                     importUrlPath.value = '';
                     if (importEpgInput) importEpgInput.value = '';
                     
-                    openManageChannelsModal(-1, tempPlaylist);
+                    await processAndImportPlaylist(tempPlaylist, result, false);
                     return;
                 } catch (err) {
-                    if (loading) loading.style.display = 'none';
+                    hideGlobalSpinner();
                     showToast(`Fallback failed:\n${err.message}`);
+                    switchTab('playlist', document.getElementById('btn-playlist'));
                     return;
                 }
             }
         }
         
-        const originalText = importSubmitBtn.textContent;
-        importSubmitBtn.textContent = 'Importing...';
-        importSubmitBtn.disabled = true;
-        if (loadingMsg) loadingMsg.style.display = 'none';
-
         const success = await addPlaylist(source, name, epgSource, editingPlaylistIndex);
         
-        if (importSubmitBtn) {
-            importSubmitBtn.textContent = originalText;
-            importSubmitBtn.disabled = false;
-        }
-
-        if (success) {
+        if (success && success !== 'pending') {
             editingPlaylistIndex = -1;
             if (importCancelBtn) importCancelBtn.style.display = 'none';
             if (importNameInput) importNameInput.value = '';
@@ -4466,26 +4554,14 @@ if (importStalkerSubmitBtn) {
         }
         let epgSource = `stalker:${mac.toUpperCase()}`;
         
-        const originalText = importStalkerSubmitBtn.textContent;
-        importStalkerSubmitBtn.textContent = 'Importing...';
-        importStalkerSubmitBtn.disabled = true;
-        if (loadingMsg) loadingMsg.style.display = 'none';
-
         const success = await addPlaylist(source, name, epgSource, editingPlaylistIndex);
         
-        if (success !== 'pending') {
-            if (importStalkerSubmitBtn) {
-                importStalkerSubmitBtn.textContent = originalText;
-                importStalkerSubmitBtn.disabled = false;
-            }
-
-            if (success) {
-                editingPlaylistIndex = -1;
-                if (importStalkerCancelBtn) importStalkerCancelBtn.style.display = 'none';
-                if (importStalkerName) importStalkerName.value = '';
-                if (importStalkerUrl) importStalkerUrl.value = '';
-                if (importStalkerMac) importStalkerMac.value = '';
-            }
+        if (success && success !== 'pending') {
+            editingPlaylistIndex = -1;
+            if (importStalkerCancelBtn) importStalkerCancelBtn.style.display = 'none';
+            if (importStalkerName) importStalkerName.value = '';
+            if (importStalkerUrl) importStalkerUrl.value = '';
+            if (importStalkerMac) importStalkerMac.value = '';
         }
     });
 }
@@ -4527,22 +4603,23 @@ if (importXtremeSubmitBtn) {
             return;
         }
         
-        const loading = document.getElementById('loading');
-        if (loading) loading.style.display = 'block';
+        showGlobalSpinner("Authenticating...");
         
         try {
             console.log('[API] Calling parseXtream for new playlist.');
             const result = await window.iptvAPI.parseXtream({ name, server, username, password });
             
-            if (loading) loading.style.display = 'none';
-            
             if (result && result.error) {
-                showToast(`Failed to import Xtream Codes.\nReason: ${result.error}`);
+                hideGlobalSpinner();
+                showToast(`Authentication failed.\nReason: ${result.error}`);
+                switchTab('playlist', document.getElementById('btn-playlist'));
                 return;
             }
             
             if (!result || !result.channels) {
-                showToast(`Failed to import.\nReason: Received invalid data from server.`);
+                hideGlobalSpinner();
+                showToast(`Authentication failed.\nReason: Received invalid data from server.`);
+                switchTab('playlist', document.getElementById('btn-playlist'));
                 return;
             }
             
@@ -4570,10 +4647,11 @@ if (importXtremeSubmitBtn) {
             importXtremeUser.value = '';
             importXtremePass.value = '';
             
-            openManageChannelsModal(-1, tempPlaylist);
+            await processAndImportPlaylist(tempPlaylist, result, false);
         } catch (err) {
-            if (loading) loading.style.display = 'none';
+            hideGlobalSpinner();
             showToast(`Error importing Xtream playlist:\n${err.message}`);
+            switchTab('playlist', document.getElementById('btn-playlist'));
         }
     });
 }
