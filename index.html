@@ -860,12 +860,11 @@
     <div id="playlist-view" style="display: flex; flex-grow: 1; flex-direction: column; background: transparent; overflow-y: auto; border: none; border-radius: 12px; padding: 24px;">
 
         <div id="loading" style="display: none; color: #bb86fc; font-weight: bold; text-align: center; margin-bottom: 20px;">Importing playlist...</div>
-
         <!-- Two-column layout: mini side menu + right content -->
         <div style="display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; box-sizing: border-box; min-width: 0; align-items: flex-start; padding: 10px 0;">
 
             <!-- Left Sticky Mini-Menu -->
-            <div id="playlist-side-menu" style="width: 200px; flex-shrink: 0; position: sticky; top: 10px; background: rgba(30, 30, 30, 0.75); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid #333; border-radius: 12px; padding: 15px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); z-index: 10;">
+            <div id="playlist-side-menu" style="width: 200px; flex-shrink: 0; position: sticky; top: 10px; display: flex; flex-direction: column; gap: 8px; z-index: 10;">
                 <h3 style="color: #bb86fc; margin: 0 0 10px 0; font-size: 1.25em; font-family: 'Outfit', 'Inter', sans-serif; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">Playlists</h3>
                 <button class="playlist-menu-btn active" data-target="card-add-playlist">Add Playlist</button>
                 <button class="playlist-menu-btn" data-target="card-my-playlists">My Playlists</button>
@@ -875,7 +874,7 @@
             <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 30px;">
 
                 <!-- Add Playlist Card -->
-                <div id="card-add-playlist" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0; box-sizing: border-box;">
+                <div id="card-add-playlist">
                     <h3 style="margin: 0 0 5px 0; color: #e0e0e0; font-family: 'Outfit', 'Inter', sans-serif;">Add Playlist</h3>
                     <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Import an M3U playlist, Xtream Codes portal, or Stalker IPTV portal to get started.</p>
 
@@ -932,7 +931,7 @@
                 </div>
 
                 <!-- My Playlists Card -->
-                <div id="card-my-playlists" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0; box-sizing: border-box;">
+                <div id="card-my-playlists">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                         <h3 style="margin: 0; color: #e0e0e0; font-family: 'Outfit', 'Inter', sans-serif;">My Playlists</h3>
                         <button id="clear-btn" class="playlist-btn delete" style="display: none;">Delete All</button>

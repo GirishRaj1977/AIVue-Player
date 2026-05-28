@@ -908,33 +908,6 @@ aeroStyles.textContent = `
         font-weight: bold !important;
     }
 
-    .playlist-menu-btn {
-        background: transparent;
-        border: none;
-        color: #888;
-        padding: 10px 15px;
-        text-align: left;
-        border-radius: 8px;
-        cursor: pointer;
-        font-weight: 500;
-        font-size: 0.95em;
-        font-family: 'Outfit', 'Inter', sans-serif;
-        transition: all 0.2s ease;
-        display: flex;
-        align-items: center;
-        width: 100%;
-        box-sizing: border-box;
-    }
-    .playlist-menu-btn:hover {
-        color: #bb86fc;
-        background: rgba(187, 134, 252, 0.08);
-    }
-    .playlist-menu-btn.active {
-        color: #000 !important;
-        background: #bb86fc !important;
-        font-weight: bold !important;
-    }
-
     /* ========================================== */
     /*   EPG Guide Page Premium Redesign Overlays */
     /* ========================================== */
@@ -1294,7 +1267,18 @@ aeroStyles.textContent = `
         padding: 20px !important;
     }
 
-    .settings-menu-btn {
+    #playlist-side-menu {
+        background: rgba(18, 18, 24, 0.45) !important;
+        backdrop-filter: blur(24px) !important;
+        -webkit-backdrop-filter: blur(24px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.05) !important;
+        border-radius: 16px !important;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+        padding: 20px !important;
+        box-sizing: border-box;
+    }
+
+    .settings-menu-btn, .playlist-menu-btn {
         background: rgba(255, 255, 255, 0.02) !important;
         border: 1px solid rgba(255, 255, 255, 0.04) !important;
         color: #a1a1aa !important;
@@ -1312,13 +1296,13 @@ aeroStyles.textContent = `
         box-sizing: border-box !important;
         margin-bottom: 6px !important;
     }
-    .settings-menu-btn:hover {
+    .settings-menu-btn:hover, .playlist-menu-btn:hover {
         color: #ffffff !important;
         background: rgba(255, 255, 255, 0.08) !important;
         border-color: rgba(255, 255, 255, 0.08) !important;
         transform: translateY(-1px) !important;
     }
-    .settings-menu-btn.active {
+    .settings-menu-btn.active, .playlist-menu-btn.active {
         color: var(--primary-accent) !important;
         background: rgba(187, 134, 252, 0.12) !important;
         border-color: rgba(187, 134, 252, 0.25) !important;
@@ -1343,7 +1327,7 @@ aeroStyles.textContent = `
     }
 
     /* Right column panels overrides */
-    #card-epg, #card-reminders, #card-mapping, #card-remote, #card-tmdb {
+    #card-epg, #card-reminders, #card-mapping, #card-remote, #card-tmdb, #card-add-playlist, #card-my-playlists {
         background: rgba(18, 18, 24, 0.45) !important;
         backdrop-filter: blur(24px) !important;
         -webkit-backdrop-filter: blur(24px) !important;
@@ -1354,7 +1338,7 @@ aeroStyles.textContent = `
         box-sizing: border-box !important;
         transition: all 0.25s ease !important;
     }
-    #card-epg:hover, #card-reminders:hover, #card-mapping:hover, #card-remote:hover, #card-tmdb:hover {
+    #card-epg:hover, #card-reminders:hover, #card-mapping:hover, #card-remote:hover, #card-tmdb:hover, #card-add-playlist:hover, #card-my-playlists:hover {
         border-color: rgba(187, 134, 252, 0.1) !important;
     }
 
@@ -1394,6 +1378,7 @@ aeroStyles.textContent = `
     }
     
     #settings-view h3 {
+    #settings-view h3, #playlist-view h3 {
         font-size: 1.05rem !important;
         font-weight: 700 !important;
         letter-spacing: -0.01em !important;
@@ -1401,6 +1386,7 @@ aeroStyles.textContent = `
         margin-top: 0 !important;
     }
     #settings-view p {
+    #settings-view p, #playlist-view p {
         font-size: 0.82rem !important;
         color: #a1a1aa !important;
         line-height: 1.5 !important;
@@ -3549,8 +3535,6 @@ function renderPlaylists() {
 
     savedPlaylists.forEach((playlist, index) => {
         const card = document.createElement('div');
-        card.style.cssText = "border: 1px solid #333; border-radius: 12px; padding: 20px; background: #1e1e1e; display: flex; flex-direction: column; gap: 10px;";
-        
         let epgInfo = '';
         let mappedChannels = 0;
         let totalPrograms = 0;
