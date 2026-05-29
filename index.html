@@ -603,6 +603,33 @@
             outline-offset: 2px !important;
         }
 
+        /* Responsive capsule scaling to preserve styling while preventing overlap */
+        @media (max-width: 1150px) {
+            .header-center {
+                left: 150px !important;
+                right: 220px !important; /* Pushes the button bar further left to clear date/time controls */
+                gap: 5px !important;
+                justify-content: center !important;
+            }
+            .nav-btn-elongated {
+                padding: 6px 10px !important; /* Extremely compact and sleek capsule */
+                border-radius: 20px !important;
+                gap: 5px !important;
+                font-size: 0.74rem !important; /* Slightly smaller text for fit */
+                height: 32px !important;
+            }
+            .nav-btn-elongated svg {
+                width: 13px !important;
+                height: 13px !important;
+            }
+            .header-left {
+                min-width: 130px !important;
+            }
+            .header-left img {
+                max-width: 110px !important;
+            }
+        }
+
         /* Right side container: Window Controls + Clock stacked vertically */
         .header-right {
             display: flex !important;

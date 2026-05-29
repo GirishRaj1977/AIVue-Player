@@ -4945,6 +4945,7 @@ window.iptvAPI.onMpvFileLoaded(() => {
     console.log('[API RECV] onMpvFileLoaded');
     window.isFileLoaded = true;
     window.isSwitchingStream = false;
+    settlePlayerBoundsAfterLayout();
     
     if (window.pendingResumeSeekTime !== null && window.pendingResumeSeekTime !== undefined) {
         const seekTime = window.pendingResumeSeekTime;
@@ -4964,7 +4965,12 @@ window.iptvAPI.onMpvPropChange((name, value) => {
     if (name === 'playback-time') {
         if (!window.isFileLoaded) return; // Ignore stale values from previous streams
         
+        const isFirstPlaybackFrame = !window.hasStartedPlayback;
         window.hasStartedPlayback = true;
+        if (isFirstPlaybackFrame) {
+            console.log('[BOUNDS] First playback frame received, settling bounds.');
+            settlePlayerBoundsAfterLayout();
+        }
         if (window.playbackTimeout) {
             clearTimeout(window.playbackTimeout);
             window.playbackTimeout = null;
@@ -6433,12 +6439,15 @@ async function embedStream(channel, scrollMode = 'start') {
         title: channel.title,
         headers: window.currentPlaybackHeaders || null,
         bounds: {
-            x: Math.ceil(rect.x),
-            y: Math.round(rect.y),
-            width: Math.round(rect.width),
-            height: Math.round(rect.height)
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            scale: window.devicePixelRatio || 1
         }
     });
+
+    settlePlayerBoundsAfterLayout();
 
     // Start a 30-second loading timeout. If no playback-time is received, fail gracefully.
     window.playbackTimeout = setTimeout(() => {
@@ -6642,12 +6651,15 @@ window.iptvAPI.onStreamFailedRetry(async () => {
         title: window.currentPlaybackChannel.title,
         headers: window.currentPlaybackHeaders || null,
         bounds: {
-            x: Math.ceil(rect.x),
-            y: Math.round(rect.y),
-            width: Math.round(rect.width),
-            height: Math.round(rect.height)
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            scale: window.devicePixelRatio || 1
         }
     });
+
+    settlePlayerBoundsAfterLayout();
 
     window.playbackTimeout = setTimeout(() => {
         if (!window.hasStartedPlayback && streamActive) {
@@ -7180,27 +7192,43 @@ function triggerBoundsUpdate() {
     const isLiveViewActive = document.getElementById('btn-live-tv') && document.getElementById('btn-live-tv').classList.contains('active');
     if (streamActive && isLiveViewActive && playerContainer) {
         const rect = playerContainer.getBoundingClientRect();
+        // Guard against zero-size or tiny layouts during hidden transitions
+        if (rect.width < 50 || rect.height < 50) {
+            console.log('[BOUNDS] Stale or zero-sized layout skipped:', rect.width, 'x', rect.height);
+            return;
+        }
         window.iptvAPI.updateMpvBounds({
-            x: Math.ceil(rect.x),
-            y: Math.round(rect.y),
-            width: Math.round(rect.width),
-            height: Math.round(rect.height)
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            scale: window.devicePixelRatio || 1
         });
     } else {
-        window.iptvAPI.updateMpvBounds({ x: 0, y: 0, width: 0, height: 0 });
+        window.iptvAPI.updateMpvBounds({ x: 0, y: 0, width: 0, height: 0, scale: window.devicePixelRatio || 1 });
     }
 }
 
 function settlePlayerBoundsAfterLayout() {
-    for (let delay of [0, 16, 50, 120]) {
-        setTimeout(triggerBoundsUpdate, delay);
+    for (let delay of [0, 16, 50, 120, 250]) {
+        setTimeout(() => {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    triggerBoundsUpdate();
+                });
+            });
+        }, delay);
     }
 }
 
 // Use ResizeObserver to track exact pixel coordinates perfectly
 const resizeObserver = new ResizeObserver(() => {
     console.log('[EVENT] ResizeObserver triggered, updating MPV bounds.');
-    triggerBoundsUpdate();
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            setTimeout(triggerBoundsUpdate, 0);
+        });
+    });
 });
 resizeObserver.observe(playerContainer);
 
@@ -10960,4 +10988,16 @@ try {
     }
 } catch (e) {
     console.error('Failed to register onOpenDvrPage listener:', e);
+}
+
+// Monitor DPI and display changes to re-sync native bounds
+try {
+    if (window.iptvAPI && typeof window.iptvAPI.onTriggerRendererBoundsSync === 'function') {
+        window.iptvAPI.onTriggerRendererBoundsSync(() => {
+            console.log('[BOUNDS] Display metrics changed or screen drag occurred. Resyncing layout.');
+            settlePlayerBoundsAfterLayout();
+        });
+    }
+} catch (e) {
+    console.error('Failed to register display metrics change listener:', e);
 }

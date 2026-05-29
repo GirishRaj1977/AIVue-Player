@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, clipboard, Tray, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, clipboard, Tray, Notification, screen } = require('electron');
 const path = require('path');
 const { spawn, execFile, exec } = require('child_process');
 const net = require('net');
@@ -568,6 +568,14 @@ let nativeToastTimer = null;
 let remoteOverrideWindow = null;
 let playerWindowHwnd = null;
 let lastPlayerWindowShapeKey = null;
+let decoderRecoveryState = {
+    url: '',
+    errorCount: 0,
+    recoveryAttempts: 0,
+    hwDisabled: false,
+    lastErrorTime: 0,
+    recoveryInProgress: false
+};
 let playerShapeProcess = null;
 let playerShapeReady = false;
 let pendingPlayerShapeCommands = [];
@@ -724,7 +732,7 @@ function createWindow() {
     });
     mainWindow.on('restore', () => {
         console.log('[EVENT] mainWindow restore');
-        syncPlayerWindow();
+        debouncedSyncPlayerWindow();
     });
     mainWindow.on('hide', () => {
         console.log('[EVENT] mainWindow hide');
@@ -733,18 +741,18 @@ function createWindow() {
     });
     mainWindow.on('show', () => {
         console.log('[EVENT] mainWindow show');
-        syncPlayerWindow();
+        debouncedSyncPlayerWindow();
     });
 
     // Ensure the video child window moves seamlessly when you move or resize the app
     mainWindow.on('move', () => {
         console.log('[EVENT] mainWindow move');
-        syncPlayerWindow();
+        debouncedSyncPlayerWindow();
         syncNativeOverlayWindows();
     });
     mainWindow.on('resize', () => {
         console.log('[EVENT] mainWindow resize');
-        syncPlayerWindow();
+        debouncedSyncPlayerWindow();
         syncNativeOverlayWindows();
     });
 
@@ -780,6 +788,17 @@ function createWindow() {
     });
 }
 
+let syncPlayerWindowTimer = null;
+function debouncedSyncPlayerWindow() {
+    if (syncPlayerWindowTimer) {
+        clearTimeout(syncPlayerWindowTimer);
+    }
+    syncPlayerWindowTimer = setTimeout(() => {
+        syncPlayerWindowTimer = null;
+        syncPlayerWindow();
+    }, 16);
+}
+
 function syncPlayerWindow() {
     console.log('[SYNC] Syncing player window bounds');
     if (playerWindow && !playerWindow.isDestroyed() && mainWindow && !mainWindow.isDestroyed() && currentDOMBounds) {
@@ -792,16 +811,27 @@ function syncPlayerWindow() {
 
         playerWindow.setIgnoreMouseEvents(true); // Re-enforce OS click fallthrough after opacity changes
         const contentBounds = mainWindow.getContentBounds();
-        playerWindow.setBounds({
-            x: contentBounds.x + currentDOMBounds.x,
-            y: contentBounds.y + currentDOMBounds.y,
-            width: currentDOMBounds.width,
-            height: currentDOMBounds.height
-        });
+        const scale = currentDOMBounds.scale || 1.0;
+
+        const physicalBounds = {
+            x: Math.round(contentBounds.x + currentDOMBounds.x),
+            y: Math.round(contentBounds.y + currentDOMBounds.y),
+            width: Math.round(currentDOMBounds.width),
+            height: Math.round(currentDOMBounds.height)
+        };
+
+        playerWindow.setBounds(physicalBounds);
+
+        // Force repaint native surface to prevent GPU lag / black frames on resize
+        playerWindow.showInactive();
+        if (typeof playerWindow.invalidateShadow === 'function') {
+            playerWindow.invalidateShadow();
+        }
+
         schedulePlayerWindowShape(
-            currentDOMBounds.width,
-            currentDOMBounds.height,
-            mainWindow.isFullScreen() ? 0 : 24
+            Math.round(currentDOMBounds.width * scale),
+            Math.round(currentDOMBounds.height * scale),
+            mainWindow.isFullScreen() ? 0 : Math.round(24 * scale)
         );
     }
 }
@@ -1808,6 +1838,14 @@ app.whenReady().then(() => {
     ensurePlayerShapeProcess();
     initMpv();
     initRemoteServer(); // Spin up the HTTP API server
+
+    // Listen for display monitor metrics/DPI changes (e.g. moving between monitors)
+    screen.on('display-metrics-changed', () => {
+        console.log('[EVENT] Display metrics changed, triggering renderer sync.');
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('trigger-renderer-bounds-sync');
+        }
+    });
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
@@ -1886,7 +1924,9 @@ function initMpv() {
         `--hwdec=auto-safe`,    
         `--profile=fast`,       
         `--cache=yes`,          
-        `--cache-secs=30`,
+        `--cache-secs=10`,
+        `--demuxer-readahead-secs=5`,
+        `--vd-lavc-dr=no`,
         `--cache-pause=yes`,
         `--demuxer-max-bytes=100M`,
         `--demuxer-max-back-bytes=50M`,
@@ -1906,6 +1946,7 @@ function initMpv() {
         `--prefetch-playlist=yes`,
         `--stream-lavf-o=reconnect=1`,
         `--stream-lavf-o=reconnect_streamed=1`,
+        `--stream-lavf-o=reconnect_delay_max=5`,
         `--idle=yes`,
         `--log-file=${path.join(app.getPath('userData'), 'mpv-debug.log')}`,
         `--msg-level=all=v`
@@ -1919,7 +1960,54 @@ function initMpv() {
         // MPV stdout parsing removed. We now rely strictly on IPC property-change events 
         // (like playback-time) to know exactly when the video has started rendering.
     });
-    mpvProcess.stderr.on('data', (data) => console.error(`[MPV ERR] ${data.toString().trim()}`));
+    mpvProcess.stderr.on('data', (data) => {
+        const text = data.toString();
+        console.error(`[MPV ERR] ${text.trim()}`);
+
+        // Parse for specific decoder failures (non-existing SPS, decode_slice_header, no frame!)
+        if (text.includes('non-existing SPS') || text.includes('decode_slice_header') || text.includes('no frame!')) {
+            const now = Date.now();
+            // Reset error counter if the last error occurred more than 8 seconds ago
+            if (now - decoderRecoveryState.lastErrorTime > 8000) {
+                decoderRecoveryState.errorCount = 0;
+            }
+            decoderRecoveryState.lastErrorTime = now;
+            decoderRecoveryState.errorCount++;
+
+            console.warn(`[DECODER RECOVERY] Stream decoder issue detected (${decoderRecoveryState.errorCount}/5): ${text.trim()}`);
+
+            if (decoderRecoveryState.errorCount >= 5 && !decoderRecoveryState.recoveryInProgress && decoderRecoveryState.url) {
+                decoderRecoveryState.recoveryInProgress = true;
+                decoderRecoveryState.errorCount = 0; // Reset counter for next tier
+                decoderRecoveryState.recoveryAttempts++;
+
+                if (decoderRecoveryState.recoveryAttempts === 1) {
+                    // TIER 1: Silently reload the stream to request a fresh keyframe / GOP
+                    console.log(`[DECODER RECOVERY] Tier 1: Forcing silent stream reload to request fresh keyframe/SPS.`);
+                    if (ipcClient && !ipcClient.destroyed) {
+                        ipcClient.write(JSON.stringify({ command: ["loadfile", decoderRecoveryState.url, "replace"] }) + '\n');
+                    }
+                    setTimeout(() => {
+                        decoderRecoveryState.recoveryInProgress = false;
+                    }, 5000);
+                } else if (decoderRecoveryState.recoveryAttempts >= 2 && !decoderRecoveryState.hwDisabled) {
+                    // TIER 2: Disable hardware acceleration dynamically and reload stream in software fallback mode
+                    console.log(`[DECODER RECOVERY] Tier 2: Decoder errors persist. Switching to software decoding (hwdec=no) and reloading.`);
+                    decoderRecoveryState.hwDisabled = true;
+                    if (ipcClient && !ipcClient.destroyed) {
+                        ipcClient.write(JSON.stringify({ command: ["set_property", "hwdec", "no"] }) + '\n');
+                        ipcClient.write(JSON.stringify({ command: ["loadfile", decoderRecoveryState.url, "replace"] }) + '\n');
+                    }
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('show-native-toast', 'Malformed stream detected. Switched to software decoder fallback.', 4000);
+                    }
+                    setTimeout(() => {
+                        decoderRecoveryState.recoveryInProgress = false;
+                    }, 5000);
+                }
+            }
+        }
+    });
 
     mpvProcess.on('exit', () => {
         console.log(`[MPV] Process exited with code: ${mpvProcess ? mpvProcess.exitCode : 'unknown'}`);
@@ -2102,6 +2190,21 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
     if (data) {
         lastActiveStreamData = data;
     }
+    if (data && data.url) {
+        if (decoderRecoveryState.url !== data.url) {
+            decoderRecoveryState.url = data.url;
+            decoderRecoveryState.errorCount = 0;
+            decoderRecoveryState.recoveryAttempts = 0;
+            if (decoderRecoveryState.hwDisabled) {
+                console.log('[DECODER RECOVERY] Resetting hwdec to auto-safe for new channel.');
+                decoderRecoveryState.hwDisabled = false;
+                if (ipcClient && !ipcClient.destroyed) {
+                    ipcClient.write(JSON.stringify({ command: ["set_property", "hwdec", "auto-safe"] }) + '\n');
+                }
+            }
+            decoderRecoveryState.recoveryInProgress = false;
+        }
+    }
     currentDOMBounds = data ? data.bounds : currentDOMBounds;
     isMpvReady = false;
 
@@ -2201,7 +2304,7 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
 ipcMain.on('update-mpv-bounds', (event, bounds) => {
     console.log('[IPC RECV] update-mpv-bounds', bounds);
     currentDOMBounds = bounds;
-    syncPlayerWindow();
+    debouncedSyncPlayerWindow();
 });
 
 // Send control commands directly to the MPV process
