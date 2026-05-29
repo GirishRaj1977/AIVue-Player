@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     onMpvFileLoaded: (callback) => ipcRenderer.on('mpv-file-loaded', () => callback()),
     onPreviousChannel: (callback) => ipcRenderer.on('mpv-previous-channel', callback),
     onNextChannel: (callback) => ipcRenderer.on('mpv-next-channel', callback),
+    onMpvSelectAid: (callback) => ipcRenderer.on('mpv-select-aid', callback),
+    onMpvSelectSid: (callback) => ipcRenderer.on('mpv-select-sid', callback),
     onStreamFailedRetry: (callback) => ipcRenderer.on('mpv-stream-failed-retry', callback),
     saveChannels: (channels) => ipcRenderer.invoke('save-channels', channels),
     deletePlaylist: (playlistId) => ipcRenderer.invoke('delete-playlist', playlistId),
@@ -124,5 +126,6 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     maximizeWindow: () => ipcRenderer.send('window-maximize'),
     closeWindow: () => ipcRenderer.send('window-close'),
     setConfirmToastActive: (active) => ipcRenderer.send('set-confirm-toast-active', active),
+    closeMpvTrackSelector: () => ipcRenderer.send('close-mpv-track-selector'),
     log: (category, level, message) => ipcRenderer.send('write-log', { category, level, message })
 });

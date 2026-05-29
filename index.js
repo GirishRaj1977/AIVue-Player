@@ -553,6 +553,10 @@ let mpvProcess;
 let currentDOMBounds = null;
 let ipcClient = null;
 let isMpvReady = false;
+let currentMpvTrackList = [];
+let currentMpvAid = null;
+let currentMpvSid = null;
+let trackSelectorWindow = null;
 let ipcConnectionAttempts = 0;
 let reconnectTimer = null;
 let splashWindow = null;
@@ -1929,6 +1933,9 @@ function connectIPC() {
         ipcClient.write(JSON.stringify({ command: ["observe_property", 9, "pause"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["observe_property", 10, "path"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["observe_property", 11, "duration"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 12, "track-list"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 13, "aid"] }) + '\n');
+        ipcClient.write(JSON.stringify({ command: ["observe_property", 14, "sid"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["request_log_messages", "v"] }) + '\n');
     });
     
@@ -1958,6 +1965,15 @@ function connectIPC() {
                             syncPlayerWindow();
                             showMainWindowAndHideSplash();
                         }
+                        if (msg.name === 'track-list') {
+                            currentMpvTrackList = msg.data || [];
+                        }
+                        if (msg.name === 'aid') {
+                            currentMpvAid = msg.data;
+                        }
+                        if (msg.name === 'sid') {
+                            currentMpvSid = msg.data;
+                        }
                         if (mainWindow && !mainWindow.isDestroyed()) {
                             mainWindow.webContents.send('mpv-prop-change', msg.name, msg.data);
                         }
@@ -1979,6 +1995,12 @@ function connectIPC() {
                     }
                     if (msg.args[0] === 'electron-next-channel') {
                         mainWindow.webContents.send('mpv-next-channel');
+                    }
+                    if (msg.args[0] === 'electron-select-aid') {
+                        showPremiumTrackSelectorWindow('audio');
+                    }
+                    if (msg.args[0] === 'electron-select-sid') {
+                        showPremiumTrackSelectorWindow('sub');
                     }
                 }
                 
@@ -5430,3 +5452,78 @@ async function checkScheduledRecordings() {
 }
 
 setInterval(checkScheduledRecordings, 5000);
+
+// ----------------------------------------------------
+// Transparent Overlay Track Selector Window spawning
+// ----------------------------------------------------
+function showPremiumTrackSelectorWindow(type) {
+    if (!playerWindow || playerWindow.isDestroyed()) return;
+    
+    // Close any existing track selector window
+    if (trackSelectorWindow && !trackSelectorWindow.isDestroyed()) {
+        trackSelectorWindow.destroy();
+    }
+    
+    // Temporarily allow mouse events on the playerWindow so the child selector can be clicked!
+    playerWindow.setIgnoreMouseEvents(false);
+    
+    const bounds = playerWindow.getBounds();
+    
+    trackSelectorWindow = new BrowserWindow({
+        parent: playerWindow,
+        show: false,
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        transparent: true,
+        frame: false,
+        hasShadow: false,
+        resizable: false,
+        skipTaskbar: true,
+        focusable: false,
+        acceptFirstMouse: true,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+
+    // Re-enable click fallthrough on playerWindow if the child selector gets closed/destroyed
+    trackSelectorWindow.on('closed', () => {
+        if (playerWindow && !playerWindow.isDestroyed()) {
+            playerWindow.setIgnoreMouseEvents(true);
+        }
+    });
+
+    const currentId = type === 'audio' ? currentMpvAid : currentMpvSid;
+    const tracks = currentMpvTrackList || [];
+
+    const url = `file://${__dirname}/track_selector.html?type=${type}&currentId=${currentId}&tracks=${encodeURIComponent(JSON.stringify(tracks))}`;
+    trackSelectorWindow.loadURL(url);
+    
+    trackSelectorWindow.once('ready-to-show', () => {
+        trackSelectorWindow.showInactive();
+    });
+}
+
+ipcMain.on('select-mpv-track', (event, { type, id }) => {
+    if (ipcClient && !ipcClient.destroyed) {
+        ipcClient.write(JSON.stringify({ command: ["set_property", type === 'audio' ? 'aid' : 'sid', id] }) + '\n');
+    }
+    if (trackSelectorWindow && !trackSelectorWindow.isDestroyed()) {
+        trackSelectorWindow.close();
+    }
+    if (playerWindow && !playerWindow.isDestroyed()) {
+        playerWindow.setIgnoreMouseEvents(true);
+    }
+});
+
+ipcMain.on('close-mpv-track-selector', () => {
+    if (trackSelectorWindow && !trackSelectorWindow.isDestroyed()) {
+        trackSelectorWindow.close();
+    }
+    if (playerWindow && !playerWindow.isDestroyed()) {
+        playerWindow.setIgnoreMouseEvents(true);
+    }
+});

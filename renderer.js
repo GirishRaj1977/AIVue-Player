@@ -5014,6 +5014,16 @@ window.iptvAPI.onMpvPropChange((name, value) => {
             setTimeout(() => window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`), 500);
             window.pendingEpgUpdate = null;
         }
+
+        if (name === 'track-list') {
+            window.currentMpvTrackList = value;
+        }
+        if (name === 'aid') {
+            window.currentMpvAid = value;
+        }
+        if (name === 'sid') {
+            window.currentMpvSid = value;
+        }
     }
 });
 
@@ -7939,6 +7949,15 @@ function injectPremiumStyles() {
             border: 1px solid rgba(187, 134, 252, 0.3) !important;
             box-shadow: 0 4px 12px rgba(187, 134, 252, 0.15) !important;
         }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes scaleUp {
+            from { transform: scale(0.92); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
     `;
     document.head.appendChild(style);
 }
@@ -9623,6 +9642,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (modal && modal.style.display === 'flex') {
                 modal.style.display = 'none';
             }
+            try {
+                window.iptvAPI.closeMpvTrackSelector();
+            } catch (err) {}
         }
     });
 });
@@ -10707,4 +10729,218 @@ async function resolveChannelStreamUrl(channel) {
         }
     }
     return finalStreamUrl;
+}
+
+// ----------------------------------------------------
+// Custom Premium Glassmorphic Track Selection Overlay
+// ----------------------------------------------------
+try {
+    window.iptvAPI.onMpvSelectAid(() => {
+        console.log('[TRACK SELECTOR] Triggered premium selector for audio tracks.');
+        showPremiumTrackSelector('audio');
+    });
+    window.iptvAPI.onMpvSelectSid(() => {
+        console.log('[TRACK SELECTOR] Triggered premium selector for subtitles.');
+        showPremiumTrackSelector('sub');
+    });
+} catch (e) {
+    console.error('[TRACK SELECTOR ERR] Failed to register electron track selection listeners:', e);
+}
+
+function showPremiumTrackSelector(type) {
+    const playerContainer = document.getElementById('player-container');
+    if (!playerContainer) return;
+
+    // Remove any existing track selector overlay
+    const oldOverlay = document.getElementById('premium-track-selector-overlay');
+    if (oldOverlay) oldOverlay.remove();
+
+    const tracks = window.currentMpvTrackList || [];
+    const filteredTracks = tracks.filter(t => t.type === (type === 'audio' ? 'audio' : 'sub'));
+    const currentId = type === 'audio' ? window.currentMpvAid : window.currentMpvSid;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'premium-track-selector-overlay';
+    overlay.style.cssText = `
+        position: absolute;
+        inset: 0;
+        background: rgba(12, 5, 20, 0.78);
+        backdrop-filter: blur(25px);
+        -webkit-backdrop-filter: blur(25px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        animation: fadeIn 0.3s ease forwards;
+        font-family: 'Outfit', 'Inter', sans-serif;
+        pointer-events: auto !important;
+    `;
+
+    // Click outside container to close
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
+
+    const container = document.createElement('div');
+    container.style.cssText = `
+        width: 380px;
+        background: rgba(25, 15, 38, 0.65);
+        border: 1px solid rgba(187, 134, 252, 0.25);
+        border-radius: 20px;
+        padding: 24px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(187, 134, 252, 0.05);
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        pointer-events: auto !important;
+    `;
+
+    const titleRow = document.createElement('div');
+    titleRow.style.cssText = `
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    `;
+
+    const title = document.createElement('span');
+    title.textContent = type === 'audio' ? 'Audio Track' : 'Subtitles';
+    title.style.cssText = `
+        color: #ffffff;
+        font-size: 1.25rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+    `;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+    closeBtn.style.cssText = `
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.6);
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    `;
+    closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.background = 'rgba(255, 255, 255, 0.1)';
+        closeBtn.style.color = '#ffffff';
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.background = 'rgba(255, 255, 255, 0.05)';
+        closeBtn.style.color = 'rgba(255, 255, 255, 0.6)';
+    });
+    closeBtn.addEventListener('click', () => overlay.remove());
+
+    titleRow.appendChild(title);
+    titleRow.appendChild(closeBtn);
+    container.appendChild(titleRow);
+
+    const list = document.createElement('div');
+    list.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 280px;
+        overflow-y: auto;
+        padding-right: 4px;
+    `;
+
+    // For subtitles, add a "Disable/Off" option
+    const finalTracks = [...filteredTracks];
+    if (type === 'sub') {
+        const offOption = {
+            id: 'no',
+            lang: '',
+            title: 'Subtitles Off',
+            selected: currentId === 'no' || !currentId
+        };
+        finalTracks.unshift(offOption);
+    }
+
+    if (finalTracks.length === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.textContent = 'No tracks available';
+        emptyMsg.style.cssText = `
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.95rem;
+            text-align: center;
+            padding: 20px;
+        `;
+        list.appendChild(emptyMsg);
+    } else {
+        finalTracks.forEach(t => {
+            const isSelected = t.selected || (type === 'sub' && t.id === 'no' && (currentId === 'no' || !currentId));
+            const item = document.createElement('div');
+            item.style.cssText = `
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 12px 16px;
+                background: ${isSelected ? 'rgba(187, 134, 252, 0.12)' : 'rgba(255, 255, 255, 0.03)'};
+                border: 1.5px solid ${isSelected ? 'rgba(187, 134, 252, 0.35)' : 'rgba(255, 255, 255, 0.06)'};
+                border-radius: 12px;
+                cursor: pointer;
+                transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            `;
+
+            const label = document.createElement('span');
+            let trackName = t.title || t.lang || (t.id === 'no' ? 'Subtitles Off' : `Track ${t.id}`);
+            if (t.lang) trackName += ` [${t.lang.toUpperCase()}]`;
+            label.textContent = trackName;
+            label.style.cssText = `
+                color: ${isSelected ? '#bb86fc' : 'rgba(255, 255, 255, 0.85)'};
+                font-weight: ${isSelected ? '700' : '500'};
+                font-size: 0.95rem;
+            `;
+
+            item.appendChild(label);
+
+            if (isSelected) {
+                const check = document.createElement('span');
+                check.innerHTML = `✔️`;
+                check.style.cssText = `
+                    color: #bb86fc;
+                    font-size: 0.9rem;
+                    text-shadow: 0 0 10px rgba(187, 134, 252, 0.5);
+                `;
+                item.appendChild(check);
+            }
+
+            item.addEventListener('mouseenter', () => {
+                if (!isSelected) {
+                    item.style.background = 'rgba(255, 255, 255, 0.08)';
+                    item.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                }
+            });
+            item.addEventListener('mouseleave', () => {
+                if (!isSelected) {
+                    item.style.background = 'rgba(255, 255, 255, 0.03)';
+                    item.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+                }
+            });
+
+            item.addEventListener('click', () => {
+                if (type === 'audio') {
+                    window.iptvAPI.sendMpvCommand(['set', 'aid', t.id]);
+                } else {
+                    window.iptvAPI.sendMpvCommand(['set', 'sid', t.id]);
+                }
+                overlay.remove();
+            });
+
+            list.appendChild(item);
+        });
+    }
+
+    container.appendChild(list);
+    overlay.appendChild(container);
+    playerContainer.appendChild(overlay);
 }
