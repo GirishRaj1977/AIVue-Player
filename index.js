@@ -293,6 +293,7 @@ function createWindow() {
         icon: path.join(__dirname, 'assets', 'logo.ico'),
         show: false, // Hide initially until fully loaded
         frame: false,
+        backgroundColor: '#10002b',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true
