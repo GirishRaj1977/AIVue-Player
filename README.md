@@ -43,6 +43,12 @@
 * **Delta Toast Notifications**: Real-time confirmation alerts pop up to declare recording startups and teardowns (`Recording Started: "[Program]"`).
 * **Precise EPG Recording Isolator**: Isolates active recording flags (`🔴`) exclusively on the currently active EPG cell, leaving future blocks untouched.
 
+### 📥 Minimize to Tray & Resource Optimizer
+* **Minimize-to-Tray Lifecycle**: Minimizing or closing the window intercepts default exit calls, cleanly hiding the application into the Windows system tray so background scheduled recordings and services continue executing completely uninterrupted.
+* **Smart Background Playback Suspension**: To prevent resource drain, the embedded player automatically shuts down background video/audio streams when minimized or hidden to the system tray.
+* **Auto-Resume Recovery**: Automatically tracks your last active channel and instantly resumes stream playback right where you left off as soon as you restore the player from the system tray!
+* **Native Desktop Alerts**: Integrates the native Windows HTML5 desktop notification engine to alert you instantly on background recording start, completion, or unexpected failures.
+
 ### 🎬 Movies & TV Series VOD Catalog
 * **TMDB Automated Metadata Scraper**: Dynamically integrates with **The Movie Database (TMDB) API** to fetch high-fidelity metadata (synopsis, ratings, release year, cast & crew) for imported VOD movies and series.
 * **Rich Poster & Fanart Presentation**: Automatically scrapes and renders high-definition backdrops, movie posters, and high-fidelity network logo overlays inside the media details view.
@@ -58,19 +64,42 @@
 
 ## 📸 Screenshots
 
-*(Add screenshots here to showcase the beautiful frosty design)*
-
+### 🖥️ Main Player & EPG Scheduling View
 <table>
-<tr>
-<td align="center"><b>Live TV Grid & Equalizer</b><br><img src="screenshots/AIVUE1.png" width="280"></td>
-<td align="center"><b>Interactive EPG Grid</b><br><img src="screenshots/AIVUE2.png" width="280"></td>
-<td align="center"><b>Modern Playlist Importer</b><br><img src="screenshots/AIVUE3.png" width="280"></td>
-</tr>
-<tr>
-<td align="center"><b>Custom Settings Panel</b><br><img src="screenshots/AIVUE5.png" width="280"></td>
-<td align="center"><b>Mobile Web Controller</b><br><img src="screenshots/AIVUE9.jpg" width="280"></td>
-<td align="center"><b>Mobile Keyboard Search</b><br><img src="screenshots/AIVUE8.jpg" width="280"></td>
-</tr>
+  <tr>
+    <td align="center"><b>Live TV Grid & Equalizer</b><br><img src="screenshots/MAIN%20VIEW.png" width="280"></td>
+    <td align="center"><b>Interactive EPG Grid</b><br><img src="screenshots/EPG%20VIEW.png" width="280"></td>
+    <td align="center"><b>Modern Playlist Importer</b><br><img src="screenshots/PALYLIST.png" width="280"></td>
+  </tr>
+</table>
+
+### 🎬 Movies & TV Series Catalog
+<table>
+  <tr>
+    <td align="center"><b>VOD Main Playlist Folders</b><br><img src="screenshots/MOVIES%201.png" width="280"></td>
+    <td align="center"><b>VOD Search & Grid View</b><br><img src="screenshots/MOVIES%202.png" width="280"></td>
+    <td align="center"><b>Embedded VOD Movie Player</b><br><img src="screenshots/MOVIES%203.png" width="280"></td>
+    <td align="center"><b>TV Series Portal Grids</b><br><img src="screenshots/SERIES.png" width="280"></td>
+  </tr>
+</table>
+
+### ⚙️ System Settings Panels
+<table>
+  <tr>
+    <td align="center"><b>Playlist Configuration</b><br><img src="screenshots/SETTINGS%201.png" width="280"></td>
+    <td align="center"><b>Remote Server Setup</b><br><img src="screenshots/SETTINGS%202.png" width="280"></td>
+    <td align="center"><b>TMDB API Settings</b><br><img src="screenshots/SETTINGS%203.png" width="280"></td>
+  </tr>
+</table>
+
+### 📡 Local Remote Control Dashboard
+<table>
+  <tr>
+    <td align="center"><b>Mobile Stream Controller</b><br><img src="screenshots/REMOTE%201.jpg" width="280"></td>
+    <td align="center"><b>Active Device Pairing Prompt</b><br><img src="screenshots/REMOTE%202.jpg" width="280"></td>
+    <td align="center"><b>Mobile EPG Grid</b><br><img src="screenshots/REMOTE%203.jpg" width="280"></td>
+    <td align="center"><b>Mobile Keyboard Search</b><br><img src="screenshots/REMOTE%204.jpg" width="280"></td>
+  </tr>
 </table>
 
 ---
@@ -126,17 +155,6 @@ The embedded remote API allows direct command pipelines. You can target the play
 * **Stop Playback**: `POST /api/command` with JSON `{ "command": "stop" }`
 * **Volume Change**: `POST /api/command` with JSON `{ "command": "volume", "value": 85 }`
 * **Navigate UI**: `POST /api/command` with JSON `{ "command": "key", "value": "down" }`
-
----
-
-## 🧠 Roadmap & Future Expansion
-
-- [x] Full Xtream Codes API database binding
-- [x] Stalker middleware portal parsing
-- [x] Custom glassmorphic titlebar overlay
-- [x] Fully integrated custom HTML Window Controls
-- [ ] Multi-platform native builds (Linux & macOS native `NSView` embedding)
-- [ ] Local casting server (Chromecast & DLNA integration)
 
 ---
 
