@@ -10944,3 +10944,20 @@ function showPremiumTrackSelector(type) {
     overlay.appendChild(container);
     playerContainer.appendChild(overlay);
 }
+
+// System Tray navigation listener to open the DVR/Recording page
+try {
+    if (window.iptvAPI && typeof window.iptvAPI.onOpenDvrPage === 'function') {
+        window.iptvAPI.onOpenDvrPage(() => {
+            console.log('[TRAY IPC] Navigating to DVR page...');
+            const recordingBtn = document.getElementById('btn-recording');
+            if (recordingBtn) {
+                switchTab('recording', recordingBtn);
+            } else {
+                console.error('[TRAY IPC] btn-recording not found in DOM');
+            }
+        });
+    }
+} catch (e) {
+    console.error('Failed to register onOpenDvrPage listener:', e);
+}

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, clipboard, Tray, Notification } = require('electron');
 const path = require('path');
 const { spawn, execFile, exec } = require('child_process');
 const net = require('net');
@@ -557,6 +557,9 @@ let currentMpvTrackList = [];
 let currentMpvAid = null;
 let currentMpvSid = null;
 let trackSelectorWindow = null;
+let tray = null;
+let lastActiveStreamData = null;
+let isQuitting = false;
 let ipcConnectionAttempts = 0;
 let reconnectTimer = null;
 let splashWindow = null;
@@ -597,11 +600,18 @@ function checkAndShowMainWindow() {
             splashWindow.destroy();
         }
         if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
-                mainWindow.maximize();
-                mainWindow.setAlwaysOnTop(true);
+            const shouldStartHidden = process.argv.includes('--hidden');
+            if (shouldStartHidden) {
+                console.log('[STARTUP] Starting minimized to tray...');
+                showTrayNotification('AIVue Player', 'App started minimized in system tray.');
+                syncPlayerWindow();
+                return;
+            }
+            mainWindow.maximize();
+            mainWindow.setAlwaysOnTop(true);
             mainWindow.show();
-                mainWindow.setAlwaysOnTop(false);
-                mainWindow.focus();
+            mainWindow.setAlwaysOnTop(false);
+            mainWindow.focus();
             syncPlayerWindow();
         }
     }
@@ -688,11 +698,42 @@ function createWindow() {
         setTimeout(showMainWindowAndHideSplash, 8000);
     });
 
-    // Terminate MPV gracefully when the window closes
+    // Intercept Close Button to Hide window into System Tray
+    mainWindow.on('close', (event) => {
+        if (!isQuitting) {
+            event.preventDefault();
+            mainWindow.hide();
+            showTrayNotification('AIVue Player', 'App minimized to tray. IPTV playing and recording in background.');
+        } else {
+            console.log('[EVENT] mainWindow close - quitting');
+            if (mpvProcess) mpvProcess.kill();
+            if (playerWindow && !playerWindow.isDestroyed()) playerWindow.destroy();
+            if (trackSelectorWindow && !trackSelectorWindow.isDestroyed()) trackSelectorWindow.destroy();
+        }
+    });
+
     mainWindow.on('closed', () => {
         console.log('[EVENT] mainWindow closed');
-        if (mpvProcess) mpvProcess.kill();
         mainWindow = null;
+    });
+
+    mainWindow.on('minimize', () => {
+        console.log('[EVENT] mainWindow minimize');
+        stopActivePlayback();
+        syncPlayerWindow();
+    });
+    mainWindow.on('restore', () => {
+        console.log('[EVENT] mainWindow restore');
+        syncPlayerWindow();
+    });
+    mainWindow.on('hide', () => {
+        console.log('[EVENT] mainWindow hide');
+        stopActivePlayback();
+        syncPlayerWindow();
+    });
+    mainWindow.on('show', () => {
+        console.log('[EVENT] mainWindow show');
+        syncPlayerWindow();
     });
 
     // Ensure the video child window moves seamlessly when you move or resize the app
@@ -742,7 +783,7 @@ function createWindow() {
 function syncPlayerWindow() {
     console.log('[SYNC] Syncing player window bounds');
     if (playerWindow && !playerWindow.isDestroyed() && mainWindow && !mainWindow.isDestroyed() && currentDOMBounds) {
-        if (!isMpvReady || currentDOMBounds.width === 0 || currentDOMBounds.height === 0 || !mainWindow.isVisible()) {
+        if (!isMpvReady || currentDOMBounds.width === 0 || currentDOMBounds.height === 0 || !mainWindow.isVisible() || mainWindow.isMinimized()) {
             playerWindow.setOpacity(0); // Make completely invisible (Bypasses OS bounds clamping)
             playerWindow.setBounds({ x: -10000, y: -10000, width: 10, height: 10 });
             return;
@@ -1762,6 +1803,7 @@ evtSource.onmessage = (e) => {
 }
 
 app.whenReady().then(() => {
+    createTray();
     createWindow();
     ensurePlayerShapeProcess();
     initMpv();
@@ -1774,9 +1816,13 @@ app.whenReady().then(() => {
     });
 });
 
+app.on('before-quit', () => {
+    isQuitting = true;
+});
+
 app.on('window-all-closed', () => {
     console.log('[APP] Shutdown requested (all windows closed)');
-    if (process.platform !== 'darwin') app.quit();
+    if (isQuitting && process.platform !== 'darwin') app.quit();
 });
 
 app.on('will-quit', () => {
@@ -2053,7 +2099,10 @@ function connectIPC() {
 // MPV Embedding Logic
 ipcMain.on('play-mpv-embedded', (event, data) => {
     console.log('[IPC RECV] play-mpv-embedded', data);
-    currentDOMBounds = data.bounds;
+    if (data) {
+        lastActiveStreamData = data;
+    }
+    currentDOMBounds = data ? data.bounds : currentDOMBounds;
     isMpvReady = false;
 
     if (!mpvProcess || mpvProcess.exitCode !== null) {
@@ -4968,6 +5017,8 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
     
     const handleDone = () => {
         activeRecordings.delete(recordingId);
+        buildTrayMenu();
+        showTrayNotification('Recording Completed', `Saved "${programName}" from ${channelName}`);
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('recording-status-change', {
                 id: recordingId,
@@ -4981,6 +5032,8 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
     
     const handleError = (err) => {
         activeRecordings.delete(recordingId);
+        buildTrayMenu();
+        showTrayNotification('Recording Failed', `Error on "${programName}" from ${channelName}: ${err.message}`);
         console.error('[DVR ERROR] Recording failed:', err.message);
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('recording-status-change', {
@@ -5006,6 +5059,8 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
         startTime: Date.now(),
         bytesWritten: 0
     });
+    buildTrayMenu();
+    showTrayNotification('Recording Started', `Now recording "${programName}" on ${channelName}`);
     
     return {
         id: recordingId,
@@ -5020,6 +5075,8 @@ ipcMain.handle('stop-recording', (event, recordingId) => {
     if (rec) {
         rec.cancel();
         activeRecordings.delete(recordingId);
+        buildTrayMenu();
+        showTrayNotification('Recording Stopped', `Stopped recording "${rec.programName}" on ${rec.channelName}`);
         return true;
     }
     return false;
@@ -5369,6 +5426,8 @@ async function checkScheduledRecordings() {
                     });
                     
                     activeScheduleRecordings.set(row.id, recordingId);
+                    buildTrayMenu();
+                    showTrayNotification('Recording Started (Scheduled)', `Now recording "${meta.programName}" on ${meta.channelName}`);
                 } catch (err) {
                     console.error('[DVR SCHEDULER] Failed to start downloader:', err);
                     db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id);
@@ -5394,6 +5453,8 @@ async function checkScheduledRecordings() {
             const handleDone = () => {
                 activeRecordings.delete(recordingId);
                 activeScheduleRecordings.delete(row.id);
+                buildTrayMenu();
+                showTrayNotification('Recording Completed (Scheduled)', `Saved "${meta.programName}" from ${meta.channelName}`);
                 try {
                     db.prepare("UPDATE dvr_schedule SET status = 'completed' WHERE id = ?").run(row.id);
                 } catch (e) {}
@@ -5411,6 +5472,8 @@ async function checkScheduledRecordings() {
             const handleError = (err) => {
                 activeRecordings.delete(recordingId);
                 activeScheduleRecordings.delete(row.id);
+                buildTrayMenu();
+                showTrayNotification('Recording Failed (Scheduled)', `Error on "${meta.programName}" from ${meta.channelName}: ${err.message}`);
                 try {
                     db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id);
                 } catch (e) {}
@@ -5444,6 +5507,7 @@ async function checkScheduledRecordings() {
             }
             activeScheduleRecordings.delete(row.id);
             db.prepare("UPDATE dvr_schedule SET status = 'completed' WHERE id = ?").run(row.id);
+            buildTrayMenu();
         }
         
     } catch (e) {
@@ -5527,3 +5591,150 @@ ipcMain.on('close-mpv-track-selector', () => {
         playerWindow.setIgnoreMouseEvents(true);
     }
 });
+
+// ==========================================
+// --- SYSTEM TRAY & NOTIFICATION SERVICE ---
+// ==========================================
+
+function createTray() {
+    console.log('[TRAY] Initializing system tray...');
+    try {
+        const iconPath = path.join(__dirname, 'assets', 'logo.ico');
+        if (!fs.existsSync(iconPath)) {
+            console.warn('[TRAY WARNING] Tray icon not found at:', iconPath);
+        }
+        tray = new Tray(iconPath);
+        tray.setToolTip('AIVue Player');
+        
+        tray.on('double-click', () => {
+            restoreWindow();
+        });
+        
+        buildTrayMenu();
+    } catch (err) {
+        console.error('[TRAY ERROR] Failed to create system tray:', err);
+    }
+}
+
+function restoreWindow() {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    
+    const wasHiddenOrMinimized = !mainWindow.isVisible() || mainWindow.isMinimized();
+    
+    if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+    syncPlayerWindow();
+    syncNativeOverlayWindows();
+    
+    if (wasHiddenOrMinimized && lastActiveStreamData) {
+        console.log('[TRAY] Restoring from tray, restarting last active stream...');
+        ipcMain.emit('play-mpv-embedded', null, lastActiveStreamData);
+    }
+}
+
+function stopActivePlayback() {
+    if (ipcClient && !ipcClient.destroyed) {
+        console.log('[TRAY] Hiding/minimizing app, stopping background active playback...');
+        ipcClient.write(JSON.stringify({ command: ['stop'] }) + '\n');
+    }
+}
+
+function buildTrayMenu() {
+    if (!tray) return;
+    try {
+        const activeCount = activeRecordings.size;
+        const isStartupEnabled = app.getLoginItemSettings().openAtLogin;
+        
+        const contextMenu = Menu.buildFromTemplate([
+            {
+                label: 'Open Player',
+                click: restoreWindow
+            },
+            {
+                type: 'separator'
+            },
+            {
+                label: `Active Recordings: ${activeCount}`,
+                enabled: false
+            },
+            {
+                label: 'Scheduled Recordings',
+                click: () => {
+                    restoreWindow();
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('open-dvr-page');
+                    }
+                }
+            },
+            {
+                type: 'separator'
+            },
+            {
+                label: 'Start with Windows',
+                type: 'checkbox',
+                checked: isStartupEnabled,
+                click: (item) => {
+                    app.setLoginItemSettings({
+                        openAtLogin: item.checked,
+                        args: item.checked ? ['--hidden'] : []
+                    });
+                    console.log(`[TRAY] Start with Windows toggled to: ${item.checked}`);
+                }
+            },
+            {
+                type: 'separator'
+            },
+            {
+                label: 'Quit',
+                click: async () => {
+                    console.log('[TRAY] Quit requested. Cleaning up and exiting...');
+                    isQuitting = true;
+                    
+                    // Cancel all active recordings
+                    for (const [id, rec] of activeRecordings.entries()) {
+                        try {
+                            console.log(`[TRAY] Cancelling recording ID: ${id}`);
+                            rec.cancel();
+                        } catch (e) {
+                            console.error('[TRAY] Error cancelling recording:', e);
+                        }
+                    }
+                    activeRecordings.clear();
+                    
+                    if (mpvProcess) {
+                        try {
+                            mpvProcess.kill();
+                        } catch (e) {}
+                    }
+                    
+                    app.quit();
+                }
+            }
+        ]);
+        
+        tray.setContextMenu(contextMenu);
+    } catch (err) {
+        console.error('[TRAY ERROR] Failed to build tray menu:', err);
+    }
+}
+
+function showTrayNotification(title, message) {
+    console.log(`[NOTIFICATION] ${title} - ${message}`);
+    try {
+        if (Notification.isSupported()) {
+            const notif = new Notification({
+                title: title,
+                body: message,
+                icon: path.join(__dirname, 'assets', 'logo.ico')
+            });
+            notif.show();
+        } else {
+            console.warn('[NOTIFICATION WARNING] Native HTML5 notifications are not supported on this platform');
+        }
+    } catch (err) {
+        console.error('[NOTIFICATION ERROR] Failed to display notification:', err);
+    }
+}
