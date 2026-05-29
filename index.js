@@ -356,7 +356,6 @@ function createWindow() {
 
     mainWindow.on('minimize', () => {
         console.log('[EVENT] mainWindow minimize');
-        stopActivePlayback();
         syncPlayerWindow();
     });
     mainWindow.on('restore', () => {
@@ -365,7 +364,6 @@ function createWindow() {
     });
     mainWindow.on('hide', () => {
         console.log('[EVENT] mainWindow hide');
-        stopActivePlayback();
         syncPlayerWindow();
     });
     mainWindow.on('show', () => {
@@ -4543,8 +4541,6 @@ function createTray() {
 function restoreWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     
-    const wasHiddenOrMinimized = !mainWindow.isVisible() || mainWindow.isMinimized();
-    
     if (mainWindow.isMinimized()) {
         mainWindow.restore();
     }
@@ -4552,11 +4548,6 @@ function restoreWindow() {
     mainWindow.focus();
     syncPlayerWindow();
     syncNativeOverlayWindows();
-    
-    if (wasHiddenOrMinimized && lastActiveStreamData) {
-        console.log('[TRAY] Restoring from tray, restarting last active stream...');
-        ipcMain.emit('play-mpv-embedded', null, lastActiveStreamData);
-    }
 }
 
 function stopActivePlayback() {
