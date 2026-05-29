@@ -23,7 +23,6 @@
 ### 📺 Advanced IPTV Playback Engine
 * **Embedded MPV Core**: Leverages an ultra-fast, native `mpv.exe` engine embedded inside a frameless Electron window using advanced Win32 OS-level `--wid` handle binding for maximum performance, hardware acceleration (`dxva2`/`d3d11`), and low latency.
 * **Format Versatility**: Seamlessly parses and loads massive playlists from standard **M3U**, **Xtream Codes API**, and **Stalker Middleware** portals.
-* **Instant Unmute Lifecycle**: Guaranteed audio playback from the millisecond the stream connects by executing automated IPC hardware unmute signals directly into the MPV process on launch.
 
 ### 🔮 Premium Frosty UI / UX (Glassmorphism)
 * **Custom Dark Theme**: Designed with a high-end, dark-mode purple neon style (`#08080a`) accented by a translucent lavender glow overlay.
@@ -35,7 +34,6 @@
 ### 📅 Live EPG & Program Grid
 * **Live Bottom Grid**: Shows EPG guides directly under the video player. Pinned channels and program cells are styled as frosty glass panels, blending into the theme.
 * **Full EPG View**: A dedicated, interactive EPG scheduling grid that lists channel programs chronologically.
-* **EPG Tab Return Restorer**: Includes automated viewport boundaries recovery, ensuring EPG grids draw correctly when switching back from other modules.
 
 ### 🔴 Intelligent DVR Stream Recording
 * **Background Scheduler**: Set one-time or recurring recording sessions for your favorite live streams using advanced cron-like schedule parameters.
@@ -53,10 +51,9 @@
 * **TMDB Automated Metadata Scraper**: Dynamically integrates with **The Movie Database (TMDB) API** to fetch high-fidelity metadata (synopsis, ratings, release year, cast & crew) for imported VOD movies and series.
 * **Rich Poster & Fanart Presentation**: Automatically scrapes and renders high-definition backdrops, movie posters, and high-fidelity network logo overlays inside the media details view.
 * **Vertical Space Saver Grid**: Category back-navigation moves above the grids in the Movies & Series pages to maximize grid card visibility. Shows a double-row list of titles immediately on load.
-* **Smart Back-tracking**: Memorizes active VOD stream information. Stopping a movie or TV show automatically returns you to the active directory modal without resetting your catalog search.
 
 ### 📡 Secure Mobile Remote Control
-* **Built-in Local API Server**: Spawns an internal Express web server (`PORT 8088`) inside Node.js.
+* **Built-in Local API Server**: Spawns an internal Express web server inside Node.js.
 * **QR-Pairing & Authentication**: Pair mobile phones or tablets securely using local network auth tokens.
 * **Interactive Web Dashboard**: Stream controls, search bars, volume scrollwheels, playlist navigation, and physical text input redirection straight to the computer screen.
 
