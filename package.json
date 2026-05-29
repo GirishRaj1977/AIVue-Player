@@ -1,6 +1,6 @@
 {
   "name": "aivue-player",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Python Electron IPTV Player",
   "main": "index.js",
   "type": "commonjs",
