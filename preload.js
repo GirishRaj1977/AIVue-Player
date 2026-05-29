@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     onMpvExit: (callback) => ipcRenderer.on('mpv-exit', (_event, code) => callback(code)),
     onMpvStopped: (callback) => ipcRenderer.on('mpv-stopped', () => callback()),
     onMpvFileLoaded: (callback) => ipcRenderer.on('mpv-file-loaded', () => callback()),
+    onMpvRestorePlayback: (callback) => ipcRenderer.on('mpv-restore-playback', () => callback()),
     onPreviousChannel: (callback) => ipcRenderer.on('mpv-previous-channel', callback),
     onNextChannel: (callback) => ipcRenderer.on('mpv-next-channel', callback),
     onMpvSelectAid: (callback) => ipcRenderer.on('mpv-select-aid', callback),

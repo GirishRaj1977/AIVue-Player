@@ -189,6 +189,8 @@ let currentMpvSid = null;
 let trackSelectorWindow = null;
 let tray = null;
 let lastActiveStreamData = null;
+let currentMpvPath = null;
+let wasPlayingBeforeTray = false;
 let isQuitting = false;
 let ipcConnectionAttempts = 0;
 let reconnectTimer = null;
@@ -365,6 +367,13 @@ function createWindow() {
     });
     mainWindow.on('hide', () => {
         console.log('[EVENT] mainWindow hide');
+        if (currentMpvPath && lastActiveStreamData) {
+            console.log('[TRAY] Window hidden/trayed. Saving playback state and stopping playback.');
+            wasPlayingBeforeTray = true;
+            stopActivePlayback();
+        } else {
+            wasPlayingBeforeTray = false;
+        }
         syncPlayerWindow();
     });
     mainWindow.on('show', () => {
@@ -831,6 +840,7 @@ function initMpv() {
 
     mpvProcess.on('exit', () => {
         console.log(`[MPV] Process exited with code: ${mpvProcess ? mpvProcess.exitCode : 'unknown'}`);
+        currentMpvPath = null;
         ipcConnectionAttempts = 0;
         if (reconnectTimer) clearTimeout(reconnectTimer);
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -918,6 +928,10 @@ function connectIPC() {
                             isMpvReady = true;
                             syncPlayerWindow();
                             showMainWindowAndHideSplash();
+                        }
+                        if (msg.name === 'path') {
+                            currentMpvPath = msg.data;
+                            console.log('[MPV] Path changed to:', currentMpvPath);
                         }
                         if (msg.name === 'track-list') {
                             currentMpvTrackList = msg.data || [];
@@ -4549,6 +4563,12 @@ function restoreWindow() {
     mainWindow.focus();
     syncPlayerWindow();
     syncNativeOverlayWindows();
+
+    if (wasPlayingBeforeTray) {
+        wasPlayingBeforeTray = false;
+        console.log('[TRAY] Restoring from tray, sending mpv-restore-playback...');
+        mainWindow.webContents.send('mpv-restore-playback');
+    }
 }
 
 function stopActivePlayback() {

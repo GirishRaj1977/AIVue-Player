@@ -5084,6 +5084,26 @@ window.iptvAPI.onMpvExit((code) => {
     }
 });
  
+window.iptvAPI.onMpvRestorePlayback(async () => {
+    console.log('[RESTORE] Main process requested playback restore.');
+    if (window.currentPlaybackChannel) {
+        console.log('[RESTORE] Resuming last channel/video:', window.currentPlaybackChannel.title);
+        try {
+            const progId = getPlaybackProgressId(window.currentPlaybackChannel);
+            if (progId) {
+                const saved = await window.iptvAPI.getPlaybackProgress(progId);
+                if (saved && saved.position) {
+                    window.pendingSeekPosition = saved.position;
+                    console.log('[RESTORE] Restoring progress position:', saved.position);
+                }
+            }
+        } catch (e) {
+            console.error('[RESTORE ERROR] Failed to fetch playback progress:', e);
+        }
+        embedStream(window.currentPlaybackChannel);
+    }
+});
+
 window.iptvAPI.onMpvStopped(() => {
     console.log('[API RECV] onMpvStopped');
     hideAutoplayOverlay();
