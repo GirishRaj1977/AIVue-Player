@@ -2295,7 +2295,7 @@ ipcMain.handle('get-epg-dict', async (event, epgSources, filterIds) => {
 
         const env = Object.assign({}, process.env, { AIVUE_CACHE_DIR: cacheDir, AIVUE_FORCE_REFRESH: '0' });
 
-        execFile(pythonCmd, args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, env }, (error, stdout) => {
+        execFile(pythonCmd, args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, timeout: 60000, env }, (error, stdout) => {
             if (error) return resolve({});
             try { 
                 cachedEpgDict = JSON.parse(stdout);
@@ -2335,7 +2335,7 @@ ipcMain.handle('get-epg-channels', async (event, epgSources) => {
             const args = [scriptPath, '--epg-only', otherSources.join(',')];
             const env = Object.assign({}, process.env, { AIVUE_CACHE_DIR: cacheDir, AIVUE_FORCE_REFRESH: '0' });
             
-            execFile(pythonCmd, args, { maxBuffer: 1024 * 1024 * 100, windowsHide: true, env }, (error, stdout) => {
+            execFile(pythonCmd, args, { maxBuffer: 1024 * 1024 * 100, windowsHide: true, timeout: 60000, env }, (error, stdout) => {
                 if (error) return resolve([]);
                 try { resolve(JSON.parse(stdout)); } 
                 catch (e) { resolve([]); }
@@ -2486,6 +2486,32 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
                     continue;
                 }
                 
+                // Smart Optimization: Filter EPG fetching list to only channels mapped in database plus a safety limit of unmapped ones.
+                // This prevents freezing/hanging the application and getting banned/rate-limited on massive Stalker playlists (e.g. 10,000+ channels).
+                let filteredStalkerChannels = [];
+                try {
+                    const mappedEpgIds = new Set();
+                    const rows = db.prepare('SELECT DISTINCT epg_id FROM mappings WHERE epg_id IS NOT NULL').all();
+                    rows.forEach(r => mappedEpgIds.add(String(r.epg_id)));
+
+                    let unmappedCount = 0;
+                    const UNMAPPED_LIMIT = 100;
+                    
+                    for (const ch of stalkerChannels) {
+                        const chId = String(chooseStalkerChannelId(ch));
+                        if (mappedEpgIds.has(chId)) {
+                            filteredStalkerChannels.push(ch);
+                        } else if (unmappedCount < UNMAPPED_LIMIT) {
+                            filteredStalkerChannels.push(ch);
+                            unmappedCount++;
+                        }
+                    }
+                    console.log(`[STALKER EPG] Filtered EPG fetch: total ${stalkerChannels.length} channels reduced to ${filteredStalkerChannels.length} (Mapped: ${filteredStalkerChannels.length - unmappedCount}, Unmapped safety limit: ${unmappedCount})`);
+                    stalkerChannels = filteredStalkerChannels;
+                } catch (filterErr) {
+                    console.error('[STALKER EPG] Failed to apply smart channels filter:', filterErr);
+                }
+
                 console.log(`[STALKER EPG] Fetching EPG for ${stalkerChannels.length} channels...`);
                 
                 // 2. Fetch EPG for all channels in parallel with limit
@@ -2556,7 +2582,7 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
         try {
             const args = [scriptPath, '--epg-dict', source, filterIds || ''];
             const stdout = await new Promise((resolve, reject) => {
-                execFile(pythonCmd, args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, env }, (error, stdout) => {
+                execFile(pythonCmd, args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, timeout: 120000, env }, (error, stdout) => {
                     if (error) reject(error);
                     else resolve(stdout);
                 });
@@ -4535,6 +4561,8 @@ ipcMain.handle('clear-cache', async (event, url) => {
     
     // Invalidate in-memory cache
     epgChannelsCache = {};
+    cachedEpgDict = null;
+    cachedEpgDictKey = '';
     
     if (db) {
         try { db.prepare('DELETE FROM epg WHERE source_url = ?').run(url); } 

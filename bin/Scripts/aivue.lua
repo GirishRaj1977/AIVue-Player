@@ -2014,12 +2014,12 @@ layouts["modern"] = function ()
         start_x = start_x + 45
     end
 
-    -- Subtitle
-    if subtitle_track and user_opts.subtitles_button then
+    -- Subtitle (always shown when subtitles_button is enabled, works for external subs too)
+    if user_opts.subtitles_button then
         lo = add_layout("sub_track")
         lo.geometry = {x = start_x, y = refY - 35, an = 5, w = 24, h = 24}
         lo.style = osc_styles.control_3
-        lo.visible = (osc_param.playresx >= 600 - outeroffset)
+        lo.visible = (osc_param.playresx >= 500 - outeroffset)
         start_x = start_x + 45
     end
 
@@ -2070,7 +2070,7 @@ layouts["modern"] = function ()
         user_opts.portrait_window_trigger
         - outeroffset
         - (playlist_button and 0 or 100)
-        - (subtitle_track and 0 or 100)
+        - (user_opts.subtitles_button and 0 or 100)
         - (audio_track and 0 or 100)
     )
     lo = add_layout("time_codes")
@@ -2382,7 +2382,7 @@ layouts["modern-compact"] = function ()
         end_x = end_x - 55
     end
 
-    elements.sub_track.visible = user_opts.subtitles_button and sub_track_count > 0 and osc_geo.w >= 600
+    elements.sub_track.visible = user_opts.subtitles_button and osc_geo.w >= 600
     if elements.sub_track.visible then
         lo = add_layout("sub_track")
         lo.geometry = {x = end_x, y = refY - 35, an = 5, w = 24, h = 24}
@@ -2936,16 +2936,23 @@ local function osc_init()
     ne.eventresponder["wheel_up_press"] = command_callback(user_opts.audio_track_wheel_up_command)
     visible_min_width = visible_min_width + (ne.enabled and 100 or 0)
 
-    --sub_track
+    --sub_track (always enabled so users can toggle external/embedded subs)
     ne = new_element("sub_track", "button")
-    ne.enabled = sub_track_count > 0
-    ne.off = sub_track_count == 0 or not mp.get_property_native("sid")
+    ne.enabled = true
+    ne.off = not mp.get_property_native("sid")
     ne.visible = (osc_param.playresx >= visible_min_width - outeroffset)
     ne.content = icons.subtitle
     ne.tooltip_style = osc_styles.tooltip
     ne.tooltipF = function ()
-        local prop = mp.get_property("current-tracks/sub/title") or mp.get_property("current-tracks/sub/lang") or locale.na
-        return (locale.subtitle .. " " .. mp.get_property_number("sid", "-") .. "/" .. sub_track_count .. " [" .. prop .. "]")
+        local sid = mp.get_property_native("sid")
+        if sub_track_count > 0 and sid then
+            local prop = mp.get_property("current-tracks/sub/title") or mp.get_property("current-tracks/sub/lang") or locale.na
+            return (locale.subtitle .. " " .. mp.get_property_number("sid", "-") .. "/" .. sub_track_count .. " [" .. prop .. "]")
+        elseif sub_track_count > 0 then
+            return (locale.subtitle .. " (" .. sub_track_count .. " available, off)")
+        else
+            return (locale.subtitle .. " (off)")
+        end
     end
     ne.nothingavailable = locale.no_subs
     ne.eventresponder["mbtn_left_up"] = command_callback(user_opts.sub_track_mbtn_left_command)
@@ -2953,7 +2960,7 @@ local function osc_init()
     ne.eventresponder["shift+mbtn_left_down"] = command_callback(user_opts.sub_track_mbtn_mid_command)
     ne.eventresponder["wheel_down_press"] = command_callback(user_opts.sub_track_wheel_down_command)
     ne.eventresponder["wheel_up_press"] = command_callback(user_opts.sub_track_wheel_up_command)
-    visible_min_width = visible_min_width + (ne.enabled and 100 or 0)
+    visible_min_width = visible_min_width + 100
 
     -- vol_ctrl
     local vol_visible_offset = sub_offset + playlist_offset

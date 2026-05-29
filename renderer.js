@@ -2487,37 +2487,62 @@ async function renderSettings() {
 
     document.querySelectorAll('.refresh-epg-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
-            const idx = parseInt(e.target.getAttribute('data-idx'));
+            const idx = parseInt(btn.getAttribute('data-idx'));
             console.log('[SETTINGS] Refresh EPG button clicked for index:', idx);
             const epgSource = savedEpgs[idx];
-            
-            const originalText = e.target.textContent;
-            e.target.textContent = '⏳';
-            e.target.disabled = true;
+            if (!epgSource) {
+                console.error('[SETTINGS] No EPG source found for index:', idx);
+                return;
+            }
 
-            console.log('[API] Calling clearCache for', epgSource);
-            await window.iptvAPI.clearCache(epgSource);
+            const originalText = btn.textContent;
+            btn.textContent = '⏳';
+            btn.disabled = true;
 
-            let allEpgSources = savedEpgs.slice();
-            console.log('[API] Calling getEpgChannels for all sources.');
-            savedPlaylists.forEach(p => {
-                if (p.epg && p.epg !== 'Not Configured' && !allEpgSources.includes(p.epg)) {
-                    allEpgSources.push(p.epg);
+            try {
+                // 1. Clear cache only for this specific EPG source
+                console.log('[API] Calling clearCache for', epgSource);
+                await window.iptvAPI.clearCache(epgSource);
+                console.log('[API] clearCache completed.');
+
+                // 2. Only re-fetch THIS specific source, not all combined sources
+                //    This prevents waiting for all other Stalker portals to complete
+                console.log('[API] Calling updateEpg for specific source only:', epgSource);
+                await window.iptvAPI.updateEpg(epgSource, null, true);
+                console.log('[API] updateEpg completed.');
+
+                // 3. Now reload all EPG channel data (from the already-updated DB)
+                let allEpgSources = savedEpgs.slice();
+                savedPlaylists.forEach(p => {
+                    if (p.epg && p.epg !== 'Not Configured' && !allEpgSources.includes(p.epg)) {
+                        allEpgSources.push(p.epg);
+                    }
+                });
+                const combinedEpgs = allEpgSources.join(',');
+
+                console.log('[API] Calling getEpgChannels.');
+                epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
+                console.log('[API] getEpgChannels completed.');
+
+                // 4. Show success feedback
+                btn.textContent = 'Refreshed ✔️';
+                showToast('EPG refreshed successfully!');
+
+                try {
+                    renderMappingColumns();
+                } catch (renderErr) {
+                    console.error('[SETTINGS] Failed to render mapping columns:', renderErr);
                 }
-            });
-            const combinedEpgs = allEpgSources.join(',');
-
-            console.log('[API] Calling updateEpg to repopulate database.');
-            await window.iptvAPI.updateEpg(combinedEpgs, null, true);
-            epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
-
-            renderMappingColumns();
-            
-            e.target.textContent = 'Refreshed ✔️';
-            setTimeout(() => {
-                e.target.textContent = originalText;
-                e.target.disabled = false;
-            }, 2000);
+            } catch (err) {
+                console.error('[SETTINGS] Failed to refresh EPG:', err);
+                btn.textContent = 'Failed ❌';
+                showToast('Failed to refresh EPG: ' + err.message);
+            } finally {
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }, 2000);
+            }
         });
     });
 
@@ -6441,6 +6466,26 @@ window.iptvAPI.onStreamFailedRetry(async () => {
     
     if (window.playbackFallbackCount > 3) {
         console.log('[MPV FALLBACK SYSTEM] Exceeded maximum fallback attempts (3). Halting stream.');
+        // Show "not available" message for movie/episode/series types
+        const ch = window.currentPlaybackChannel;
+        const isVod = ch && (ch.type === 'movie' || ch.type === 'episode' || ch.type === 'series');
+        if (isVod) {
+            const playerOverlay = document.getElementById('player-overlay');
+            if (playerOverlay) {
+                playerOverlay.innerHTML = `
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; height: 100%;">
+                        <img src="assets/logo.png" style="width: 128px; height: 128px; margin-bottom: 20px; border-radius: 15px; background: #2A2A2A;">
+                        <span style="color: #cf6679; font-size: 1.2em; font-weight: bold;">Video not currently available</span>
+                        <span style="color: #888; font-size: 0.9em; margin-top: 8px;">The portal could not deliver this stream.<br>Please try again later.</span>
+                    </div>
+                `;
+            }
+            streamActive = false;
+            currentPlayingChannelIndex = -1;
+            clearPlayingChannelIndicator();
+            const fsBtn = document.getElementById('fullscreen-btn');
+            if (fsBtn) fsBtn.style.display = 'none';
+        }
         return;
     }
     
@@ -7207,8 +7252,12 @@ const mainView = document.getElementById('main-view');
 
 let currentTabId = 'playlist';
 let previousTabId = 'playlist';
+let currentMoviePlaylistId = null;
 let currentMovieCategory = null;
+let movieGridScrollTop = 0; // saved scroll position for the movies category list
+let currentVodPlaylistId = null;
 let currentVodCategory = null;
+let vodGridScrollTop = 0;   // saved scroll position for the vod category list
 
 function switchTab(tabId, clickedBtn) {
     console.log('[UI] Switching tab to:', tabId);
@@ -7225,9 +7274,11 @@ function switchTab(tabId, clickedBtn) {
 
     // Reset Movies and VOD category selection on tab entry to open into the initial folder load views
     if (tabId === 'movies') {
+        currentMoviePlaylistId = null;
         currentMovieCategory = null;
     }
     if (tabId === 'vod') {
+        currentVodPlaylistId = null;
         currentVodCategory = null;
     }
 
@@ -8695,26 +8746,21 @@ async function renderMovies() {
     const headerContainer = document.getElementById('movies-header-container');
     if (headerContainer) headerContainer.remove();
     
-    let stalkerCategories = [];
-    let m3uGroups = {};
     let hasMovies = false;
-    
+    let playlistsWithMovies = [];
     savedPlaylists.forEach(p => {
         if (p.channels && !p.disabled) {
+            let count = 0;
             p.channels.forEach(c => {
                 if (c.disabled) return;
-                if (c.type === 'movie_category') {
-                    c.playlistId = p.id;
-                    stalkerCategories.push(c);
-                    hasMovies = true;
-                } else if (c.type === 'movie') {
-                    c.playlistId = p.id;
-                    const groupName = c.group || 'Movies';
-                    if (!m3uGroups[groupName]) m3uGroups[groupName] = [];
-                    m3uGroups[groupName].push(c);
-                    hasMovies = true;
+                if (c.type === 'movie_category' || c.type === 'movie') {
+                    count++;
                 }
             });
+            if (count > 0) {
+                playlistsWithMovies.push(p);
+                hasMovies = true;
+            }
         }
     });
     
@@ -8724,7 +8770,21 @@ async function renderMovies() {
     }
     if (empty) empty.style.display = 'none';
     
-    if (!currentMovieCategory) {
+    const renderFolder = (title, count, onClick) => {
+        const card = document.createElement('div');
+        card.className = 'catalog-folder-card';
+        card.innerHTML = `
+            <div class="catalog-folder-icon">
+                <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <div class="catalog-folder-title" title="${title.replace(/"/g, '&quot;')}">${title}</div>
+            ${count !== null ? `<div class="catalog-folder-count">${count} Items</div>` : ''}
+        `;
+        card.addEventListener('click', onClick);
+        grid.appendChild(card);
+    };
+
+    if (!currentMoviePlaylistId) {
         const backContainer = document.getElementById('movies-back-btn-container');
         if (backContainer) backContainer.style.display = 'none';
         const titleHeader = document.getElementById('movies-title-header');
@@ -8735,22 +8795,92 @@ async function renderMovies() {
         grid.style.gap = '20px';
         grid.style.padding = '20px';
 
-        const renderFolder = (title, count, onClick) => {
-            const card = document.createElement('div');
-            card.className = 'catalog-folder-card';
-            card.innerHTML = `
-                <div class="catalog-folder-icon">
-                    <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                </div>
-                <div class="catalog-folder-title" title="${title.replace(/"/g, '&quot;')}">${title}</div>
-                ${count !== null ? `<div class="catalog-folder-count">${count} Items</div>` : ''}
+        playlistsWithMovies.forEach(p => {
+            renderFolder(p.name, null, () => {
+                movieGridScrollTop = document.getElementById('movies-view')?.scrollTop || 0;
+                currentMoviePlaylistId = p.id;
+                renderMovies();
+                const moviesView = document.getElementById('movies-view');
+                if (moviesView) moviesView.scrollTop = 0;
+            });
+        });
+
+        const searchInput = document.getElementById('movies-search');
+        if (searchInput) {
+            searchInput.replaceWith(searchInput.cloneNode(true));
+            const newSearchInput = document.getElementById('movies-search');
+            newSearchInput.value = '';
+            newSearchInput.addEventListener('keyup', (e) => {
+                const query = e.target.value.toLowerCase().trim();
+                const cards = grid.querySelectorAll('.catalog-folder-card');
+                cards.forEach(card => {
+                    const title = card.querySelector('.catalog-folder-title').textContent.toLowerCase();
+                    if (title.includes(query)) {
+                        card.style.display = 'flex';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+        }
+        return;
+    }
+
+    const selectedPlaylist = savedPlaylists.find(p => p.id === currentMoviePlaylistId);
+    if (!selectedPlaylist) {
+        currentMoviePlaylistId = null;
+        renderMovies();
+        return;
+    }
+
+    let stalkerCategories = [];
+    let m3uGroups = {};
+
+    selectedPlaylist.channels.forEach(c => {
+        if (c.disabled) return;
+        if (c.type === 'movie_category') {
+            c.playlistId = selectedPlaylist.id;
+            stalkerCategories.push(c);
+        } else if (c.type === 'movie') {
+            c.playlistId = selectedPlaylist.id;
+            const groupName = c.group || 'Movies';
+            if (!m3uGroups[groupName]) m3uGroups[groupName] = [];
+            m3uGroups[groupName].push(c);
+        }
+    });
+
+    if (!currentMovieCategory) {
+        const backContainer = document.getElementById('movies-back-btn-container');
+        if (backContainer) {
+            backContainer.style.display = 'block';
+            backContainer.innerHTML = `
+                <button class="playlist-btn category-back-btn" style="background: #2a2a2a; color: white; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    Back
+                </button>
             `;
-            card.addEventListener('click', onClick);
-            grid.appendChild(card);
-        };
-        
+            const backBtn = backContainer.querySelector('button');
+            backBtn.addEventListener('click', () => {
+                const savedScroll = movieGridScrollTop;
+                currentMoviePlaylistId = null;
+                renderMovies();
+                requestAnimationFrame(() => {
+                    const moviesView = document.getElementById('movies-view');
+                    if (moviesView) moviesView.scrollTop = savedScroll;
+                });
+            });
+        }
+        const titleHeader = document.getElementById('movies-title-header');
+        if (titleHeader) titleHeader.textContent = `Movies - ${selectedPlaylist.name}`;
+
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(180px, 1fr))';
+        grid.style.gap = '20px';
+        grid.style.padding = '20px';
+
         stalkerCategories.forEach(cat => {
             renderFolder(cat.title || cat.name, null, () => {
+                movieGridScrollTop = document.getElementById('movies-view')?.scrollTop || 0;
                 currentMovieCategory = {
                     type: 'stalker',
                     playlistId: cat.playlistId,
@@ -8763,6 +8893,7 @@ async function renderMovies() {
         
         Object.keys(m3uGroups).sort(sortAlphaNum).forEach(groupName => {
             renderFolder(groupName, m3uGroups[groupName].length, () => {
+                movieGridScrollTop = document.getElementById('movies-view')?.scrollTop || 0;
                 currentMovieCategory = {
                     type: 'm3u',
                     playlistId: m3uGroups[groupName][0].playlistId,
@@ -8804,12 +8935,18 @@ async function renderMovies() {
             `;
             const backBtn = backContainer.querySelector('button');
             backBtn.addEventListener('click', () => {
+                const savedScroll = movieGridScrollTop;
                 currentMovieCategory = null;
                 renderMovies();
+                // Restore scroll after render completes
+                requestAnimationFrame(() => {
+                    const moviesView = document.getElementById('movies-view');
+                    if (moviesView) moviesView.scrollTop = savedScroll;
+                });
             });
         }
         const titleHeader = document.getElementById('movies-title-header');
-        if (titleHeader) titleHeader.textContent = `Movies - ${currentMovieCategory.title}`;
+        if (titleHeader) titleHeader.textContent = `Movies - ${selectedPlaylist.name} - ${currentMovieCategory.title}`;
 
         grid.style.display = 'grid';
         grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(160px, 1fr))';
@@ -8957,26 +9094,21 @@ async function renderVod() {
     const headerContainer = document.getElementById('vod-header-container');
     if (headerContainer) headerContainer.remove();
     
-    let stalkerCategories = [];
-    let m3uGroups = {};
     let hasSeries = false;
-    
+    let playlistsWithSeries = [];
     savedPlaylists.forEach(p => {
         if (p.channels && !p.disabled) {
+            let count = 0;
             p.channels.forEach(c => {
                 if (c.disabled) return;
-                if (c.type === 'vod_category' || c.type === 'series_category') {
-                    c.playlistId = p.id;
-                    stalkerCategories.push(c);
-                    hasSeries = true;
-                } else if (c.type === 'vod' || c.type === 'series') {
-                    c.playlistId = p.id;
-                    const groupName = c.group || 'Series';
-                    if (!m3uGroups[groupName]) m3uGroups[groupName] = [];
-                    m3uGroups[groupName].push(c);
-                    hasSeries = true;
+                if (c.type === 'vod_category' || c.type === 'series_category' || c.type === 'vod' || c.type === 'series') {
+                    count++;
                 }
             });
+            if (count > 0) {
+                playlistsWithSeries.push(p);
+                hasSeries = true;
+            }
         }
     });
     
@@ -8986,7 +9118,21 @@ async function renderVod() {
     }
     if (empty) empty.style.display = 'none';
     
-    if (!currentVodCategory) {
+    const renderFolder = (title, count, onClick) => {
+        const card = document.createElement('div');
+        card.className = 'catalog-folder-card';
+        card.innerHTML = `
+            <div class="catalog-folder-icon">
+                <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <div class="catalog-folder-title" title="${title.replace(/"/g, '&quot;')}">${title}</div>
+            ${count !== null ? `<div class="catalog-folder-count">${count} Items</div>` : ''}
+        `;
+        card.addEventListener('click', onClick);
+        grid.appendChild(card);
+    };
+
+    if (!currentVodPlaylistId) {
         const backContainer = document.getElementById('vod-back-btn-container');
         if (backContainer) backContainer.style.display = 'none';
         const titleHeader = document.getElementById('vod-title-header');
@@ -8997,22 +9143,92 @@ async function renderVod() {
         grid.style.gap = '20px';
         grid.style.padding = '20px';
 
-        const renderFolder = (title, count, onClick) => {
-            const card = document.createElement('div');
-            card.className = 'catalog-folder-card';
-            card.innerHTML = `
-                <div class="catalog-folder-icon">
-                    <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                </div>
-                <div class="catalog-folder-title" title="${title.replace(/"/g, '&quot;')}">${title}</div>
-                ${count !== null ? `<div class="catalog-folder-count">${count} Items</div>` : ''}
+        playlistsWithSeries.forEach(p => {
+            renderFolder(p.name, null, () => {
+                vodGridScrollTop = document.getElementById('vod-view')?.scrollTop || 0;
+                currentVodPlaylistId = p.id;
+                renderVod();
+                const vodView = document.getElementById('vod-view');
+                if (vodView) vodView.scrollTop = 0;
+            });
+        });
+
+        const searchInput = document.getElementById('vod-search');
+        if (searchInput) {
+            searchInput.replaceWith(searchInput.cloneNode(true));
+            const newSearchInput = document.getElementById('vod-search');
+            newSearchInput.value = '';
+            newSearchInput.addEventListener('keyup', (e) => {
+                const query = e.target.value.toLowerCase().trim();
+                const cards = grid.querySelectorAll('.catalog-folder-card');
+                cards.forEach(card => {
+                    const title = card.querySelector('.catalog-folder-title').textContent.toLowerCase();
+                    if (title.includes(query)) {
+                        card.style.display = 'flex';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+        }
+        return;
+    }
+
+    const selectedPlaylist = savedPlaylists.find(p => p.id === currentVodPlaylistId);
+    if (!selectedPlaylist) {
+        currentVodPlaylistId = null;
+        renderVod();
+        return;
+    }
+
+    let stalkerCategories = [];
+    let m3uGroups = {};
+
+    selectedPlaylist.channels.forEach(c => {
+        if (c.disabled) return;
+        if (c.type === 'vod_category' || c.type === 'series_category') {
+            c.playlistId = selectedPlaylist.id;
+            stalkerCategories.push(c);
+        } else if (c.type === 'vod' || c.type === 'series') {
+            c.playlistId = selectedPlaylist.id;
+            const groupName = c.group || 'Series';
+            if (!m3uGroups[groupName]) m3uGroups[groupName] = [];
+            m3uGroups[groupName].push(c);
+        }
+    });
+
+    if (!currentVodCategory) {
+        const backContainer = document.getElementById('vod-back-btn-container');
+        if (backContainer) {
+            backContainer.style.display = 'block';
+            backContainer.innerHTML = `
+                <button class="playlist-btn category-back-btn" style="background: #2a2a2a; color: white; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    Back
+                </button>
             `;
-            card.addEventListener('click', onClick);
-            grid.appendChild(card);
-        };
-        
+            const backBtn = backContainer.querySelector('button');
+            backBtn.addEventListener('click', () => {
+                const savedScroll = vodGridScrollTop;
+                currentVodPlaylistId = null;
+                renderVod();
+                requestAnimationFrame(() => {
+                    const vodView = document.getElementById('vod-view');
+                    if (vodView) vodView.scrollTop = savedScroll;
+                });
+            });
+        }
+        const titleHeader = document.getElementById('vod-title-header');
+        if (titleHeader) titleHeader.textContent = `TV Series - ${selectedPlaylist.name}`;
+
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(180px, 1fr))';
+        grid.style.gap = '20px';
+        grid.style.padding = '20px';
+
         stalkerCategories.forEach(cat => {
             renderFolder(cat.title || cat.name, null, () => {
+                vodGridScrollTop = document.getElementById('vod-view')?.scrollTop || 0;
                 currentVodCategory = {
                     type: 'stalker',
                     playlistId: cat.playlistId,
@@ -9025,6 +9241,7 @@ async function renderVod() {
         
         Object.keys(m3uGroups).sort(sortAlphaNum).forEach(groupName => {
             renderFolder(groupName, m3uGroups[groupName].length, () => {
+                vodGridScrollTop = document.getElementById('vod-view')?.scrollTop || 0;
                 currentVodCategory = {
                     type: 'm3u',
                     playlistId: m3uGroups[groupName][0].playlistId,
@@ -9066,12 +9283,18 @@ async function renderVod() {
             `;
             const backBtn = backContainer.querySelector('button');
             backBtn.addEventListener('click', () => {
+                const savedScroll = vodGridScrollTop;
                 currentVodCategory = null;
                 renderVod();
+                // Restore scroll after render completes
+                requestAnimationFrame(() => {
+                    const vodView = document.getElementById('vod-view');
+                    if (vodView) vodView.scrollTop = savedScroll;
+                });
             });
         }
         const titleHeader = document.getElementById('vod-title-header');
-        if (titleHeader) titleHeader.textContent = `TV Series - ${currentVodCategory.title}`;
+        if (titleHeader) titleHeader.textContent = `TV Series - ${selectedPlaylist.name} - ${currentVodCategory.title}`;
 
         grid.style.display = 'grid';
         grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(160px, 1fr))';
