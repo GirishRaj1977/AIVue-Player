@@ -224,6 +224,7 @@ app.commandLine.appendSwitch('log-level', '3'); // Suppress Chromium console spa
 ipcMain.on('splash-ended', () => {
     console.log('[EVENT] splash-ended');
     isSplashEnded = true;
+    shouldShowMainWindow = true; // Show window immediately when splash screen ends!
     checkAndShowMainWindow();
 });
 
@@ -332,7 +333,7 @@ function createWindow() {
         checkAndShowMainWindow();
         
         // Fallback in case of an issue playing the stream
-        setTimeout(showMainWindowAndHideSplash, 8000);
+        setTimeout(showMainWindowAndHideSplash, 3000);
     });
 
     // Intercept Close Button to Hide window into System Tray

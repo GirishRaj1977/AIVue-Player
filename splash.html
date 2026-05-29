@@ -241,7 +241,7 @@ function renderNextLog() {
     currentLogIndex++;
     
     // Calculate a slightly randomized timing for organic simulation
-    const nextTimeout = currentLogIndex === startupLogs.length - 1 ? 400 : Math.random() * 150 + 150;
+    const nextTimeout = currentLogIndex === startupLogs.length - 1 ? 200 : Math.random() * 50 + 40;
     setTimeout(renderNextLog, nextTimeout);
 }
 
