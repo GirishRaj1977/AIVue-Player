@@ -39,6 +39,7 @@ let liveEpgLastEndIndex = -1;
 let liveEpgLastScrollLeft = -1;
 let liveEpgScrollTicking = false;
 
+
 function onLiveEpgScroll() {
     if (!liveEpgScrollTicking) {
         window.requestAnimationFrame(() => {
@@ -115,8 +116,9 @@ function renderVisibleLiveEpgRows(force = false) {
         
         let programmes = null;
         if (epgId) {
-            if (epgCache[epgId]) {
-                programmes = epgCache[epgId];
+            const epgKey = epgId.toLowerCase();
+            if (epgCache[epgKey]) {
+                programmes = epgCache[epgKey];
             } else {
                 channelsToFetch.push(channel);
             }
@@ -208,6 +210,8 @@ async function renderLiveEpgGrid() {
         container.innerHTML = '<div style="color: #888; text-align: center; margin-top: 50px;">No channels available.</div>';
         return;
     }
+
+    // EPG logos pre-resolved on load-channels
 
     if (window.liveEpgTimeIndicatorInterval) clearInterval(window.liveEpgTimeIndicatorInterval);
 
@@ -582,9 +586,12 @@ async function fetchEpgDataForChannels(channels) {
         if (!ch) return;
         const mappedId = channelMappings[ch.title];
         const epgId = mappedId || ch.tvg_id || ch.tvg_name;
-        if (epgId && !epgCache[epgId] && !epgLoadingSet.has(epgId)) {
-            epgIdsToFetch.add(epgId);
-            epgLoadingSet.add(epgId);
+        if (epgId) {
+            const epgKey = epgId.toLowerCase();
+            if (!epgCache[epgKey] && !epgLoadingSet.has(epgKey)) {
+                epgIdsToFetch.add(epgKey);
+                epgLoadingSet.add(epgKey);
+            }
         }
     });
     
@@ -601,12 +608,13 @@ async function fetchEpgDataForChannels(channels) {
     const epgData = await window.iptvAPI.getEpg(epgIdsArr, startLimit, endLimit);
     
     Object.keys(epgData).forEach(id => {
-        epgCache[id] = epgData[id] || [];
+        epgCache[id.toLowerCase()] = epgData[id] || [];
     });
 
     // Mark as loaded even if no data was returned to prevent re-fetching
     epgIdsArr.forEach(id => {
-        if (!epgCache[id]) epgCache[id] = [];
+        const epgKey = id.toLowerCase();
+        if (!epgCache[epgKey]) epgCache[epgKey] = [];
     });
     
     renderVisibleEpgRows(true); // Force re-render with new data
@@ -689,8 +697,9 @@ function renderVisibleEpgRows(force = false) {
         
         let programmes = null;
         if (epgId) {
-            if (epgCache[epgId]) {
-                programmes = epgCache[epgId];
+            const epgKey = epgId.toLowerCase();
+            if (epgCache[epgKey]) {
+                programmes = epgCache[epgKey];
             } else {
                 channelsToFetch.push(channel);
             }
@@ -778,6 +787,8 @@ async function renderFullEpg() {
     try {
         clientScheduledRecordings = await window.iptvAPI.getScheduledRecordings();
     } catch (e) {}
+
+    // EPG logos pre-resolved on load-channels
 
     if (allChannels.length === 0) {
         epgView.innerHTML = '<div style="color: #888; text-align: center; margin-top: 50px;">No channels available.</div>';

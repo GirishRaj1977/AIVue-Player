@@ -67,9 +67,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!ch) return;
             const mappedId = channelMappings[ch.title];
             const epgId = mappedId || ch.tvg_id || ch.tvg_name;
-            if (epgId && !epgCache[epgId] && !epgLoadingSet.has(epgId)) {
-                epgIdsToFetch.add(epgId);
-                epgLoadingSet.add(epgId);
+            if (epgId) {
+                const epgKey = epgId.toLowerCase();
+                if (!epgCache[epgKey] && !epgLoadingSet.has(epgKey)) {
+                    epgIdsToFetch.add(epgKey);
+                    epgLoadingSet.add(epgKey);
+                }
             }
         });
         
@@ -90,11 +93,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const epgData = await response.json();
             
             Object.keys(epgData).forEach(id => {
-                epgCache[id] = epgData[id] || [];
+                epgCache[id.toLowerCase()] = epgData[id] || [];
             });
 
             epgIdsArr.forEach(id => {
-                if (!epgCache[id]) epgCache[id] = [];
+                const epgKey = id.toLowerCase();
+                if (!epgCache[epgKey]) epgCache[epgKey] = [];
             });
             
             renderVisibleEpgRows(true);
@@ -153,8 +157,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             let programmes = null;
             if (epgId) {
-                if (epgCache[epgId]) {
-                    programmes = epgCache[epgId];
+                const epgKey = epgId.toLowerCase();
+                if (epgCache[epgKey]) {
+                    programmes = epgCache[epgKey];
                 } else {
                     channelsToFetch.push(channel);
                 }

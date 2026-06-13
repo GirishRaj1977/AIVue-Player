@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { app } = require('electron');
 const db = require('./db.js');
 const tmdb = require('./tmdb.js');
 
@@ -59,7 +60,7 @@ function initRemoteServer(options) {
             if (currentSettings.username && currentSettings.password) {
                 const expectedAuth = Buffer.from(currentSettings.username + ':' + currentSettings.password).toString('base64');
                 const authCookie = getCookie(req, 'aivue_auth');
-                
+
                 // Support legacy basic auth (for the auto-login URL)
                 const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
                 const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
@@ -119,7 +120,7 @@ function initRemoteServer(options) {
                     console.log(`[REMOTE API] New device allowed. Overriding active device.`);
                     currentSettings.activeDeviceId = deviceId;
                     options.saveRemoteSettings(currentSettings);
-                    try { fs.writeFileSync(options.remoteSettingsPath, JSON.stringify(currentSettings)); } catch(e) {}
+                    try { fs.writeFileSync(options.remoteSettingsPath, JSON.stringify(currentSettings)); } catch (e) { }
                     const mw = options.getMainWindow();
                     if (mw && !mw.isDestroyed()) mw.webContents.send('remote-settings-updated');
                     next();
@@ -159,7 +160,7 @@ function initRemoteServer(options) {
                 if (deviceId) {
                     currentSettings.activeDeviceId = deviceId;
                     options.saveRemoteSettings(currentSettings);
-                    try { fs.writeFileSync(options.remoteSettingsPath, JSON.stringify(currentSettings)); } catch(e) {}
+                    try { fs.writeFileSync(options.remoteSettingsPath, JSON.stringify(currentSettings)); } catch (e) { }
                     const mw = options.getMainWindow();
                     if (mw && !mw.isDestroyed()) mw.webContents.send('remote-settings-updated');
                 }
@@ -168,7 +169,7 @@ function initRemoteServer(options) {
 
             const expectedAuth = Buffer.from(currentSettings.username + ':' + currentSettings.password).toString('base64');
             let deviceId = getCookie(req, 'aivue_device_id');
-            
+
             // If already logged in AND activeDeviceId matches, redirect directly to remote
             if (getCookie(req, 'aivue_auth') === expectedAuth && currentSettings.activeDeviceId === deviceId) {
                 console.log(`[REMOTE API] User already authenticated. Redirecting /login to /remote`);
@@ -212,7 +213,7 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             if (username === currentSettings.username && password === currentSettings.password) {
                 const expectedAuth = Buffer.from(currentSettings.username + ':' + currentSettings.password).toString('base64');
                 res.cookie('aivue_auth', expectedAuth, { maxAge: 31536000000, httpOnly: true });
-                
+
                 // Pair this device on login
                 let deviceId = getCookie(req, 'aivue_device_id');
                 if (!deviceId) {
@@ -221,7 +222,7 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                 }
                 currentSettings.activeDeviceId = deviceId;
                 options.saveRemoteSettings(currentSettings);
-                try { fs.writeFileSync(options.remoteSettingsPath, JSON.stringify(currentSettings)); } catch(e) {}
+                try { fs.writeFileSync(options.remoteSettingsPath, JSON.stringify(currentSettings)); } catch (e) { }
                 const mw = options.getMainWindow();
                 if (mw && !mw.isDestroyed()) mw.webContents.send('remote-settings-updated');
 
@@ -261,13 +262,20 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
         });
 
         // ------------------ API Endpoints ------------------
-        app.get('/api/channels', (req, res) => {
+        app.get('/api/channels', async (req, res) => {
             try {
-                const playlists = options.loadChannelsFromDb();
+                const playlists = await options.loadChannelsFromDb();
                 let list = [];
                 playlists.forEach(p => {
                     if (p.channels && !p.disabled) {
-                        list.push(...p.channels.filter(c => !c.disabled && c.type === 'live').map(c => ({...c, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg})));
+                        list.push(...p.channels.filter(c => !c.disabled && c.type === 'live').map(c => {
+                            let logoUrl = c.logo || '';
+                            if (logoUrl && logoUrl.startsWith('aivue-logo:///')) {
+                                const filename = logoUrl.substring(14);
+                                logoUrl = `/api/logo/${filename}`;
+                            }
+                            return { ...c, logo: logoUrl, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg };
+                        }));
                     }
                 });
                 res.json(list);
@@ -276,10 +284,21 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             }
         });
 
-        app.get('/api/mappings', (req, res) => {
+        app.get('/api/logo/:filename', (req, res) => {
+            const filename = req.params.filename;
+            const logosDir = path.join(app.getPath('userData'), 'ChannelLogos');
+            const filePath = path.join(logosDir, filename);
+            if (filePath.startsWith(logosDir) && fs.existsSync(filePath)) {
+                res.sendFile(filePath);
+            } else {
+                res.status(404).send('Not Found');
+            }
+        });
+
+        app.get('/api/mappings', async (req, res) => {
             try {
                 if (!db) return res.json({});
-                const rows = db.prepare("SELECT * FROM mappings").all();
+                const rows = await db.prepare("SELECT * FROM mappings").all();
                 const map = rows.reduce((acc, r) => {
                     acc[r.channel_title] = r.epg_id;
                     return acc;
@@ -290,13 +309,30 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             }
         });
 
-        app.post('/api/epg', (req, res) => {
+        app.post('/api/epg', async (req, res) => {
             const { ids, start, end } = req.body;
             if (!ids || !Array.isArray(ids) || ids.length === 0) {
                 return res.json({});
             }
-            const epgData = options.getEpgDataFromDb(ids, start, end);
+            const epgData = await options.getEpgDataFromDb(ids, start, end);
             res.json(epgData);
+        });
+
+        app.get('/api/epg-logos', async (req, res) => {
+            try {
+                const playlists = await options.loadChannelsFromDb();
+                const epgSources = [...new Set(
+                    playlists.map(p => p.epg).filter(e =>
+                        e && e !== 'Not Configured' && !e.startsWith('stalker:') && !e.startsWith('xtream-epg:')
+                    )
+                )].join(',');
+                if (!epgSources) return res.json({});
+                const logos = await options.getEpgLogos(epgSources);
+                res.json(logos || {});
+            } catch (e) {
+                console.error('[REMOTE] /api/epg-logos error:', e.message);
+                res.json({});
+            }
         });
 
         app.post('/api/play', (req, res) => {
@@ -308,29 +344,29 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             res.send('OK');
         });
 
-        app.get('/api/movies', (req, res) => {
+        app.get('/api/movies', async (req, res) => {
             res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
             res.setHeader('Pragma', 'no-cache');
             res.setHeader('Expires', '0');
-            const playlists = options.loadChannelsFromDb();
+            const playlists = await options.loadChannelsFromDb();
             let movies = [];
             playlists.forEach(p => {
                 if (p.channels && !p.disabled) {
-                    movies.push(...p.channels.filter(c => !c.disabled && (c.type === 'movie' || c.type === 'movie_category')).map(c => ({...c, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg})));
+                    movies.push(...p.channels.filter(c => !c.disabled && (c.type === 'movie' || c.type === 'movie_category')).map(c => ({ ...c, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg })));
                 }
             });
             res.json(movies);
         });
 
-        app.get('/api/series', (req, res) => {
+        app.get('/api/series', async (req, res) => {
             res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
             res.setHeader('Pragma', 'no-cache');
             res.setHeader('Expires', '0');
-            const playlists = options.loadChannelsFromDb();
+            const playlists = await options.loadChannelsFromDb();
             let series = [];
             playlists.forEach(p => {
                 if (p.channels && !p.disabled) {
-                    series.push(...p.channels.filter(c => !c.disabled && (c.type === 'series' || c.type === 'series_category' || c.type === 'vod' || c.type === 'vod_category' || c.group === 'Series Categories')).map(c => ({...c, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg})));
+                    series.push(...p.channels.filter(c => !c.disabled && (c.type === 'series' || c.type === 'series_category' || c.type === 'vod' || c.type === 'vod_category' || c.group === 'Series Categories')).map(c => ({ ...c, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg })));
                 }
             });
             res.json(series);
@@ -369,11 +405,11 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             }
         });
 
-        app.get('/api/progress', (req, res) => {
+        app.get('/api/progress', async (req, res) => {
             const { id } = req.query;
             if (!id) return res.status(400).json({ error: 'ID required' });
             try {
-                const row = db.prepare("SELECT * FROM playback_progress WHERE id = ?").get(id);
+                const row = await db.prepare("SELECT * FROM playback_progress WHERE id = ?").get(id);
                 res.json(row || null);
             } catch (e) {
                 res.status(500).json({ error: e.message });
@@ -551,7 +587,7 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             res.setHeader('Expires', '0');
             try {
                 res.send(fs.readFileSync(path.join(__dirname, 'remote_epg.js'), 'utf8'));
-            } catch(e) {
+            } catch (e) {
                 res.status(404).send('console.error("remote_epg.js not found");');
             }
         });
@@ -563,7 +599,7 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             res.setHeader('Expires', '0');
             try {
                 res.send(fs.readFileSync(path.join(__dirname, 'remote_movies.js'), 'utf8'));
-            } catch(e) {
+            } catch (e) {
                 res.status(404).send('console.error("remote_movies.js not found");');
             }
         });
@@ -572,7 +608,7 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
         app.get('/cmd/:command', (req, res) => {
             const cmd = req.params.command;
             const mw = options.getMainWindow();
-            switch(cmd) {
+            switch (cmd) {
                 case 'guide':
                     res.redirect('/epg');
                     return;
@@ -582,10 +618,10 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                 case 'voldown': options.sendMpvCommand(['add', 'volume', -5]); break;
                 case 'forward': options.sendMpvCommand(['seek', 30]); break;
                 case 'rewind': options.sendMpvCommand(['seek', -30]); break;
-                case 'chup': 
+                case 'chup':
                     if (mw && !mw.isDestroyed()) mw.webContents.send('mpv-next-channel');
                     break;
-                case 'chdown': 
+                case 'chdown':
                     if (mw && !mw.isDestroyed()) mw.webContents.send('mpv-previous-channel');
                     break;
                 case 'power': case 'home': case 'back': case 'guide': case 'favorites':

@@ -10,11 +10,35 @@
     font-weight: 600;
     font-style: normal;
 }
+:root {
+    --primary-accent: #bb86fc;
+    --primary-accent-rgb: 187, 134, 252;
+    --bg-gradient: linear-gradient(180deg, #3c096c 0%, #240046 35%, #10002b 70%, #03001e 100%);
+}
+
+body.theme-teal {
+    --primary-accent: #069494;
+    --primary-accent-rgb: 6, 148, 148;
+    --bg-gradient: linear-gradient(180deg, #023e3e 0%, #012828 35%, #001515 70%, #000c0c 100%);
+}
+
+body.theme-green {
+    --primary-accent: #07a872;
+    --primary-accent-rgb: 7, 168, 114;
+    --bg-gradient: linear-gradient(180deg, #034832 0%, #023021 35%, #011911 70%, #000f0a 100%);
+}
+
+body.theme-black {
+    --primary-accent: #e0e0e0;
+    --primary-accent-rgb: 224, 224, 224;
+    --bg-gradient: linear-gradient(180deg, #151515 0%, #0d0d0d 35%, #050505 70%, #000000 100%);
+}
+
 body { 
     margin: 0; 
     display: flex; 
     height: 100vh; 
-    background: linear-gradient(180deg, #3c096c 0%, #240046 35%, #10002b 70%, #03001e 100%) !important; 
+    background: var(--bg-gradient) !important; 
     background-attachment: fixed !important;
     color: #e0e0e0; 
     font-family: 'Inter', sans-serif; 
@@ -34,7 +58,7 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 0 16px;
-    background: linear-gradient(to bottom, rgba(187, 134, 252, 0.16) 0%, rgba(8, 8, 10, 0) 100%) !important;
+    background: linear-gradient(to bottom, rgba(var(--primary-accent-rgb), 0.16) 0%, rgba(8, 8, 10, 0) 100%) !important;
     z-index: 1000;
     pointer-events: none;
     box-sizing: border-box;
@@ -65,7 +89,7 @@ body {
     width: 48px;
     height: 48px;
 }
-.nav-btn:hover, .nav-btn.active { color: #bb86fc; background: #2a2a2a; }
+.nav-btn:hover, .nav-btn.active { color: var(--primary-accent); background: #2a2a2a; }
 .nav-btn svg { width: 26px; height: 26px; fill: currentColor; }
 #sidebar { 
     width: 560px; 
@@ -108,10 +132,10 @@ body {
 
 .import-mode-btn { flex: 1; padding: 10px; cursor: pointer; background: #333; color: #888; border: 1px solid #444; font-weight: bold; border-radius: 4px; transition: 0.2s; }
 .import-mode-btn:hover { background: #444; color: white; }
-.import-mode-btn.active { background: #bb86fc; color: black; border-color: #bb86fc; }
+.import-mode-btn.active { background: var(--primary-accent); color: black; border-color: var(--primary-accent); }
 
 .fav-btn { background: transparent; border: none; color: #555; cursor: pointer; padding: 5px; display: flex; align-items: center; transition: 0.2s; margin-left: auto; }
-.fav-btn:hover { color: #bb86fc; }
+.fav-btn:hover { color: var(--primary-accent); }
 .fav-btn.active { color: #cf6679; }
 .fav-btn svg { width: 22px; height: 22px; fill: currentColor; }
 
@@ -132,8 +156,8 @@ body {
 }
 .catalog-card:hover {
     transform: translateY(-8px);
-    border-color: rgba(187, 134, 252, 0.4);
-    box-shadow: 0 12px 30px rgba(187, 134, 252, 0.15);
+    border-color: rgba(var(--primary-accent-rgb), 0.4);
+    box-shadow: 0 12px 30px rgba(var(--primary-accent-rgb), 0.15);
 }
 .catalog-poster-wrapper {
     position: relative;
@@ -171,7 +195,7 @@ body {
     transition: color 0.2s ease;
 }
 .catalog-card:hover .catalog-title {
-    color: #bb86fc;
+    color: var(--primary-accent);
 }
 .catalog-meta {
     font-size: 0.8em;
@@ -181,8 +205,8 @@ body {
     align-items: center;
 }
 .catalog-badge {
-    background: rgba(187, 134, 252, 0.15);
-    color: #bb86fc;
+    background: rgba(var(--primary-accent-rgb), 0.15);
+    color: var(--primary-accent);
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 0.75em;
@@ -208,9 +232,9 @@ body {
     color: white;
 }
 .season-tab.active {
-    background: rgba(187, 134, 252, 0.15);
-    border-color: rgba(187, 134, 252, 0.4);
-    color: #bb86fc;
+    background: rgba(var(--primary-accent-rgb), 0.15);
+    border-color: rgba(var(--primary-accent-rgb), 0.4);
+    color: var(--primary-accent);
 }
 
 /* Episode Card Style */
@@ -226,8 +250,8 @@ body {
     gap: 12px;
 }
 .episode-card:hover {
-    background: rgba(187, 134, 252, 0.08);
-    border-color: rgba(187, 134, 252, 0.3);
+    background: rgba(var(--primary-accent-rgb), 0.08);
+    border-color: rgba(var(--primary-accent-rgb), 0.3);
     transform: translateX(4px);
 }
 .episode-num {
@@ -244,7 +268,7 @@ body {
     flex-shrink: 0;
 }
 .episode-card:hover .episode-num {
-    background: #bb86fc;
+    background: var(--primary-accent);
     color: black;
 }
 .episode-name {
@@ -271,9 +295,9 @@ body {
 }
 .details-episode-card:hover {
     transform: translateY(-4px);
-    border-color: rgba(187, 134, 252, 0.35);
-    background: rgba(187, 134, 252, 0.04);
-    box-shadow: 0 10px 20px rgba(187, 134, 252, 0.08);
+    border-color: rgba(var(--primary-accent-rgb), 0.35);
+    background: rgba(var(--primary-accent-rgb), 0.04);
+    box-shadow: 0 10px 20px rgba(var(--primary-accent-rgb), 0.08);
 }
 .details-episode-thumbnail-wrapper {
     position: relative;
@@ -320,16 +344,16 @@ body {
     flex: 1;
 }
 .details-episode-card:hover .details-episode-title {
-    color: #bb86fc;
+    color: var(--primary-accent);
 }
 .details-episode-num-badge {
     font-size: 0.75em;
-    color: #bb86fc;
-    background: rgba(187, 134, 252, 0.12);
+    color: var(--primary-accent);
+    background: rgba(var(--primary-accent-rgb), 0.12);
     padding: 2px 6px;
     border-radius: 4px;
     font-weight: bold;
-    border: 1px solid rgba(187, 134, 252, 0.2);
+    border: 1px solid rgba(var(--primary-accent-rgb), 0.2);
     flex-shrink: 0;
 }
 .details-episode-overview {
@@ -366,7 +390,7 @@ body {
     opacity: 1;
 }
 .details-episode-play-icon {
-    background: #bb86fc;
+    background: var(--primary-accent);
     color: black;
     border-radius: 50%;
     width: 44px;
@@ -374,7 +398,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 15px rgba(187,134,252,0.4);
+    box-shadow: 0 4px 15px rgba(var(--primary-accent-rgb),0.4);
     transform: scale(0.8);
     transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
@@ -386,8 +410,8 @@ body {
     to { transform: rotate(360deg); }
 }
 .loader-spinner {
-    border: 3px solid rgba(187, 134, 252, 0.2);
-    border-top-color: #bb86fc;
+    border: 3px solid rgba(var(--primary-accent-rgb), 0.2);
+    border-top-color: var(--primary-accent);
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -425,15 +449,15 @@ body {
     position: absolute;
     width: 8px;
     height: 8px;
-    background: #bb86fc;
+    background: var(--primary-accent);
     border-radius: 50%;
-    box-shadow: 0 0 8px rgba(187, 134, 252, 0.7), 0 0 16px rgba(187, 134, 252, 0.35);
+    box-shadow: 0 0 8px rgba(var(--primary-accent-rgb), 0.7), 0 0 16px rgba(var(--primary-accent-rgb), 0.35);
     animation: winDotPulse 2.4s cubic-bezier(0.5, 0.15, 0.25, 1) infinite;
 }
 .win-loading-ring.large .win-loading-dot {
     width: 10px;
     height: 10px;
-    box-shadow: 0 0 10px rgba(187, 134, 252, 0.8), 0 0 22px rgba(187, 134, 252, 0.4);
+    box-shadow: 0 0 10px rgba(var(--primary-accent-rgb), 0.8), 0 0 22px rgba(var(--primary-accent-rgb), 0.4);
 }
 /* Position 5 dots evenly around the ring */
 .win-loading-dot:nth-child(1) { top: 0; left: 50%; transform: translateX(-50%); animation-delay: 0s; }
@@ -442,12 +466,12 @@ body {
 .win-loading-dot:nth-child(4) { bottom: 9.5%; left: 11.7%; animation-delay: -0.45s; }
 .win-loading-dot:nth-child(5) { top: 20.6%; left: 2.4%; animation-delay: -0.6s; }
 .win-loading-label {
-    color: #bb86fc;
+    color: var(--primary-accent);
     font-family: 'Outfit', 'Inter', sans-serif;
     font-size: 0.92em;
     font-weight: 600;
     letter-spacing: 0.02em;
-    text-shadow: 0 0 12px rgba(187, 134, 252, 0.4);
+    text-shadow: 0 0 12px rgba(var(--primary-accent-rgb), 0.4);
 }
 /* Full-screen overlay variant */
 .win-loading-overlay {
@@ -474,7 +498,7 @@ body {
 .win-loading-container.compact .win-loading-dot {
     width: 6px;
     height: 6px;
-    box-shadow: 0 0 6px rgba(187, 134, 252, 0.6), 0 0 12px rgba(187, 134, 252, 0.3);
+    box-shadow: 0 0 6px rgba(var(--primary-accent-rgb), 0.6), 0 0 12px rgba(var(--primary-accent-rgb), 0.3);
 }
 .win-loading-container.compact .win-loading-label {
     font-size: 0.82em;
@@ -494,12 +518,12 @@ body {
     background: rgba(12, 5, 20, 0.65) !important;
     backdrop-filter: blur(20px) !important;
     -webkit-backdrop-filter: blur(20px) !important;
-    border-bottom: 1.5px solid rgba(187, 134, 252, 0.25) !important;
+    border-bottom: 1.5px solid rgba(var(--primary-accent-rgb), 0.25) !important;
     border-bottom-left-radius: 20px !important;
     border-bottom-right-radius: 20px !important;
     z-index: 1000 !important;
     pointer-events: auto !important; /* Enable clicks! */
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 4px 20px rgba(187, 134, 252, 0.08) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 4px 20px rgba(var(--primary-accent-rgb), 0.08) !important;
     box-sizing: border-box !important;
     -webkit-app-region: drag !important; /* Support hidden titlebar dragging */
 }
@@ -520,7 +544,7 @@ body {
     height: 100% !important;
     width: auto !important;
     object-fit: contain !important;
-    filter: drop-shadow(0 4px 15px rgba(187, 134, 252, 0.35)) !important;
+    filter: drop-shadow(0 4px 15px rgba(var(--primary-accent-rgb), 0.35)) !important;
     transition: transform 0.3s ease !important;
     z-index: 1001 !important; /* Make sure it bleeds over other elements beautifully */
     transform-origin: center left !important;
@@ -580,16 +604,16 @@ body {
     transform: scale(1.1) !important;
 }
 .nav-btn-elongated.active {
-    background: rgba(187, 134, 252, 0.12) !important;
-    border-color: rgba(187, 134, 252, 0.3) !important;
-    color: #bb86fc !important;
-    box-shadow: 0 0 20px rgba(187, 134, 252, 0.25) !important;
+    background: rgba(var(--primary-accent-rgb), 0.12) !important;
+    border-color: rgba(var(--primary-accent-rgb), 0.3) !important;
+    color: var(--primary-accent) !important;
+    box-shadow: 0 0 20px rgba(var(--primary-accent-rgb), 0.25) !important;
 }
 .nav-btn-elongated.active svg {
-    fill: #bb86fc !important;
+    fill: var(--primary-accent) !important;
 }
 .nav-btn-elongated:focus {
-    outline: 1.5px solid #bb86fc !important;
+    outline: 1.5px solid var(--primary-accent) !important;
     outline-offset: 2px !important;
 }
 
@@ -674,9 +698,9 @@ body {
     transition: transform 0.2s ease !important;
 }
 .win-btn:hover {
-    background: rgba(187, 134, 252, 0.15) !important;
-    border-color: rgba(187, 134, 252, 0.3) !important;
-    color: #bb86fc !important;
+    background: rgba(var(--primary-accent-rgb), 0.15) !important;
+    border-color: rgba(var(--primary-accent-rgb), 0.3) !important;
+    color: var(--primary-accent) !important;
 }
 .win-btn:hover svg {
     transform: scale(1.08) !important;
@@ -693,10 +717,10 @@ body {
 }
 
  .header-action-btn.active {
-    background: rgba(187, 134, 252, 0.12) !important;
-    border-color: rgba(187, 134, 252, 0.3) !important;
-    color: #bb86fc !important;
-    box-shadow: 0 0 16px rgba(187, 134, 252, 0.2) !important;
+    background: rgba(var(--primary-accent-rgb), 0.12) !important;
+    border-color: rgba(var(--primary-accent-rgb), 0.3) !important;
+    color: var(--primary-accent) !important;
+    box-shadow: 0 0 16px rgba(var(--primary-accent-rgb), 0.2) !important;
  }
  #btn-exit {
     color: #cf6679 !important;
@@ -815,12 +839,36 @@ select {
 }
 select:hover, select:focus {
     background: rgba(255, 255, 255, 0.08) !important;
-    border-color: rgba(187, 134, 252, 0.3) !important;
-    box-shadow: 0 0 12px rgba(187, 134, 252, 0.15) !important;
+    border-color: rgba(var(--primary-accent-rgb), 0.3) !important;
+    box-shadow: 0 0 12px rgba(var(--primary-accent-rgb), 0.15) !important;
 }
 select option {
     background-color: #240046 !important; /* Rich deep indigo-purple matching the body gradient */
     color: #ffffff !important;
     font-family: 'Inter', sans-serif !important;
     padding: 10px !important;
+}
+
+/* Premium Glassmorphic Settings Card Class */
+.settings-card {
+    background: rgba(25, 25, 35, 0.55) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
+    padding: 25px !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    transition: all 0.3s ease !important;
+}
+
+body.theme-teal select option {
+    background-color: #012828 !important;
+}
+body.theme-green select option {
+    background-color: #023021 !important;
+}
+body.theme-black select option {
+    background-color: #0d0d0d !important;
 }

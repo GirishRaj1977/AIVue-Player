@@ -61,13 +61,15 @@ def fetch_content(url):
 def parse_epg(content, epg_data=None, filter_ids=None):
     if epg_data is None:
         epg_data = {}
+    filter_ids_low = set(str(x).lower() for x in filter_ids) if filter_ids else None
     try:
         root = ET.fromstring(content)
         for prog in root.findall('programme'):
             ch_id = prog.get('channel')
             if not ch_id:
                 continue
-            if filter_ids and ch_id not in filter_ids:
+            ch_id_low = ch_id.lower()
+            if filter_ids_low and ch_id_low not in filter_ids_low:
                 continue
             start = prog.get('start')
             stop = prog.get('stop')
@@ -76,9 +78,9 @@ def parse_epg(content, epg_data=None, filter_ids=None):
             desc_elem = prog.find('desc')
             desc = desc_elem.text if desc_elem is not None else ""
             
-            if ch_id not in epg_data:
-                epg_data[ch_id] = []
-            epg_data[ch_id].append({"start": start, "stop": stop, "title": title, "desc": desc})
+            if ch_id_low not in epg_data:
+                epg_data[ch_id_low] = []
+            epg_data[ch_id_low].append({"start": start, "stop": stop, "title": title, "desc": desc})
     except Exception:
         pass
     return epg_data
@@ -225,18 +227,35 @@ def parse_m3u(content, source=""):
     return {"channels": channels, "epg_url": epg_url, "exp_date": exp_date}
 
 def attach_epg(channels, epg_data, channel_mappings={}):
-    if not epg_data or not channels:
+    if not channels:
         return channels
+    if not epg_data:
+        for ch in channels:
+            ch['epg_programmes'] = []
+        return channels
+        
+    # Create a case-insensitive lookup map for EPG programmes
+    epg_data_low = {str(k).lower(): v for k, v in epg_data.items()}
+    # Convert mappings values to lowercase as well
+    mappings_low = {k: (str(v).lower() if v else None) for k, v in channel_mappings.items()}
+
     for ch in channels:
         ch_id = ch.get('tvg_id')
         ch_name = ch.get('tvg_name')
+        ch_id_low = str(ch_id).lower() if ch_id else None
+        ch_name_low = str(ch_name).lower() if ch_name else None
         
         mapping_key = ch.get('title')
-        mapped_id = channel_mappings.get(mapping_key)
-        if mapped_id and mapped_id in epg_data:
-            ch['epg_programmes'] = epg_data[mapped_id]
+        mapped_id_low = mappings_low.get(mapping_key)
+        
+        if mapped_id_low and mapped_id_low in epg_data_low:
+            ch['epg_programmes'] = epg_data_low[mapped_id_low]
         else:
-            ch['epg_programmes'] = epg_data.get(ch_id) or epg_data.get(ch_name) or []
+            ch['epg_programmes'] = (
+                epg_data_low.get(ch_id_low) 
+                or epg_data_low.get(ch_name_low) 
+                or []
+            )
     return channels
 
 def main():
@@ -267,11 +286,52 @@ def main():
                             if not ch_id: continue
                             display_name = ch.find('display-name')
                             name = display_name.text if display_name is not None and display_name.text else ch_id
-                            epg_channels.append({"id": ch_id, "name": name, "source": epg_source})
+                            icon_elem = ch.find('icon')
+                            icon = icon_elem.get('src', '') if icon_elem is not None else ''
+                            epg_channels.append({"id": ch_id, "name": name, "source": epg_source, "icon": icon})
                 except Exception:
                     pass
         print(json.dumps(epg_channels))
         sys.exit(0)
+
+    if source == "--epg-logos":
+        epg_source_arg = sys.argv[2] if len(sys.argv) > 2 else ""
+        logo_map = {}
+        if epg_source_arg:
+            epg_sources = [s.strip() for s in epg_source_arg.split(',') if s.strip()]
+            for epg_source in epg_sources:
+                try:
+                    content = ""
+                    if epg_source.startswith('http://') or epg_source.startswith('https://'):
+                        content, _ = fetch_content(epg_source)
+                    elif os.path.exists(epg_source):
+                        with open(epg_source, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                    if content:
+                        root = ET.fromstring(content)
+                        for ch in root.findall('channel'):
+                            ch_id = ch.get('id')
+                            if not ch_id:
+                                continue
+                            icon_elem = ch.find('icon')
+                            if icon_elem is not None:
+                                src = icon_elem.get('src', '')
+                                if src:
+                                    # Store by channel ID (primary key)
+                                    logo_map[ch_id.lower()] = src
+                                    # Also store by display-name for channels with numeric IDs
+                                    # This enables fuzzy matching by channel name (e.g. "Aaj Tak.in")
+                                    if ch_id.isdigit():
+                                        display_name_elem = ch.find('display-name')
+                                        if display_name_elem is not None and display_name_elem.text:
+                                            dn = display_name_elem.text.strip()
+                                            if dn:
+                                                logo_map[dn.lower()] = src
+                except Exception:
+                    pass
+        print(json.dumps(logo_map))
+        sys.exit(0)
+
 
     if source == "--epg-dict":
         epg_source_arg = sys.argv[2] if len(sys.argv) > 2 else ""

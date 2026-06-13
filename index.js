@@ -1,9 +1,159 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, clipboard, Tray, Notification, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, clipboard, Tray, Notification, screen, protocol, net: electronNet } = require('electron');
 const path = require('path');
 const { spawn, execFile, exec } = require('child_process');
 const net = require('net');
 const fs = require('fs');
 const crypto = require('crypto');
+const https = require('https');
+const http = require('http');
+
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'aivue-logo', privileges: { bypassCSP: true, secure: true, corsEnabled: true, supportFetchAPI: true } }
+]);
+
+function downloadImage(url, destPath, redirectCount = 0) {
+    if (redirectCount > 5) {
+        return Promise.reject(new Error('Too many redirects'));
+    }
+    return new Promise((resolve, reject) => {
+        // Ensure parent directory exists
+        const dir = path.dirname(destPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+
+        const file = fs.createWriteStream(destPath);
+        const protocolLib = url.startsWith('https') ? https : http;
+        
+        const req = protocolLib.get(url, { headers: { 'User-Agent': 'VLC/3.0.9 LibVLC/3.0.9' }, timeout: 15000 }, (response) => {
+            if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                file.close();
+                fs.unlink(destPath, () => {});
+                try {
+                    const redirectUrl = new URL(response.headers.location, url).toString();
+                    downloadImage(redirectUrl, destPath, redirectCount + 1).then(resolve).catch(reject);
+                } catch (urlErr) {
+                    reject(urlErr);
+                }
+                return;
+            }
+            if (response.statusCode !== 200) {
+                file.close();
+                fs.unlink(destPath, () => {});
+                reject(new Error(`Failed to download: ${response.statusCode}`));
+                return;
+            }
+            response.pipe(file);
+            file.on('finish', () => {
+                file.close();
+                resolve();
+            });
+        });
+        
+        req.on('error', (err) => {
+            file.close();
+            fs.unlink(destPath, () => {});
+            reject(err);
+        });
+        
+        req.on('timeout', () => {
+            req.destroy();
+            file.close();
+            fs.unlink(destPath, () => {});
+            reject(new Error('Download timeout'));
+        });
+    });
+}
+
+// --- Background Logo Cache System ---
+// Downloads EPG logo images to local ChannelLogos/ directory and updates the DB
+// so subsequent loads serve logos from disk (aivue-logo://) with zero network requests.
+
+const logoDownloadQueue = [];
+let logoDownloadRunning = false;
+
+function queueLogoDownload(epgId, remoteUrl) {
+    logoDownloadQueue.push({ epgId, remoteUrl });
+    if (!logoDownloadRunning) {
+        processLogoDownloadQueue();
+    }
+}
+
+async function processLogoDownloadQueue() {
+    if (logoDownloadQueue.length === 0) {
+        logoDownloadRunning = false;
+        return;
+    }
+    logoDownloadRunning = true;
+    const { epgId, remoteUrl } = logoDownloadQueue.shift();
+    try {
+        const logosDir = path.join(app.getPath('userData'), 'ChannelLogos');
+        if (!fs.existsSync(logosDir)) fs.mkdirSync(logosDir, { recursive: true });
+
+        // Use MD5 of URL as filename, keep original extension
+        const hash = crypto.createHash('md5').update(remoteUrl).digest('hex');
+        const ext = path.extname(new URL(remoteUrl).pathname) || '.png';
+        const filename = hash + ext;
+        const destPath = path.join(logosDir, filename);
+        const cachedUrl = 'aivue-logo://' + filename;
+
+        if (!fs.existsSync(destPath)) {
+            await downloadImage(remoteUrl, destPath);
+        }
+
+        // Update DB with cached URL
+        if (db) {
+            await db.prepare('UPDATE epg_logos SET cached_logo = ? WHERE epg_id = ?').run(cachedUrl, epgId);
+        }
+        console.log(`[Logo Cache] Cached logo for "${epgId}": ${cachedUrl}`);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('logo-cached', { originalUrl: remoteUrl, cachedUrl });
+        }
+    } catch (err) {
+        console.warn(`[Logo Cache] Failed to download logo for "${epgId}" (${remoteUrl}): ${err.message}`);
+    }
+    // Small delay between downloads to avoid rate limiting
+    setTimeout(processLogoDownloadQueue, 200);
+}
+
+function normalizeName(name) {
+    if (!name) return '';
+    let str = name.toLowerCase();
+    
+    // Remove brackets and their content, e.g. [HD], (US), |UK|
+    str = str.replace(/[\[\(\{\|\<].*?[\]\)\}\|\>]/g, ' ');
+    
+    // Remove common prefixes/suffixes/badges and quality terms
+    const termsToRemove = [
+        'hd', 'uhd', 'fhd', 'sd', '4k', '1080p', '720p', 'hevc', 'h264', 'h.264', '50fps', '60fps',
+        'us', 'uk', 'in', 'ca', 'fr', 'es', 'de', 'it', 'mx', 'ar', 'co', 'pe', 'br', 'la', 'latam',
+        'backup', 'back', 'main', 'tv', 'ch', 'channel', 'premium', 'vip', 'east', 'west', 'direct',
+        'fhd', '1080', '720', 'live', 'air'
+    ];
+    
+    // Replace non-alphanumeric with space
+    str = str.replace(/[^a-z0-9]/g, ' ');
+    
+    // Remove terms as words
+    termsToRemove.forEach(term => {
+        const regex = new RegExp(`\\b${term}\\b`, 'g');
+        str = str.replace(regex, ' ');
+    });
+    
+    // Convert word numbers to digits
+    const wordToDigit = {
+        'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4',
+        'five': '5', 'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10'
+    };
+    for (const [word, digit] of Object.entries(wordToDigit)) {
+        str = str.replace(new RegExp(`\\b${word}\\b`, 'g'), digit);
+    }
+    
+    // Replace multiple spaces with a single space
+    str = str.replace(/\s+/g, ' ').trim();
+    
+    return str;
+}
 
 // --- Logger Initialization & Error Handling ---
 const logger = require('./logger');
@@ -13,6 +163,8 @@ logger.init();
 console.log(`[APP] Version ${app.getVersion() || '1.0.0'} started`);
 console.log(`[APP] OS: ${process.platform} (${process.arch})`);
 console.log(`[APP] User data path: ${app.getPath('userData')}`);
+console.log(`[APP] App installation path: ${app.getAppPath()}`);
+console.log(`[APP] Resources/Base path: ${app.isPackaged ? process.resourcesPath : __dirname}`);
 
 // Uncaught exceptions and rejections handlers (routed automatically to crash.log)
 process.on('uncaughtException', (err) => {
@@ -217,9 +369,11 @@ let shouldShowMainWindow = false;
 let isSplashEnded = false;
 const ipcPath = process.platform === 'win32' ? '\\\\.\\pipe\\mpv-electron-ipc' : '/tmp/mpv-electron-ipc';
 
-// Fix for "Network service crashed" on Windows (disables Chromium sandbox and HW acceleration)
+// Stability fixes for Windows GPU / sandbox issues
 app.commandLine.appendSwitch('no-sandbox');
-app.disableHardwareAcceleration();
+// Use software compositing only — prevents GPU compositor crashes without fully disabling
+// GPU rasterization (keeps CSS gradients, animations and layout GPU-accelerated)
+app.commandLine.appendSwitch('disable-gpu-compositing');
 // Suppress harmless DirectComposition GPU driver warnings on Windows
 app.commandLine.appendSwitch('log-level', '3'); // Suppress Chromium console spam
 
@@ -652,6 +806,7 @@ function initRemoteServer() {
         showRemoteOverridePrompt,
         getEpgDataFromDb,
         loadChannelsFromDb,
+        getEpgLogos: getEpgLogosInternal,
         executeLoadStalkerCategory,
         sendMpvCommand: (cmd) => {
             if (ipcClient && !ipcClient.destroyed) {
@@ -661,7 +816,37 @@ function initRemoteServer() {
     });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+    try {
+        await db.initPromise;
+    } catch (e) {
+        console.error('[DB Ready Error] SQLite schema load failed:', e);
+    }
+
+    // Register custom protocol handler for EPG logos cached on disk
+    protocol.handle('aivue-logo', (request) => {
+        try {
+            const url = new URL(request.url);
+            const filename = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+            const logosDir = path.join(app.getPath('userData'), 'ChannelLogos');
+            const filePath = path.join(logosDir, filename);
+            const resolvedPath = path.resolve(filePath);
+            const resolvedLogosDir = path.resolve(logosDir);
+            if (resolvedPath.startsWith(resolvedLogosDir) && fs.existsSync(resolvedPath)) {
+                const data = fs.readFileSync(resolvedPath);
+                let mimeType = 'image/png';
+                if (filename.toLowerCase().endsWith('.jpg') || filename.toLowerCase().endsWith('.jpeg')) mimeType = 'image/jpeg';
+                else if (filename.toLowerCase().endsWith('.gif')) mimeType = 'image/gif';
+                else if (filename.toLowerCase().endsWith('.webp')) mimeType = 'image/webp';
+                return new Response(data, { headers: { 'Content-Type': mimeType } });
+            }
+        } catch (err) {
+            console.error('[Protocol Handler] Error serving cached logo:', err);
+        }
+        return new Response('Not Found', { status: 404 });
+    });
+
+    populateEpgLogosIfEmpty();
     createTray();
     createWindow();
     ensurePlayerShapeProcess();
@@ -777,6 +962,7 @@ function initMpv() {
         `--stream-lavf-o=reconnect_streamed=1`,
         `--stream-lavf-o=reconnect_delay_max=5`,
         `--idle=yes`,
+        `--screenshot-directory=${app.getPath('pictures')}`,
         `--log-file=${path.join(app.getPath('userData'), 'mpv-debug.log')}`,
         `--msg-level=all=v`
     ];
@@ -1242,6 +1428,43 @@ ipcMain.on('copy-to-clipboard', (event, text) => {
     clipboard.writeText(text);
 });
 
+function runParser(args, options, callback) {
+    const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
+    const env = Object.assign({}, process.env, options.env || {});
+    const scriptPath = path.join(baseDir, 'backend', 'parser.py');
+    const exePath = path.join(baseDir, 'backend', 'parser.exe');
+    
+    if (process.platform === 'win32') {
+        if (fs.existsSync(exePath)) {
+            console.log(`[Parser] Running compiled parser.exe: ${exePath}`);
+            const runArgs = args.slice(1);
+            return execFile(exePath, runArgs, { ...options, env }, (err, stdout, stderr) => {
+                if (err) {
+                    console.error(`[Parser Error] Compiled parser.exe failed to run: ${err.message}`);
+                    console.error(`  - Compiled path: ${exePath} (exists: ${fs.existsSync(exePath)})`);
+                    console.error(`  - Falling back to Python interpreter if installed...`);
+                }
+                callback(err, stdout, stderr);
+            });
+        } else {
+            console.log(`[Parser] Compiled parser.exe not found at: ${exePath}`);
+        }
+    }
+    
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    console.log(`[Parser] Running script with fallback: ${pythonCmd} ${args.join(' ')}`);
+    return execFile(pythonCmd, args, { ...options, env }, (err, stdout, stderr) => {
+        if (err) {
+            console.error(`[Parser Error] Fallback parser run failed: ${err.message}`);
+            console.error(`  - Script path: ${scriptPath} (exists: ${fs.existsSync(scriptPath)})`);
+            console.error(`  - Executable path tried: ${exePath} (exists: ${fs.existsSync(exePath)})`);
+            console.error(`  - App Installation / Resources: ${baseDir}`);
+            console.error(`  - User Data Path: ${app.getPath('userData')}`);
+        }
+        callback(err, stdout, stderr);
+    });
+}
+
 // M3U Parsing backend wrapper
 ipcMain.handle('parse-m3u', async (event, source, epgSource, mappings, forceRefresh) => {
     console.log('[IPC HANDLE] parse-m3u START', { source, epgSource, mappings, forceRefresh });
@@ -1252,7 +1475,6 @@ ipcMain.handle('parse-m3u', async (event, source, epgSource, mappings, forceRefr
     }
 
     return new Promise((resolve) => {
-        const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
         const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
         const scriptPath = path.join(baseDir, 'backend', 'parser.py');
         
@@ -1267,13 +1489,32 @@ ipcMain.handle('parse-m3u', async (event, source, epgSource, mappings, forceRefr
         });
 
         console.log(`[Backend] Starting Python parser for: ${source}`);
-        execFile(pythonCmd, args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, timeout: 120000, env }, (error, stdout, stderr) => {
+        runParser(args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, timeout: 120000, env }, (error, stdout, stderr) => {
             console.log(`[Backend] Python parser finished.`);
             console.timeEnd('parse-m3u');
             console.log('[IPC HANDLE] parse-m3u END');
             if (error) {
-                console.error(`[Backend] Error:`, error.message);
-                return resolve({ error: `${error.message}\n${stderr || ''}` });
+                const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
+                const scriptPath = path.join(baseDir, 'backend', 'parser.py');
+                const exePath = path.join(baseDir, 'backend', 'parser.exe');
+                console.error(`[Backend] Parser execution failed! Error details:`, error.message);
+                console.error(`[Backend] Diagnostics:`);
+                console.error(`  - Executable path tried: ${exePath} (Exists: ${fs.existsSync(exePath)})`);
+                console.error(`  - Script path tried: ${scriptPath} (Exists: ${fs.existsSync(scriptPath)})`);
+                console.error(`  - User Data Path: ${app.getPath('userData')}`);
+                console.error(`  - App Installation / Resources Path: ${baseDir}`);
+                console.error(`  - System Path environment: ${process.env.PATH}`);
+                
+                return resolve({ 
+                    error: `Python Parser failed to execute.\n\n` +
+                           `Error: ${error.message}\n\n` +
+                           `Diagnostics:\n` +
+                           `  - Tried compiled exe: ${exePath} (exists: ${fs.existsSync(exePath)})\n` +
+                           `  - Tried script path: ${scriptPath} (exists: ${fs.existsSync(scriptPath)})\n` +
+                           `  - App installation folder: ${baseDir}\n` +
+                           `  - Logs/User data folder: ${app.getPath('userData')}\n\n` +
+                           `Ensure Python is installed on your system (or compiled parser.exe is in the resources folder), and added to PATH.`
+                });
             }
             if (!stdout || stdout.trim() === '') {
                 return resolve({ error: "Python executed but returned absolutely nothing. Ensure 'backend/parser.py' is not empty, and that the Microsoft Store Python alias isn't intercepting the command." });
@@ -1295,7 +1536,6 @@ ipcMain.handle('get-epg-dict', async (event, epgSources, filterIds) => {
         return cachedEpgDict;
     }
     return new Promise((resolve) => {
-        const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
         const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
         const scriptPath = path.join(baseDir, 'backend', 'parser.py');
         
@@ -1303,7 +1543,7 @@ ipcMain.handle('get-epg-dict', async (event, epgSources, filterIds) => {
 
         const env = Object.assign({}, process.env, { AIVUE_CACHE_DIR: cacheDir, AIVUE_FORCE_REFRESH: '0' });
 
-        execFile(pythonCmd, args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, timeout: 60000, env }, (error, stdout) => {
+        runParser(args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, timeout: 60000, env }, (error, stdout) => {
             if (error) return resolve({});
             try { 
                 cachedEpgDict = JSON.parse(stdout);
@@ -1317,6 +1557,96 @@ ipcMain.handle('get-epg-dict', async (event, epgSources, filterIds) => {
 
 // Standalone EPG Extractor
 let epgChannelsCache = {};
+let epgLogosCache = {};
+
+async function getEpgLogosInternal(epgSources) {
+    console.log('[EPG LOGOS INTERNAL]', { epgSources });
+    if (!epgSources) return {};
+    if (epgLogosCache[epgSources]) {
+        console.log('[CACHE HIT] Returning cached EPG logos');
+        return epgLogosCache[epgSources];
+    }
+    return new Promise((resolve) => {
+        const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
+        const scriptPath = path.join(baseDir, 'backend', 'parser.py');
+        const args = [scriptPath, '--epg-logos', epgSources];
+        const env = Object.assign({}, process.env, { AIVUE_CACHE_DIR: cacheDir, AIVUE_FORCE_REFRESH: '0' });
+        runParser(args, { maxBuffer: 1024 * 1024 * 50, windowsHide: true, timeout: 30000, env }, (error, stdout) => {
+            if (error) return resolve({});
+            try {
+                const rawLogos = JSON.parse(stdout);
+                const lowercaseLogos = {};
+                for (const [key, val] of Object.entries(rawLogos || {})) {
+                    lowercaseLogos[key.toLowerCase()] = val;
+                }
+                epgLogosCache[epgSources] = lowercaseLogos;
+                resolve(lowercaseLogos);
+            } catch (e) { resolve({}); }
+        });
+    });
+}
+
+ipcMain.handle('get-epg-logos', async (event, epgSources) => {
+    return getEpgLogosInternal(epgSources);
+});
+
+async function populateEpgLogosIfEmpty() {
+    try {
+        if (!db) return;
+        const row = await db.prepare('SELECT COUNT(*) as count FROM epg_logos').get();
+        if (row && row.count === 0) {
+            console.log('[DB] epg_logos table is empty. Attempting background population from existing EPG sources...');
+            
+            const playlists = await db.prepare('SELECT epg_url FROM playlists').all();
+            const extEpgs = await db.prepare('SELECT source_url FROM external_epgs').all();
+            
+            const sources = new Set();
+            playlists.forEach(p => {
+                const url = p.epg_url;
+                if (url && url !== 'Not Configured' && !url.startsWith('stalker:') && !url.startsWith('xtream-epg:')) {
+                    sources.add(url);
+                }
+            });
+            extEpgs.forEach(e => {
+                if (e.source_url && !e.source_url.startsWith('stalker:') && !e.source_url.startsWith('xtream-epg:')) {
+                    sources.add(e.source_url);
+                }
+            });
+            
+            if (sources.size === 0) {
+                console.log('[DB] No active EPG sources found to populate epg_logos.');
+                return;
+            }
+            
+            // Populate in background
+            (async () => {
+                for (const source of sources) {
+                    try {
+                        console.log(`[DB Background Logo Populate] Fetching logos for source: ${source}`);
+                        const logoMap = await getEpgLogosInternal(source);
+                        if (logoMap && Object.keys(logoMap).length > 0) {
+                            const insertLogo = db.prepare(`
+                                INSERT OR REPLACE INTO epg_logos (epg_id, logo_url)
+                                VALUES (@epgId, @logoUrl)
+                            `);
+                            const logoTx = db.transaction(async (logos) => {
+                                for (const [epgId, logoUrl] of Object.entries(logos)) {
+                                    await insertLogo.run({ epgId: String(epgId).toLowerCase(), logoUrl });
+                                }
+                            });
+                            await logoTx(logoMap);
+                            console.log(`[DB Background Logo Populate] Successfully saved ${Object.keys(logoMap).length} logos for ${source}`);
+                        }
+                    } catch (err) {
+                        console.error(`[DB Background Logo Populate] Failed for source ${source}:`, err.message);
+                    }
+                }
+            })();
+        }
+    } catch (e) {
+        console.error('[DB] Failed to check/populate epg_logos table:', e.message);
+    }
+}
 
 ipcMain.handle('get-epg-channels', async (event, epgSources) => {
     console.log('[IPC HANDLE] get-epg-channels', { epgSources });
@@ -1336,14 +1666,13 @@ ipcMain.handle('get-epg-channels', async (event, epgSources) => {
     // 1. Get other EPG channels using Python parser
     if (otherSources.length > 0) {
         const otherChannels = await new Promise((resolve) => {
-            const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
             const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
             const scriptPath = path.join(baseDir, 'backend', 'parser.py');
             
             const args = [scriptPath, '--epg-only', otherSources.join(',')];
             const env = Object.assign({}, process.env, { AIVUE_CACHE_DIR: cacheDir, AIVUE_FORCE_REFRESH: '0' });
             
-            execFile(pythonCmd, args, { maxBuffer: 1024 * 1024 * 100, windowsHide: true, timeout: 60000, env }, (error, stdout) => {
+            runParser(args, { maxBuffer: 1024 * 1024 * 100, windowsHide: true, timeout: 60000, env }, (error, stdout) => {
                 if (error) return resolve([]);
                 try { resolve(JSON.parse(stdout)); } 
                 catch (e) { resolve([]); }
@@ -1356,7 +1685,7 @@ ipcMain.handle('get-epg-channels', async (event, epgSources) => {
     if (stalkerSources.length > 0 && db) {
         for (const stalkerSrc of stalkerSources) {
             try {
-                const rows = db.prepare(`
+                const rows = await db.prepare(`
                     SELECT DISTINCT e.channel_id, COALESCE(c.title, e.channel_id) AS name
                     FROM epg e
                     LEFT JOIN channels c ON e.channel_id = c.tvg_id
@@ -1392,7 +1721,6 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
         return true;
     }
 
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
     const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
     const scriptPath = path.join(baseDir, 'backend', 'parser.py');
     const env = Object.assign({}, process.env, { AIVUE_CACHE_DIR: cacheDir, AIVUE_FORCE_REFRESH: forceRefresh ? '1' : '0' });
@@ -1401,7 +1729,7 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
         if (source.startsWith('xtream-epg:')) {
             console.log(`[XTREAM EPG] Fetching EPG for: ${source}`);
             try {
-                const playlistRow = db.prepare('SELECT source_url FROM playlists WHERE epg_url = ?').get(source);
+                const playlistRow = await db.prepare('SELECT source_url FROM playlists WHERE epg_url = ?').get(source);
                 if (playlistRow) {
                     const credParts = playlistRow.source_url.substring(19).split('|');
                     const server = credParts[0];
@@ -1416,8 +1744,8 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
                             VALUES (@channel_id, @start, @stop, @title, @desc, @source)
                         `);
                         
-                        const saveTx = db.transaction((epgDict) => {
-                            deleteOld.run(source);
+                        const saveTx = db.transaction(async (epgDict) => {
+                            await deleteOld.run(source);
                             let insertCount = 0;
                             for (const [streamId, epList] of Object.entries(epgDict)) {
                                 if (Array.isArray(epList)) {
@@ -1432,8 +1760,8 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
                                         } catch (dateErr) {
                                             continue;
                                         }
-                                        insert.run({
-                                            channel_id: String(streamId),
+                                        await insert.run({
+                                            channel_id: String(streamId).toLowerCase(),
                                             start: startIso,
                                             stop: endIso,
                                             title: ep.title || 'No Title',
@@ -1446,7 +1774,7 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
                             }
                             console.log(`[XTREAM EPG] Saved ${insertCount} EPG entries to database.`);
                         });
-                        saveTx(res.epg_data);
+                        await saveTx(res.epg_data);
                     }
                 }
             } catch (err) {
@@ -1458,7 +1786,7 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
             
             try {
                 // Find the playlist URL from the database
-                const playlistRow = db.prepare('SELECT source_url FROM playlists WHERE epg_url = ?').get(source);
+                const playlistRow = await db.prepare('SELECT source_url FROM playlists WHERE epg_url = ?').get(source);
                 if (!playlistRow) {
                     console.warn(`[STALKER EPG] No playlist found in DB for EPG source: ${source}`);
                     continue;
@@ -1478,7 +1806,7 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
                 if (!stalkerChannels || stalkerChannels.length === 0) {
                     // Fallback: load from channels table in DB
                     try {
-                        const rows = db.prepare(`
+                        const rows = await db.prepare(`
                             SELECT tvg_id AS id, title AS name
                             FROM channels
                             WHERE playlist_id = (SELECT id FROM playlists WHERE epg_url = ?) AND type = 'live'
@@ -1499,7 +1827,7 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
                 let filteredStalkerChannels = [];
                 try {
                     const mappedEpgIds = new Set();
-                    const rows = db.prepare('SELECT DISTINCT epg_id FROM mappings WHERE epg_id IS NOT NULL').all();
+                    const rows = await db.prepare('SELECT DISTINCT epg_id FROM mappings WHERE epg_id IS NOT NULL').all();
                     rows.forEach(r => mappedEpgIds.add(String(r.epg_id)));
 
                     let unmappedCount = 0;
@@ -1561,13 +1889,13 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
                     VALUES (@channel_id, @start, @stop, @title, @desc, @source)
                 `);
                 
-                const saveTx = db.transaction((epgDict) => {
-                    deleteOld.run(source);
+                const saveTx = db.transaction(async (epgDict) => {
+                    await deleteOld.run(source);
                     let insertCount = 0;
                     for (const [chId, progs] of Object.entries(epgDict)) {
                         for (const p of progs) {
-                            insert.run({
-                                channel_id: chId,
+                            await insert.run({
+                                channel_id: String(chId).toLowerCase(),
                                 start: p.start || '',
                                 stop: p.stop || '',
                                 title: p.title || '',
@@ -1580,7 +1908,7 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
                     console.log(`[STALKER EPG] Inserted ${insertCount} EPG entries for ${source}`);
                 });
                 
-                saveTx(stalkerEpgDict);
+                await saveTx(stalkerEpgDict);
             } catch (err) {
                 console.error(`[STALKER EPG] Failed to update for ${source}:`, err);
             }
@@ -1590,7 +1918,7 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
         try {
             const args = [scriptPath, '--epg-dict', source, filterIds || ''];
             const stdout = await new Promise((resolve, reject) => {
-                execFile(pythonCmd, args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, timeout: 120000, env }, (error, stdout) => {
+                runParser(args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, timeout: 120000, env }, (error, stdout) => {
                     if (error) reject(error);
                     else resolve(stdout);
                 });
@@ -1604,12 +1932,12 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
                 VALUES (@channel_id, @start, @stop, @title, @desc, @source)
             `);
 
-            const saveTx = db.transaction((epgDict) => {
-                deleteOld.run(source);
+            const saveTx = db.transaction(async (epgDict) => {
+                await deleteOld.run(source);
                 for (const [chId, progs] of Object.entries(epgDict)) {
                     for (const p of progs) {
-                        insert.run({
-                            channel_id: chId,
+                        await insert.run({
+                            channel_id: String(chId).toLowerCase(),
                             start: p.start || '',
                             stop: p.stop || '',
                             title: p.title || '',
@@ -1620,7 +1948,27 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
                 }
             });
 
-            saveTx(dict);
+            await saveTx(dict);
+
+            // Save EPG logos for this XMLTV source
+            try {
+                const logoMap = await getEpgLogosInternal(source);
+                if (logoMap && Object.keys(logoMap).length > 0) {
+                    const insertLogo = db.prepare(`
+                        INSERT OR REPLACE INTO epg_logos (epg_id, logo_url)
+                        VALUES (@epgId, @logoUrl)
+                    `);
+                    const logoTx = db.transaction(async (logos) => {
+                        for (const [epgId, logoUrl] of Object.entries(logos)) {
+                            await insertLogo.run({ epgId: String(epgId).toLowerCase(), logoUrl });
+                        }
+                    });
+                    await logoTx(logoMap);
+                    console.log(`[EPG Update] Saved ${Object.keys(logoMap).length} logos for ${source}`);
+                }
+            } catch (logoErr) {
+                console.error(`[EPG Update] Failed to save logos for ${source}:`, logoErr);
+            }
         } catch (err) {
             console.error(`[EPG Update] Failed for ${source}:`, err);
         }
@@ -1630,11 +1978,11 @@ ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) 
     return true;
 });
 
-function getEpgDataFromDb(channelIds, startLimit, endLimit) {
+async function getEpgDataFromDb(channelIds, startLimit, endLimit) {
     if (!db || !channelIds || channelIds.length === 0) return {};
     try {
         const result = {};
-        const safeChannelIds = channelIds.filter(id => id !== null && id !== undefined).map(id => String(id));
+        const safeChannelIds = channelIds.filter(id => id !== null && id !== undefined).map(id => String(id).toLowerCase());
         // SQLite has a limit on bind variables, process array elements in safe chunks
         const chunkSize = 900;
         for (let i = 0; i < safeChannelIds.length; i += chunkSize) {
@@ -1650,7 +1998,7 @@ function getEpgDataFromDb(channelIds, startLimit, endLimit) {
                 params = [...chunk];
             }
             
-            const rows = db.prepare(query).all(...params);
+            const rows = await db.prepare(query).all(...params);
             
             for (const row of rows) {
                 if (!result[row.channel_id]) result[row.channel_id] = [];
@@ -1669,29 +2017,32 @@ function getEpgDataFromDb(channelIds, startLimit, endLimit) {
     }
 }
 
-ipcMain.handle('get-epg', (event, channelIds, startLimit, endLimit) => {
+ipcMain.handle('get-epg', async (event, channelIds, startLimit, endLimit) => {
     console.log('[IPC HANDLE] get-epg START', { channelIds_count: channelIds ? channelIds.length : 0 });
     console.time('get-epg');
-    const result = getEpgDataFromDb(channelIds, startLimit, endLimit);
+    const result = await getEpgDataFromDb(channelIds, startLimit, endLimit);
     console.timeEnd('get-epg');
     console.log('[IPC HANDLE] get-epg END');
     return result;
 });
 
 // Native file dialog for selecting playlists
-ipcMain.handle('open-file-dialog', async () => {
-    console.log('[IPC HANDLE] open-file-dialog');
+ipcMain.handle('open-file-dialog', async (event, type = 'playlist') => {
+    console.log('[IPC HANDLE] open-file-dialog', { type });
+    const filters = type === 'epg'
+        ? [{ name: 'XMLTV EPG files', extensions: ['xml', 'xml.gz', 'gz'] }]
+        : [{ name: 'M3U Playlists', extensions: ['m3u', 'm3u8'] }];
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
         title: 'AIVue Player',
         properties: ['openFile'],
-        filters: [{ name: 'M3U Playlists', extensions: ['m3u', 'm3u8'] }]
+        filters
     });
     if (canceled) return [];
     return filePaths;
 });
 
 // Channels persistence
-function saveChannelsToDb(playlists) {
+async function saveChannelsToDb(playlists) {
     console.log('[DB] Saving channels to database START...');
     console.time('saveChannelsToDb');
     if (!db) {
@@ -1709,25 +2060,20 @@ function saveChannelsToDb(playlists) {
             exp_date = @exp_date
     `);
 
-    const insertChannel = db.prepare(`
-        INSERT INTO channels (playlist_id, tvg_id, tvg_name, title, logo, group_name, stream_url, is_favourite, is_disabled, type)
-        VALUES (@playlist_id, @tvg_id, @tvg_name, @title, @logo, @group_name, @stream_url, @is_favourite, @is_disabled, @type)
-    `);
-
     const clearChannels = db.prepare(`DELETE FROM channels WHERE playlist_id = ?`);
     const deletePlaylist = db.prepare(`DELETE FROM playlists WHERE id = ?`);
 
-    const saveTx = db.transaction((pls) => {
+    const saveTx = db.transaction(async (pls) => {
         const incomingIds = pls.map(p => p.id.toString());
-        const existingPlaylists = db.prepare(`SELECT id FROM playlists`).all();
+        const existingPlaylists = await db.prepare(`SELECT id FROM playlists`).all();
         for (const row of existingPlaylists) {
             if (!incomingIds.includes(row.id)) {
-                deletePlaylist.run(row.id);
+                await deletePlaylist.run(row.id);
             }
         }
 
         for (const p of pls) {
-            insertPlaylist.run({
+            await insertPlaylist.run({
                 id: p.id.toString(),
                 name: p.name || 'Unnamed',
                 source: p.source || '',
@@ -1736,29 +2082,53 @@ function saveChannelsToDb(playlists) {
                 exp_date: p.exp_date || null
             });
 
-            clearChannels.run(p.id.toString());
+            await clearChannels.run(p.id.toString());
             
-            if (p.channels) {
-                for (const c of p.channels) {
-                    insertChannel.run({
-                        playlist_id: p.id.toString(),
-                        tvg_id: c.tvg_id || '',
-                        tvg_name: c.tvg_name || '',
-                        title: c.title || '',
-                        logo: c.logo || '',
-                        group_name: c.group || '',
-                        stream_url: c.url || '',
-                        is_favourite: c.favourite ? 1 : 0,
-                        is_disabled: c.disabled ? 1 : 0,
-                        type: c.type || 'live'
+            if (p.channels && p.channels.length > 0) {
+                // Bulk insert channels to prevent UI hang from event loop saturation
+                await new Promise((resolve, reject) => {
+                    db.native.serialize(() => {
+                        const stmt = db.native.prepare(`
+                            INSERT INTO channels (playlist_id, tvg_id, tvg_name, title, logo, group_name, stream_url, is_favourite, is_disabled, type)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        `);
+                        
+                        let errorOccurred = false;
+                        let opsRemaining = p.channels.length;
+                        
+                        for (const c of p.channels) {
+                            stmt.run([
+                                p.id.toString(),
+                                c.tvg_id || '',
+                                c.tvg_name || '',
+                                c.title || '',
+                                c.logo || '',
+                                c.group || '',
+                                c.url || '',
+                                c.favourite ? 1 : 0,
+                                c.disabled ? 1 : 0,
+                                c.type || 'live'
+                            ], function(err) {
+                                if (err && !errorOccurred) {
+                                    errorOccurred = true;
+                                    stmt.finalize();
+                                    return reject(err);
+                                }
+                                opsRemaining--;
+                                if (opsRemaining === 0 && !errorOccurred) {
+                                    stmt.finalize();
+                                    resolve();
+                                }
+                            });
+                        }
                     });
-                }
+                });
             }
         }
     });
 
     try {
-        saveTx(playlists);
+        await saveTx(playlists);
     } catch (e) {
         console.error('[DB ERR] Transaction failed:', e);
         console.timeEnd('saveChannelsToDb');
@@ -1770,10 +2140,10 @@ function saveChannelsToDb(playlists) {
     return true;
 }
 
-ipcMain.handle('save-channels', (event, channels) => {
+ipcMain.handle('save-channels', async (event, channels) => {
     console.log('[IPC HANDLE] save-channels START', { playlist_count: channels ? channels.length : 0 });
     try {
-        const result = saveChannelsToDb(channels);
+        const result = await saveChannelsToDb(channels);
         console.log('[IPC HANDLE] save-channels END');
         return result;
     } catch (e) {
@@ -1793,12 +2163,12 @@ ipcMain.handle('delete-playlist', async (event, playlistId) => {
         const deleteChannels = db.prepare('DELETE FROM channels WHERE playlist_id = ?');
         const deletePlaylist = db.prepare('DELETE FROM playlists WHERE id = ?');
         
-        const deleteTx = db.transaction((id) => {
-            deleteChannels.run(id);
-            deletePlaylist.run(id);
+        const deleteTx = db.transaction(async (id) => {
+            await deleteChannels.run(id);
+            await deletePlaylist.run(id);
         });
         
-        deleteTx(playlistId.toString());
+        await deleteTx(playlistId.toString());
         console.timeEnd('delete-playlist');
         console.log('[IPC HANDLE] delete-playlist END');
         return true;
@@ -1813,12 +2183,12 @@ ipcMain.handle('clear-all-playlists', async () => {
     console.log('[IPC HANDLE] clear-all-playlists START');
     if (!db) return false;
     try {
-        db.transaction(() => {
-            db.prepare('DELETE FROM channels').run();
-            db.prepare('DELETE FROM playlists').run();
-            db.prepare('DELETE FROM epg').run();
-            db.prepare('DELETE FROM mappings').run();
-            db.prepare('DELETE FROM external_epgs').run();
+        await db.transaction(async () => {
+            await db.prepare('DELETE FROM channels').run();
+            await db.prepare('DELETE FROM playlists').run();
+            await db.prepare('DELETE FROM epg').run();
+            await db.prepare('DELETE FROM mappings').run();
+            await db.prepare('DELETE FROM external_epgs').run();
         })();
         console.log('[IPC HANDLE] clear-all-playlists END');
         return true;
@@ -1828,11 +2198,11 @@ ipcMain.handle('clear-all-playlists', async () => {
     }
 });
 
-ipcMain.handle('get-external-epgs', () => {
+ipcMain.handle('get-external-epgs', async () => {
     console.log('[IPC HANDLE] get-external-epgs START');
     if (!db) return [];
     try {
-        const rows = db.prepare('SELECT source_url FROM external_epgs').all();
+        const rows = await db.prepare('SELECT source_url FROM external_epgs').all();
         console.log('[IPC HANDLE] get-external-epgs END');
         return rows.map(r => r.source_url);
     } catch (e) {
@@ -1841,57 +2211,172 @@ ipcMain.handle('get-external-epgs', () => {
     }
 });
 
-ipcMain.handle('add-external-epg', (event, url) => {
+ipcMain.handle('add-external-epg', async (event, url) => {
     console.log('[IPC HANDLE] add-external-epg', { url });
     if (!db) return false;
     try {
-        db.prepare('INSERT OR IGNORE INTO external_epgs (source_url) VALUES (?)').run(url);
+        await db.prepare('INSERT OR IGNORE INTO external_epgs (source_url) VALUES (?)').run(url);
         return true;
     } catch (e) {
         return false;
     }
 });
 
-ipcMain.handle('remove-external-epg', (event, url) => {
+ipcMain.handle('remove-external-epg', async (event, url) => {
     console.log('[IPC HANDLE] remove-external-epg', { url });
     if (!db) return false;
     try {
-        db.prepare('DELETE FROM external_epgs WHERE source_url = ?').run(url);
+        await db.prepare('DELETE FROM external_epgs WHERE source_url = ?').run(url);
         return true;
     } catch (e) {
         return false;
     }
 });
 
-function loadChannelsFromDb() {
+async function loadChannelsFromDb() {
     try {
         if (!db) return [];
         const oldFilePath = path.join(app.getPath('userData'), 'saved_channels.json');
         
-        const dbCount = db.prepare(`SELECT COUNT(*) as count FROM playlists`).get();
+        const dbCount = await db.prepare(`SELECT COUNT(*) as count FROM playlists`).get();
         if (dbCount.count === 0 && fs.existsSync(oldFilePath)) {
             console.log("[DB] Starting with a blank database, deleting old JSON data...");
             fs.unlinkSync(oldFilePath);
             console.log("[DB] Old JSON deleted.");
         }
 
-        const playlists = db.prepare(`SELECT * FROM playlists`).all();
+        const playlists = await db.prepare(`SELECT * FROM playlists`).all();
         const getChannels = db.prepare(`SELECT * FROM channels WHERE playlist_id = ?`);
         
+        // Load mappings
+        const mappings = {};
+        try {
+            const mappingsRows = await db.prepare('SELECT channel_title, epg_id FROM mappings').all();
+            for (const row of mappingsRows) {
+                mappings[row.channel_title] = row.epg_id;
+            }
+        } catch (mapErr) {
+            console.error('[loadChannelsFromDb] Mappings load error:', mapErr.message);
+        }
+
+        // Load EPG logos — prefer locally cached aivue-logo:// URLs over remote URLs
+        const epgLogos = {};      // epg_id -> effective logo URL (cached preferred)
+        const epgLogoRemote = {}; // epg_id -> remote URL (for queuing uncached downloads)
+        try {
+            const epgLogosRows = await db.prepare('SELECT epg_id, logo_url, cached_logo FROM epg_logos').all();
+
+            // Build a Set of existing cached filenames with a single readdirSync call
+            // instead of calling fs.existsSync() per channel (avoids O(n) blocking disk I/O
+            // which causes "Window Not Responding" on startup with large playlists)
+            const logosDir = path.join(app.getPath('userData'), 'ChannelLogos');
+            let cachedLogoFiles = new Set();
+            try {
+                if (fs.existsSync(logosDir)) {
+                    cachedLogoFiles = new Set(fs.readdirSync(logosDir));
+                }
+            } catch (_dirErr) { /* If directory unreadable, treat all logos as uncached */ }
+
+            for (const row of epgLogosRows) {
+                const key = row.epg_id.toLowerCase();
+                // If a local cached file exists on disk, use it — otherwise use remote URL
+                if (row.cached_logo) {
+                    const filename = row.cached_logo.replace('aivue-logo://', '');
+                    if (cachedLogoFiles.has(filename)) {
+                        epgLogos[key] = row.cached_logo;
+                        continue;
+                    }
+                }
+                // Fall back to remote URL and remember it for background caching
+                epgLogos[key] = row.logo_url;
+                if (row.logo_url) epgLogoRemote[key] = { epgId: row.epg_id, url: row.logo_url };
+            }
+        } catch (logoErr) {
+            console.error('[loadChannelsFromDb] EPG logos load error:', logoErr.message);
+        }
+
         const result = [];
         for (const p of playlists) {
-            const pChannels = getChannels.all(p.id).map(c => ({
-                tvg_id: c.tvg_id,
-                tvg_name: c.tvg_name,
-                title: c.title,
-                logo: c.logo,
-                group: c.group_name,
-                url: c.stream_url,
-                favourite: c.is_favourite === 1,
-                disabled: c.is_disabled === 1,
-                type: c.type || 'live'
-            }));
+            const pChannels = await getChannels.all(p.id);
+            const mappedChannels = [];
             
+            for (const c of pChannels) {
+                let effectiveLogo = c.logo;
+                
+                // Treat Stalker portal paths (/logo/...) and other non-absolute URLs as missing logos.
+                // Only real HTTP(S) URLs or our cached aivue-logo:// protocol are valid for display.
+                const isValidLogoUrl = effectiveLogo &&
+                    (effectiveLogo.startsWith('http://') || effectiveLogo.startsWith('https://') || effectiveLogo.startsWith('aivue-logo://'));
+                
+                if (!isValidLogoUrl) {
+                    effectiveLogo = ''; // Reset to empty so EPG lookup triggers below
+                    let matchedEpgId = mappings[c.title];
+                    
+                    if (!matchedEpgId) {
+                        const tvgIdLow = c.tvg_id ? String(c.tvg_id).toLowerCase() : '';
+                        const tvgNameLow = c.tvg_name ? String(c.tvg_name).toLowerCase() : '';
+                        if (tvgIdLow && epgLogos[tvgIdLow]) {
+                            matchedEpgId = tvgIdLow;
+                        } else if (tvgNameLow && epgLogos[tvgNameLow]) {
+                            matchedEpgId = tvgNameLow;
+                        }
+                    }
+                    
+                    if (!matchedEpgId && c.title) {
+                        const normTitle = normalizeName(c.title);
+                        if (normTitle) {
+                            for (const epgId of Object.keys(epgLogos)) {
+                                if (normalizeName(epgId) === normTitle) {
+                                    matchedEpgId = epgId;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (matchedEpgId) {
+                        const logoUrl = epgLogos[matchedEpgId.toLowerCase()];
+                        if (logoUrl) {
+                            effectiveLogo = logoUrl;
+                        }
+                    }
+                }
+
+                // (Removed local caching of logos, relying on Chromium's built-in caching)
+                
+                mappedChannels.push({
+                    tvg_id: c.tvg_id,
+                    tvg_name: c.tvg_name,
+                    title: c.title,
+                    logo: effectiveLogo,
+                    group: c.group_name,
+                    url: c.stream_url,
+                    favourite: c.is_favourite === 1,
+                    disabled: c.is_disabled === 1,
+                    type: c.type || 'live'
+                });
+            }
+            
+            const logoCached = mappedChannels.filter(c => c.logo && c.logo.startsWith('aivue-logo://')).length;
+            const logoRemote = mappedChannels.filter(c => c.logo && (c.logo.startsWith('http://') || c.logo.startsWith('https://'))).length;
+            console.log(`[loadChannelsFromDb] Playlist "${p.name}": ${mappedChannels.length} channels, ${logoCached} cached locally, ${logoRemote} using remote URLs`);
+
+            // Queue background downloads for any logos not yet cached locally
+            // We track which epg_id's were actually used so we only download needed ones
+            const usedEpgIds = new Set();
+            for (const c of mappedChannels) {
+                if (c.logo && (c.logo.startsWith('http://') || c.logo.startsWith('https://'))) {
+                    // Find which epg_id resolved to this logo
+                    for (const [key, info] of Object.entries(epgLogoRemote)) {
+                        if (info.url === c.logo) {
+                            if (!usedEpgIds.has(key)) {
+                                usedEpgIds.add(key);
+                                queueLogoDownload(info.epgId, info.url);
+                            }
+                        }
+                    }
+                }
+            }
+
             result.push({
                 id: p.id,
                 name: p.name,
@@ -1899,7 +2384,7 @@ function loadChannelsFromDb() {
                 epg: p.epg_url,
                 disabled: p.is_disabled === 1,
                 exp_date: p.exp_date,
-                channels: pChannels
+                channels: mappedChannels
             });
         }
         return result;
@@ -1909,9 +2394,9 @@ function loadChannelsFromDb() {
     }
 }
 
-ipcMain.handle('load-channels', (event) => {
+ipcMain.handle('load-channels', async (event) => {
     console.log('[IPC HANDLE] load-channels START');
-    const result = loadChannelsFromDb();
+    const result = await loadChannelsFromDb();
     console.log('[IPC HANDLE] load-channels END');
     return result;
 });
@@ -2094,10 +2579,10 @@ async function runInChunks(items, chunkSize, asyncFn) {
     }
 }
 
-function getPortalProfile(portalUrl) {
+async function getPortalProfile(portalUrl) {
     if (!db) return null;
     try {
-        const row = db.prepare('SELECT * FROM portal_profiles WHERE portal_url = ?').get(portalUrl);
+        const row = await db.prepare('SELECT * FROM portal_profiles WHERE portal_url = ?').get(portalUrl);
         return row || null;
     } catch (e) {
         console.error('[DB] Failed to get portal profile:', e.message);
@@ -2105,12 +2590,12 @@ function getPortalProfile(portalUrl) {
     }
 }
 
-function updatePortalProfile(portalUrl, updates) {
+async function updatePortalProfile(portalUrl, updates) {
     if (!db) return;
     try {
-        const existing = getPortalProfile(portalUrl);
+        const existing = await getPortalProfile(portalUrl);
         if (!existing) {
-            db.prepare(`
+            await db.prepare(`
                 INSERT INTO portal_profiles (portal_url, uses_direct_source, requires_headers, preferred_format, last_working_url, link_resolves, token_failures, avg_resolve_ms)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
@@ -2131,7 +2616,7 @@ function updatePortalProfile(portalUrl, updates) {
                 params.push(v);
             }
             params.push(portalUrl);
-            db.prepare(`UPDATE portal_profiles SET ${setClause.join(', ')} WHERE portal_url = ?`).run(...params);
+            await db.prepare(`UPDATE portal_profiles SET ${setClause.join(', ')} WHERE portal_url = ?`).run(...params);
         }
     } catch (e) {
         console.error('[DB] Failed to update portal profile:', e.message);
@@ -2179,7 +2664,7 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
     cleanServer = cleanServer.replace(/\/+$/, '');
 
     // 0. Query Capability Profile
-    const profile = getPortalProfile(cleanServer);
+    const profile = await getPortalProfile(cleanServer);
     const preferredFormat = profile ? profile.preferred_format : null;
     const usesDirectSource = profile ? profile.uses_direct_source : 0;
     const lastWorkingUrl = profile ? profile.last_working_url : null;
@@ -2300,7 +2785,7 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
                 const existingAvg = profile ? (profile.avg_resolve_ms || 0) : 0;
                 const newAvg = ((existingAvg * existingResolves) + elapsed) / newResolves;
 
-                updatePortalProfile(cleanServer, {
+                await updatePortalProfile(cleanServer, {
                     uses_direct_source: (directSourceUrl && urlCandidate === decodeURIComponent(directSourceUrl)) ? 1 : 0,
                     requires_headers: 1,
                     preferred_format: format,
@@ -2326,7 +2811,7 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
     console.log(`[XTREAM RESOLVER] All probes failed or timed out. Returning primary candidate as fallback.`);
     
     const newFailures = (profile ? (profile.token_failures || 0) : 0) + 1;
-    updatePortalProfile(cleanServer, {
+    await updatePortalProfile(cleanServer, {
         token_failures: newFailures
     });
 
@@ -2369,7 +2854,7 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
         let token = '';
         
         try {
-            const response = await fetch(handshakeUrl, { headers });
+            const response = await fetch(handshakeUrl, { headers, signal: AbortSignal.timeout(15000) });
             const setCookie = response.headers.get('set-cookie');
             if (setCookie) {
                 const match = setCookie.match(/PHPSESSID=([^;]+)/);
@@ -2412,7 +2897,7 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
         
         const profileUrl = `${url}?type=stb&action=get_profile&mac=${encodeURIComponent(mac)}&hd=1&auth_second_step=1`;
         try {
-            const response = await fetch(profileUrl, { headers: authHeaders });
+            const response = await fetch(profileUrl, { headers: authHeaders, signal: AbortSignal.timeout(15000) });
             
             // Capture PHPSESSID from profile request as well!
             const setCookie = response.headers.get('set-cookie');
@@ -2481,7 +2966,7 @@ async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = 
     }
     
     try {
-        const response = await fetch(requestUrl, { headers: reqHeaders });
+        const response = await fetch(requestUrl, { headers: reqHeaders, signal: AbortSignal.timeout(15000) });
         
         // Auto-heal on Unauthorized/Forbidden status codes
         if ((response.status === 401 || response.status === 403) && !isRetry) {
@@ -2524,6 +3009,8 @@ async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = 
                 console.warn(`[STALKER] Retrying empty response once...`);
                 stalkerTokens.delete(cacheKey);
                 return stalkerRequest(baseUrl, mac, action, extraParams, true);
+            } else {
+                console.warn(`[STALKER] Retry also empty for ${action}`);
             }
             return {};
         }
@@ -2536,6 +3023,9 @@ async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = 
                 stalkerTokens.delete(cacheKey);
                 return stalkerRequest(baseUrl, mac, action, extraParams, true);
             }
+            if (isRetry) {
+                console.log(`[STALKER] Retry succeeded for ${action}!`);
+            }
             return parsed;
         } catch (err) {
             console.error(`[STALKER] Invalid JSON for ${action}`);
@@ -2543,6 +3033,8 @@ async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = 
                 console.warn(`[STALKER] Retrying invalid JSON response once...`);
                 stalkerTokens.delete(cacheKey);
                 return stalkerRequest(baseUrl, mac, action, extraParams, true);
+            } else {
+                console.error(`[STALKER] Retry also failed (Invalid JSON) for ${action}`);
             }
             return {};
         }
@@ -2552,6 +3044,8 @@ async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = 
             console.warn(`[STALKER] Retrying network failure once...`);
             stalkerTokens.delete(cacheKey);
             return stalkerRequest(baseUrl, mac, action, extraParams, true);
+        } else {
+            console.error(`[STALKER] Retry also failed (Network error) for ${action}:`, err.message);
         }
         return {};
     }
@@ -2591,20 +3085,28 @@ async function fetchAllStalkerPages(baseUrl, mac, action, extraParams) {
         
         if (totalPages > 1) {
             console.log(`[STALKER] Fetching ${totalPages - 1} additional pages for ${action} (${totalItems} total items)...`);
-            const chunkSize = 10; // Parallel fetch chunk size for 10x faster loading speed!
+            const chunkSize = 5; // Reduced from 10 to 5 to protect overloaded Stalker portals from aggressive concurrency rate-limiting
             for (let i = 2; i <= totalPages; i += chunkSize) {
                 const chunkPromises = [];
                 for (let p = i; p < i + chunkSize && p <= totalPages; p++) {
                     chunkPromises.push(stalkerRequest(baseUrl, mac, action, { ...extraParams, p }));
                 }
                 const results = await Promise.all(chunkPromises);
+                let foundAnyData = false;
                 for (const res of results) {
                     if (!res || !res.js) {
                         console.warn(`[STALKER] No js payload returned`, extraParams);
                         continue;
                     }
                     let chunkData = res.js?.data || (Array.isArray(res.js) ? res.js : []);
+                    if (chunkData.length > 0) {
+                        foundAnyData = true;
+                    }
                     allItems.push(...chunkData);
+                }
+                if (!foundAnyData) {
+                    console.log(`[STALKER] Pagination returned no items at chunk starting page ${i}. Stopping early.`);
+                    break;
                 }
             }
         }
@@ -2810,6 +3312,14 @@ ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
         // 0. Fetch profile for expiry date
         try {
             const profileRes = await stalkerRequest(url, mac, 'get_profile', { type: 'stb' });
+            if (profileRes && profileRes.error) {
+                console.error('[STALKER] Profile fetch returned error:', profileRes.error);
+                return { error: profileRes.error };
+            }
+            if (profileRes && profileRes.js && profileRes.js.error) {
+                console.error('[STALKER] Profile fetch returned js.error:', profileRes.js.error);
+                return { error: profileRes.js.error };
+            }
             if (profileRes && profileRes.js) {
                 const expire = profileRes.js.expire_billing || profileRes.js.expire || profileRes.js.end_date;
                 if (expire) {
@@ -3553,9 +4063,9 @@ ipcMain.handle('get-xtream-episodes', async (event, { server, username, password
 ipcMain.handle('get-telemetry-diagnostics', async (event, portalUrl) => {
     try {
         if (!portalUrl) {
-            return db.prepare('SELECT * FROM portal_profiles').all();
+            return await db.prepare('SELECT * FROM portal_profiles').all();
         }
-        return getPortalProfile(portalUrl);
+        return await getPortalProfile(portalUrl);
     } catch (e) {
         console.error('[TELEMETRY IPC ERR] Fail:', e.message);
         return null;
@@ -3569,11 +4079,12 @@ ipcMain.handle('clear-cache', async (event, url) => {
     
     // Invalidate in-memory cache
     epgChannelsCache = {};
+    epgLogosCache = {};
     cachedEpgDict = null;
     cachedEpgDictKey = '';
     
     if (db) {
-        try { db.prepare('DELETE FROM epg WHERE source_url = ?').run(url); } 
+        try { await db.prepare('DELETE FROM epg WHERE source_url = ?').run(url); } 
         catch (e) { console.error(e); }
     }
 
@@ -3588,11 +4099,11 @@ ipcMain.handle('clear-cache', async (event, url) => {
 });
 
 // Mappings persistence
-ipcMain.handle('get-mappings', () => {
+ipcMain.handle('get-mappings', async () => {
     console.log('[IPC HANDLE] get-mappings START');
     if (!db) return {};
     try {
-        const rows = db.prepare('SELECT channel_title, epg_id FROM mappings').all();
+        const rows = await db.prepare('SELECT channel_title, epg_id FROM mappings').all();
         const map = {};
         for (const row of rows) {
             map[row.channel_title] = row.epg_id;
@@ -3605,18 +4116,18 @@ ipcMain.handle('get-mappings', () => {
     }
 });
 
-ipcMain.handle('save-mapping', (event, title, epgId) => {
+ipcMain.handle('save-mapping', async (event, title, epgId) => {
     console.log('[IPC HANDLE] save-mapping START', { title, epgId });
     if (!db) return false;
     try {
         if (epgId) {
-            db.prepare(`
+            await db.prepare(`
                 INSERT INTO mappings (channel_title, epg_id)
                 VALUES (@title, @epg)
                 ON CONFLICT(channel_title) DO UPDATE SET epg_id = @epg
-            `).run({ title, epg: epgId });
+            `).run({ title, epg: String(epgId).toLowerCase() });
         } else {
-            db.prepare('DELETE FROM mappings WHERE channel_title = ?').run(title);
+            await db.prepare('DELETE FROM mappings WHERE channel_title = ?').run(title);
         }
         console.log('[IPC HANDLE] save-mapping END');
         return true;
@@ -3626,7 +4137,7 @@ ipcMain.handle('save-mapping', (event, title, epgId) => {
     }
 });
 
-ipcMain.handle('save-mappings-bulk', (event, mappingsArray) => {
+ipcMain.handle('save-mappings-bulk', async (event, mappingsArray) => {
     console.log('[IPC HANDLE] save-mappings-bulk START', mappingsArray.length);
     if (!db) return false;
     try {
@@ -3637,17 +4148,17 @@ ipcMain.handle('save-mappings-bulk', (event, mappingsArray) => {
         `);
         const deleteStmt = db.prepare('DELETE FROM mappings WHERE channel_title = ?');
         
-        const transaction = db.transaction((mappings) => {
+        const transaction = db.transaction(async (mappings) => {
             for (const { title, epgId } of mappings) {
                 if (epgId) {
-                    insertStmt.run({ title, epg: epgId });
+                    await insertStmt.run({ title, epg: String(epgId).toLowerCase() });
                 } else {
-                    deleteStmt.run(title);
+                    await deleteStmt.run(title);
                 }
             }
         });
         
-        transaction(mappingsArray);
+        await transaction(mappingsArray);
         console.log('[IPC HANDLE] save-mappings-bulk END');
         return true;
     } catch (e) {
@@ -3656,10 +4167,10 @@ ipcMain.handle('save-mappings-bulk', (event, mappingsArray) => {
     }
 });
 
-ipcMain.handle('get-playback-progress', (event, id) => {
+ipcMain.handle('get-playback-progress', async (event, id) => {
     try {
         if (!db) return null;
-        const row = db.prepare("SELECT * FROM playback_progress WHERE id = ?").get(id);
+        const row = await db.prepare("SELECT * FROM playback_progress WHERE id = ?").get(id);
         return row || null;
     } catch (e) {
         console.error('[DB ERR] Failed to get playback progress:', e);
@@ -3667,11 +4178,11 @@ ipcMain.handle('get-playback-progress', (event, id) => {
     }
 });
 
-ipcMain.handle('save-playback-progress', (event, { id, tmdb_id, title, stream_url, season, episode, position, duration, completed }) => {
+ipcMain.handle('save-playback-progress', async (event, { id, tmdb_id, title, stream_url, season, episode, position, duration, completed }) => {
     try {
         if (!db) return false;
         const last_watched = new Date().toISOString();
-        db.prepare(`
+        await db.prepare(`
             INSERT INTO playback_progress (id, tmdb_id, title, stream_url, season, episode, position, duration, last_watched, completed)
             VALUES (@id, @tmdb_id, @title, @stream_url, @season, @episode, @position, @duration, @last_watched, @completed)
             ON CONFLICT(id) DO UPDATE SET
@@ -3687,26 +4198,35 @@ ipcMain.handle('save-playback-progress', (event, { id, tmdb_id, title, stream_ur
     }
 });
 
-ipcMain.handle('get-all-playback-progress', () => {
+ipcMain.handle('get-all-playback-progress', async () => {
     try {
         if (!db) return [];
-        return db.prepare("SELECT * FROM playback_progress").all();
+        return await db.prepare("SELECT * FROM playback_progress").all();
     } catch (e) {
         console.error('[DB ERR] Failed to get all playback progress:', e);
         return [];
     }
 });
 
-ipcMain.handle('factory-reset', () => {
+ipcMain.handle('factory-reset', async () => {
     console.log('[IPC HANDLE] factory-reset START. Relaunching app.');
     try {
-        if (db) db.close(); // Safely release SQLite locks
+        if (db) await db.close(); // Safely release SQLite locks
         const dbPath = path.join(app.getPath('userData'), 'iptv.db');
         const walPath = dbPath + '-wal';
         const shmPath = dbPath + '-shm';
         if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
         if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
         if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
+        
+        const cacheDir = path.join(app.getPath('userData'), 'cache');
+        if (fs.existsSync(cacheDir)) {
+            try {
+                fs.rmSync(cacheDir, { recursive: true, force: true });
+            } catch (cacheErr) {
+                console.error("[DB ERR] Failed to delete cache folder:", cacheErr);
+            }
+        }
         
         console.log('[IPC HANDLE] factory-reset END');
         app.relaunch();
@@ -3718,11 +4238,39 @@ ipcMain.handle('factory-reset', () => {
     }
 });
 
+ipcMain.handle('clear-logs', () => {
+    console.log('[IPC HANDLE] clear-logs START');
+    try {
+        const logDir = path.join(app.getPath('userData'), 'logs');
+        if (fs.existsSync(logDir)) {
+            const files = fs.readdirSync(logDir);
+            for (const file of files) {
+                const filePath = path.join(logDir, file);
+                try {
+                    if (fs.statSync(filePath).isFile()) {
+                        fs.unlinkSync(filePath);
+                    }
+                } catch (unlinkErr) {
+                    try {
+                        // Empty the file if it's locked by the running process
+                        fs.writeFileSync(filePath, '');
+                    } catch (writeErr) {
+                        console.error(`[LOGGER] Failed to clear locked log file ${file}:`, writeErr);
+                    }
+                }
+            }
+        }
+        console.log('[IPC HANDLE] clear-logs END');
+        return true;
+    } catch (e) {
+        console.error("[LOGGER] Clear logs failed:", e);
+        return false;
+    }
+});
+
 // ==========================================
 // --- DVR LIVE TV CHANNELS RECORDING ENGINE ---
 // ==========================================
-const http = require('http');
-const https = require('https');
 const { URL } = require('url');
 
 const activeRecordings = new Map();
@@ -3885,10 +4433,10 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
     return { cancel };
 }
 
-ipcMain.handle('get-recording-path', () => {
+ipcMain.handle('get-recording-path', async () => {
     try {
         if (!db) return path.join(app.getPath('documents'), 'AIVueRecordings');
-        const row = db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        const row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
         if (row && row.value) return row.value;
     } catch (e) {
         console.error('[DB ERR] Failed to read recording path settings:', e);
@@ -3896,10 +4444,10 @@ ipcMain.handle('get-recording-path', () => {
     return path.join(app.getPath('documents'), 'AIVueRecordings');
 });
 
-ipcMain.handle('save-recording-path', (event, targetPath) => {
+ipcMain.handle('save-recording-path', async (event, targetPath) => {
     try {
         if (!db) return false;
-        db.prepare("INSERT OR REPLACE INTO dvr_settings (key, value) VALUES ('recording_path', ?)").run(targetPath);
+        await db.prepare("INSERT OR REPLACE INTO dvr_settings (key, value) VALUES ('recording_path', ?)").run(targetPath);
         if (!fs.existsSync(targetPath)) {
             fs.mkdirSync(targetPath, { recursive: true });
         }
@@ -3915,7 +4463,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
     
     let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
     try {
-        const row = db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        const row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
         if (row && row.value) folder = row.value;
     } catch (e) {}
     
@@ -4037,7 +4585,7 @@ ipcMain.handle('get-active-recordings', () => {
 ipcMain.handle('get-recordings', async () => {
     let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
     try {
-        const row = db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        const row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
         if (row && row.value) folder = row.value;
     } catch (e) {}
     
@@ -4083,7 +4631,7 @@ ipcMain.handle('get-recordings', async () => {
 ipcMain.handle('delete-recording', async (event, filename) => {
     let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
     try {
-        const row = db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        const row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
         if (row && row.value) folder = row.value;
     } catch (e) {}
     
@@ -4103,13 +4651,13 @@ ipcMain.handle('delete-recording', async (event, filename) => {
 // --- DVR RECORDINGS SCHEDULER ENGINE ---
 // ==========================================
 
-ipcMain.handle('schedule-recording', (event, channelUrl, channelName, programName, startTime, endTime, headers = []) => {
+ipcMain.handle('schedule-recording', async (event, channelUrl, channelName, programName, startTime, endTime, headers = []) => {
     console.log('[DVR SCHEDULER IPC] schedule-recording:', channelName, '--', programName, '-- Start:', startTime);
     try {
         if (!db) return false;
         
         const metadata = JSON.stringify({ channelName, programName, headers });
-        const res = db.prepare(`
+        const res = await db.prepare(`
             INSERT INTO dvr_schedule (channel_url, start_time, end_time, status, file_path)
             VALUES (?, ?, ?, 'pending', ?)
         `).run(channelUrl, startTime, endTime, metadata);
@@ -4121,10 +4669,10 @@ ipcMain.handle('schedule-recording', (event, channelUrl, channelName, programNam
     }
 });
 
-ipcMain.handle('get-scheduled-recordings', () => {
+ipcMain.handle('get-scheduled-recordings', async () => {
     try {
         if (!db) return [];
-        const rows = db.prepare("SELECT * FROM dvr_schedule ORDER BY start_time ASC").all();
+        const rows = await db.prepare("SELECT * FROM dvr_schedule ORDER BY start_time ASC").all();
         return rows.map(r => {
             let meta = { channelName: 'Unknown', programName: 'Scheduled Program', headers: [] };
             try {
@@ -4146,12 +4694,12 @@ ipcMain.handle('get-scheduled-recordings', () => {
     }
 });
 
-ipcMain.handle('cancel-scheduled-recording', (event, scheduleId) => {
+ipcMain.handle('cancel-scheduled-recording', async (event, scheduleId) => {
     console.log('[DVR SCHEDULER IPC] cancel-scheduled-recording:', scheduleId);
     try {
         if (!db) return false;
         
-        const row = db.prepare("SELECT * FROM dvr_schedule WHERE id = ?").get(scheduleId);
+        const row = await db.prepare("SELECT * FROM dvr_schedule WHERE id = ?").get(scheduleId);
         if (row && row.status === 'recording') {
             const recordingId = activeScheduleRecordings.get(scheduleId);
             if (recordingId) {
@@ -4162,7 +4710,7 @@ ipcMain.handle('cancel-scheduled-recording', (event, scheduleId) => {
             activeScheduleRecordings.delete(scheduleId);
         }
         
-        db.prepare("DELETE FROM dvr_schedule WHERE id = ?").run(scheduleId);
+        await db.prepare("DELETE FROM dvr_schedule WHERE id = ?").run(scheduleId);
         return true;
     } catch (e) {
         console.error('[DB ERR] Failed to cancel scheduled recording:', e);
@@ -4179,7 +4727,7 @@ async function checkScheduledRecordings() {
     
     try {
         // 1. Start pending recordings whose time has arrived
-        const pending = db.prepare("SELECT * FROM dvr_schedule WHERE status = 'pending' AND start_time <= ?").all(nowIso);
+        const pending = await db.prepare("SELECT * FROM dvr_schedule WHERE status = 'pending' AND start_time <= ?").all(nowIso);
         for (const row of pending) {
             let meta = { channelName: 'Scheduled', programName: 'Program', headers: [] };
             try {
@@ -4188,11 +4736,11 @@ async function checkScheduledRecordings() {
             
             console.log(`[DVR SCHEDULER] Starting scheduled recording: ${meta.programName} on ${meta.channelName}`);
             
-            db.prepare("UPDATE dvr_schedule SET status = 'recording' WHERE id = ?").run(row.id);
+            await db.prepare("UPDATE dvr_schedule SET status = 'recording' WHERE id = ?").run(row.id);
             
             let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
             try {
-                const setting = db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+                const setting = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
                 if (setting && setting.value) folder = setting.value;
             } catch (e) {}
             
@@ -4368,6 +4916,7 @@ async function checkScheduledRecordings() {
                 } catch (err) {
                     console.error('[DVR SCHEDULER] Failed to start downloader:', err);
                     db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id);
+                    db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id).catch(() => {});
                 }
             };
             
@@ -4387,13 +4936,13 @@ async function checkScheduledRecordings() {
                 }
             };
             
-            const handleDone = () => {
+            const handleDone = async () => {
                 activeRecordings.delete(recordingId);
                 activeScheduleRecordings.delete(row.id);
                 buildTrayMenu();
                 showTrayNotification('Recording Completed (Scheduled)', `Saved "${meta.programName}" from ${meta.channelName}`);
                 try {
-                    db.prepare("UPDATE dvr_schedule SET status = 'completed' WHERE id = ?").run(row.id);
+                    await db.prepare("UPDATE dvr_schedule SET status = 'completed' WHERE id = ?").run(row.id);
                 } catch (e) {}
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('recording-status-change', {
@@ -4406,13 +4955,13 @@ async function checkScheduledRecordings() {
                 }
             };
             
-            const handleError = (err) => {
+            const handleError = async (err) => {
                 activeRecordings.delete(recordingId);
                 activeScheduleRecordings.delete(row.id);
                 buildTrayMenu();
                 showTrayNotification('Recording Failed (Scheduled)', `Error on "${meta.programName}" from ${meta.channelName}: ${err.message}`);
                 try {
-                    db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id);
+                    await db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id);
                 } catch (e) {}
                 console.error('[DVR SCHEDULER ERROR] Recording failed:', err.message);
                 if (mainWindow && !mainWindow.isDestroyed()) {
@@ -4431,7 +4980,7 @@ async function checkScheduledRecordings() {
         }
         
         // 2. Stop ongoing scheduled recordings whose end time has arrived
-        const active = db.prepare("SELECT * FROM dvr_schedule WHERE status = 'recording' AND end_time <= ?").all(nowIso);
+        const active = await db.prepare("SELECT * FROM dvr_schedule WHERE status = 'recording' AND end_time <= ?").all(nowIso);
         for (const row of active) {
             console.log(`[DVR SCHEDULER] Ending scheduled recording id ${row.id}`);
             const recordingId = activeScheduleRecordings.get(row.id);
@@ -4443,7 +4992,7 @@ async function checkScheduledRecordings() {
                 activeRecordings.delete(recordingId);
             }
             activeScheduleRecordings.delete(row.id);
-            db.prepare("UPDATE dvr_schedule SET status = 'completed' WHERE id = ?").run(row.id);
+            await db.prepare("UPDATE dvr_schedule SET status = 'completed' WHERE id = ?").run(row.id);
             buildTrayMenu();
         }
         

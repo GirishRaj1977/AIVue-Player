@@ -1,48 +1,39 @@
 # Dependencies
 node_modules/
 
-# Electron builds
-dist/
-build/
-out/
-release/
+# OS Generated
+.DS_Store
+Thumbs.db
 
 # Logs
+logs/
 *.log
 
-# M3U Playlists (if they are examples or local-only)
-*.m3u
+# Databases
+iptv.db
+iptv.db-wal
+iptv.db-shm
 
-# SQLite DB
-*.db
-*.sqlite
-*.db-shm
-*.db-wal
+# Local User App Data & Cache
+cache/
+AIVueRecordings/
+saved_channels.json
+tmdb_config.json
+remote_settings.json
 
-# Cache
-.cache/
-
-# Python cache
+# Python Caches
 __pycache__/
 *.pyc
+*.pyo
 
-# OS files
-Thumbs.db
-.DS_Store
+# Electron build output
+dist/
+dist/*
 
-# VS Code
-.vscode/
+# PyInstaller build artifacts
+build/
+*.spec
+backend/parser.exe
 
-# Electron temp
-tmp/
-
-# mpv temp
-*.pipe
-
-# Environment
-.env
-
-episodes_fetching_snippet.txt
-stalker_temp.py
-dvr_code_summary.txt
-rlogs.txt
+# AI tools
+.lean_ai/

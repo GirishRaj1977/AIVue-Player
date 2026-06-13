@@ -243,6 +243,31 @@ aeroStyles.textContent = `
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
         padding: 8px 0 !important;
         padding: 2px 0 !important;
+        /* Promote sidebar to its own compositing layer to avoid repaint on scroll */
+        will-change: transform;
+        contain: layout style paint;
+    }
+
+    /* ── Performance: suppress expensive blur & transitions during fullscreen
+       toggle to prevent GPU compositing thrash on the way in and out ─────── */
+    body.fullscreen-transitioning * {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        transition: none !important;
+        animation: none !important;
+    }
+
+    /* Promote the main view panels to their own compositing layers so
+       tab-switching display:flex/none does not repaint the entire document */
+    #main-view, #playlist-view, #epg-view, #settings-view,
+    #movies-view, #vod-view, #recording-view {
+        contain: layout style paint;
+        will-change: transform;
+    }
+
+    /* Channel items: GPU-accelerated hover translate (avoids layout reflow) */
+    .channel-item {
+        transform: translateZ(0);
     }
 
     /* Channel List selection styles (Premium Glass Cards) */
@@ -1573,6 +1598,7 @@ let editingPlaylistIndex = -1;
 let savedEpgs = [];
 let channelMappings = {};
 
+
 let savedReminders = JSON.parse(localStorage.getItem('iptv_reminders') || '[]');
 let clientActiveRecordings = [];
 let clientScheduledRecordings = [];
@@ -1678,19 +1704,19 @@ function showToast(message) {
         toast.id = 'toast-notification';
         document.body.appendChild(toast);
     }
-    
+
     if (toast.hideTimeout) clearTimeout(toast.hideTimeout);
-    
+
     // Style passive toast in the modern, premium obsidian-purple-glass theme
     toast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(18, 18, 24, 0.85); color: #ffffff; border: 1px solid rgba(187, 134, 252, 0.45); padding: 14px 28px; border-radius: 16px; z-index: 10000; font-weight: 600; font-family: "Inter", sans-serif; box-shadow: 0 10px 30px rgba(187, 134, 252, 0.15), 0 5px 15px rgba(0,0,0,0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); opacity: 0; pointer-events: none; white-space: pre-wrap; text-align: center; font-size: 0.92em; letter-spacing: -0.01em;';
-    
+
     toast.textContent = message;
-    
+
     requestAnimationFrame(() => {
         toast.style.opacity = '1';
         toast.style.transform = 'translateX(-50%) translateY(0)';
     });
-    
+
     toast.hideTimeout = setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(-50%) translateY(20px)';
@@ -1712,10 +1738,10 @@ function showConfirmToast(message, onConfirm) {
         document.body.appendChild(toast);
     }
     if (toast.hideTimeout) clearTimeout(toast.hideTimeout);
-    
+
     // Style for modern premium interactive look matching the purple-obsidian-glass theme (Z-INDEX 2147483647 to sit on top)
     toast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(18, 18, 24, 0.85); color: #ffffff; border: 1px solid rgba(187, 134, 252, 0.45); padding: 18px 26px; border-radius: 16px; z-index: 2147483647; font-family: "Inter", sans-serif; box-shadow: 0 10px 30px rgba(187, 134, 252, 0.15), 0 5px 15px rgba(0,0,0,0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); opacity: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; pointer-events: auto; min-width: 320px; text-align: center;';
-    
+
     toast.innerHTML = `
         <div style="font-weight: 600; font-size: 0.95em; color: #e4e4e7; line-height: 1.45; letter-spacing: -0.01em;">${message}</div>
         <div style="display: flex; gap: 12px; width: 100%; justify-content: center; margin-top: 4px;">
@@ -1723,12 +1749,12 @@ function showConfirmToast(message, onConfirm) {
             <button id="toast-cancel-btn" style="background: #2a2a2a; color: #fff; border: 1px solid #444; padding: 8px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background 0.2s, transform 0.1s; font-family: 'Inter', sans-serif; font-size: 0.85em; flex: 1;">Cancel</button>
         </div>
     `;
-    
+
     requestAnimationFrame(() => {
         toast.style.opacity = '1';
         toast.style.transform = 'translateX(-50%) translateY(0)';
     });
-    
+
     const hideToast = () => {
         if (window.isAppFullscreen) {
             if (window.iptvAPI && typeof window.iptvAPI.setConfirmToastActive === 'function') {
@@ -1744,29 +1770,29 @@ function showConfirmToast(message, onConfirm) {
             toast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(18, 18, 24, 0.85); color: #ffffff; border: 1px solid rgba(187, 134, 252, 0.45); padding: 14px 28px; border-radius: 16px; z-index: 10000; font-weight: 600; font-family: "Inter", sans-serif; box-shadow: 0 10px 30px rgba(187, 134, 252, 0.15), 0 5px 15px rgba(0,0,0,0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); opacity: 0; pointer-events: none; white-space: pre-wrap; text-align: center; font-size: 0.92em; letter-spacing: -0.01em;';
         }, 300);
     };
-    
+
     const confirmBtn = document.getElementById('toast-confirm-btn');
     const cancelBtn = document.getElementById('toast-cancel-btn');
-    
+
     confirmBtn.addEventListener('mouseover', () => confirmBtn.style.background = '#e57386');
     confirmBtn.addEventListener('mouseout', () => confirmBtn.style.background = '#cf6679');
     confirmBtn.addEventListener('mousedown', () => confirmBtn.style.transform = 'scale(0.95)');
     confirmBtn.addEventListener('mouseup', () => confirmBtn.style.transform = 'scale(1)');
-    
+
     cancelBtn.addEventListener('mouseover', () => cancelBtn.style.background = '#383838');
     cancelBtn.addEventListener('mouseout', () => cancelBtn.style.background = '#2a2a2a');
     cancelBtn.addEventListener('mousedown', () => cancelBtn.style.transform = 'scale(0.95)');
     cancelBtn.addEventListener('mouseup', () => cancelBtn.style.transform = 'scale(1)');
-    
+
     confirmBtn.addEventListener('click', () => {
         hideToast();
         onConfirm();
     });
-    
+
     cancelBtn.addEventListener('click', () => {
         hideToast();
     });
-    
+
     toast.hideTimeout = setTimeout(hideToast, 8000);
 }
 
@@ -1794,7 +1820,7 @@ let epgScrollTicking = false;
 
 function formatDateToEpgString(date) {
     const pad = n => n.toString().padStart(2, '0');
-    return `${date.getUTCFullYear()}${pad(date.getUTCMonth()+1)}${pad(date.getUTCDate())}${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}`;
+    return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}`;
 }
 
 let mappingDebounceTimer;
@@ -1816,57 +1842,803 @@ function sortAlphaNum(a, b) {
     return (a || '').toString().localeCompare((b || '').toString(), undefined, { numeric: true, sensitivity: 'base' });
 }
 
-async function autoMapChannels(showSummaryAlert = false, skipSave = false) {
-    console.log('[MAPPING] Starting auto-map process...');
-    let mappedCount = 0;
-    const epgLookup = {};
-    if (epgChannelsData) {
-        epgChannelsData.forEach(epg => {
-            if (epg.id) epgLookup[epg.id.toLowerCase()] = epg.id;
-            if (epg.name) epgLookup[epg.name.toLowerCase()] = epg.id;
-        });
+function normalizeChannelName(name) {
+    if (!name) return '';
+    let str = name.toLowerCase();
+
+    // Normalize common substitutions
+    str = str.replace(/&amp;/g, ' and ').replace(/&/g, ' and ');
+
+    // Remove brackets and their content, e.g. [HD], (US), |UK|
+    str = str.replace(/[\[\(\{\|<].*?[\]\)\}\|>]/g, ' ');
+
+    // Remove common quality/country badge terms
+    const termsToRemove = [
+        'hd', 'uhd', 'fhd', 'sd', '4k', '1080p', '720p', '480p', 'hevc', 'h264', 'h265',
+        'h.264', 'h.265', '50fps', '60fps',
+        'us', 'uk', 'in', 'ca', 'fr', 'es', 'de', 'it', 'mx', 'ar', 'co', 'pe', 'br',
+        'la', 'latam', 'india', 'hindi', 'english',
+        'backup', 'back', 'main', 'tv', 'ch', 'channel', 'premium', 'vip',
+        'east', 'west', 'direct', '1080', '720', 'live', 'air', 'new'
+    ];
+
+    // Replace non-alphanumeric with space (preserve digits)
+    str = str.replace(/[^a-z0-9]/g, ' ');
+
+    // Remove terms as whole words
+    termsToRemove.forEach(term => {
+        const regex = new RegExp(`\\b${term}\\b`, 'g');
+        str = str.replace(regex, ' ');
+    });
+
+    // Normalize attached digit suffixes: "ten1" → "ten 1", "sports2" → "sports 2"
+    str = str.replace(/([a-z])(\d)/g, '$1 $2').replace(/(\d)([a-z])/g, '$1 $2');
+
+    // Convert word numbers to digits
+    const wordToDigit = {
+        'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4',
+        'five': '5', 'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10'
+    };
+    for (const [word, digit] of Object.entries(wordToDigit)) {
+        str = str.replace(new RegExp(`\\b${word}\\b`, 'g'), digit);
     }
 
-    const uniqueTitles = new Set();
-    const mappingsToSave = [];
+    // Collapse whitespace
+    str = str.replace(/\s+/g, ' ').trim();
+    return str;
+}
 
-    for (const ch of allChannels) {
-        const title = ch.title || 'Unknown Channel';
-        if (uniqueTitles.has(title)) continue;
-        uniqueTitles.add(title);
-        
-        if (channelMappings[title]) continue; // Skip already mapped channels
+// ─── Multi-Stage EPG Matching Pipeline ─────────────────────────────────────
 
-        let matchedEpgId = null;
-        const tvgIdLow = ch.tvg_id ? String(ch.tvg_id).toLowerCase() : null;
-        const tvgNameLow = ch.tvg_name ? String(ch.tvg_name).toLowerCase() : null;
-        const titleLow = ch.title ? String(ch.title).toLowerCase() : null;
+/** Levenshtein edit-distance ratio → 0–100 */
+function levenshteinRatio(a, b) {
+    if (!a || !b) return 0;
+    if (a === b) return 100;
+    const la = a.length, lb = b.length;
+    const maxLen = Math.max(la, lb);
+    if (maxLen === 0) return 100;
+    let prev = Array.from({ length: lb + 1 }, (_, i) => i);
+    for (let i = 1; i <= la; i++) {
+        const curr = [i];
+        for (let j = 1; j <= lb; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+        }
+        prev = curr;
+    }
+    return Math.round((1 - prev[lb] / maxLen) * 100);
+}
 
-        if (tvgIdLow && epgLookup[tvgIdLow]) matchedEpgId = epgLookup[tvgIdLow];
-        else if (tvgNameLow && epgLookup[tvgNameLow]) matchedEpgId = epgLookup[tvgNameLow];
-        else if (titleLow && epgLookup[titleLow]) matchedEpgId = epgLookup[titleLow];
+/** Token overlap (Jaccard-like): common_tokens / max_tokens → 0–100 */
+function tokenOverlapScore(a, b) {
+    if (!a || !b) return 0;
+    const ta = new Set(a.split(' ').filter(Boolean));
+    const tb = new Set(b.split(' ').filter(Boolean));
+    if (!ta.size || !tb.size) return 0;
+    let common = 0;
+    ta.forEach(t => { if (tb.has(t)) common++; });
+    return Math.round((common / Math.max(ta.size, tb.size)) * 100);
+}
 
-        if (matchedEpgId) {
-            channelMappings[title] = matchedEpgId;
-            mappingsToSave.push({ title, epgId: matchedEpgId });
-            mappedCount++;
+/** Token sort ratio: sort tokens alphabetically then Levenshtein → 0–100 */
+function tokenSortRatio(a, b) {
+    if (!a || !b) return 0;
+    const sa = a.split(' ').filter(Boolean).sort().join(' ');
+    const sb = b.split(' ').filter(Boolean).sort().join(' ');
+    return levenshteinRatio(sa, sb);
+}
+
+/** Token set ratio (rapidfuzz-style): intersection vs each remainder → 0–100 */
+function tokenSetRatio(a, b) {
+    if (!a || !b) return 0;
+    const ta   = new Set(a.split(' ').filter(Boolean));
+    const tb   = new Set(b.split(' ').filter(Boolean));
+    const inter = [...ta].filter(t => tb.has(t)).sort().join(' ');
+    const remA  = [...ta].filter(t => !tb.has(t)).sort().join(' ');
+    const remB  = [...tb].filter(t => !ta.has(t)).sort().join(' ');
+    const s2 = [inter, remA].filter(Boolean).join(' ');
+    const s3 = [inter, remB].filter(Boolean).join(' ');
+    return Math.max(
+        levenshteinRatio(inter, s2),
+        levenshteinRatio(inter, s3),
+        levenshteinRatio(s2, s3)
+    );
+}
+
+/** Channel alias dictionary — common naming inconsistencies across IPTV providers */
+const CHANNEL_ALIASES = {
+    // Sony
+    'sonymax':           ['sony max', 'max hd', 'max india'],
+    'sonyliv':           ['sony liv'],
+    'sonypix':           ['sony pix', 'pix hd'],
+    'sonyentertainment': ['set india', 'sony entertainment television', 'sony et', 'sony entertainment', 'sony tv'],
+    'sonysports1':       ['sony ten 1', 'ten sports 1', 'ten 1', 'sony ten1'],
+    'sonysports2':       ['sony ten 2', 'ten sports 2', 'ten 2', 'sony ten2'],
+    'sonysports3':       ['sony ten 3', 'ten sports 3', 'ten 3', 'sony ten3'],
+    'sonysports5':       ['sony ten 5', 'ten sports 5', 'ten 5', 'sony ten5'],
+    'sonysix':           ['sony six', 'six hd'],
+    'sonymix':           ['sony mix', 'mix hd'],
+    // Star
+    'starplus':          ['star plus', 'starplus', 'star plus india'],
+    'stargold':          ['star gold', 'gold india'],
+    'starmovies':        ['star movies', 'fox star movies'],
+    'startv':            ['star vijay', 'vijay tv', 'vijay'],
+    'starutsav':         ['star utsav', 'utsav'],
+    'starjalsha':        ['star jalsha', 'jalsha'],
+    'starsports1':       ['star sports 1', 'starsports 1', 'star sports first', 'star sports hindi'],
+    'starsports2':       ['star sports 2', 'starsports 2'],
+    'starsports3':       ['star sports 3', 'starsports 3'],
+    'starsports4':       ['star sports 4', 'starsports 4'],
+    // Colors
+    'colors':            ['colors tv', 'colors hd', 'colors india', 'colors viacom'],
+    'colorsinfiniti':    ['colors infinity', 'infinity', 'colors infinity hd'],
+    'colorsrishtey':     ['colors rishtey', 'rishtey'],
+    'colorsbangla':      ['colors bangla'],
+    'colorskannada':     ['colors kannada'],
+    // Zee
+    'zeetv':             ['zee entertainment', 'zee india', 'zee tv'],
+    'zeecafe':           ['zee cafe'],
+    'zeeclassic':        ['zee classic'],
+    'zeebangla':         ['zee bangla'],
+    'zeemarathi':        ['zee marathi'],
+    'zeetelugu':         ['zee telugu'],
+    'zeekannada':        ['zee kannada'],
+    'zeecinema':         ['zee cinema', 'zee cinema hd'],
+    // Discovery
+    'discovery':         ['discovery channel', 'disc channel'],
+    'discoveryscience':  ['discovery science', 'disc science'],
+    'discoveryturbo':    ['discovery turbo', 'turbo'],
+    'animalplanet':      ['animal planet', 'animal planet hd'],
+    'tlc':               ['tlc india', 'tlc hd'],
+    // Sports
+    'espn':              ['espn us', 'espn america', 'espn sports'],
+    'espn2':             ['espn 2', 'espnews'],
+    'skysports1':        ['sky sports 1', 'sky sports main event', 'sky main event'],
+    'skysports2':        ['sky sports 2', 'sky sports football'],
+    'eurosport1':        ['eurosport 1', 'eurosport'],
+    'eurosport2':        ['eurosport 2'],
+    // UK
+    'bbcone':            ['bbc 1', 'bbc one', 'bbc1'],
+    'bbctwo':            ['bbc 2', 'bbc two', 'bbc2'],
+    'bbcthree':          ['bbc 3', 'bbc three', 'bbc3'],
+    'bbcfour':           ['bbc 4', 'bbc four', 'bbc4'],
+    'bbcnews':           ['bbc world news', 'bbc news channel', 'bbc news 24'],
+    'itv':               ['itv 1', 'itv1', 'itv hd'],
+    'itv2':              ['itv 2'],
+    'channel4':          ['ch4', 'c4', 'channel 4', 'ch 4'],
+    'channel5':          ['ch5', 'c5', 'channel 5', 'ch 5', 'five'],
+    'skyone':            ['sky 1', 'sky one'],
+    'skyatlantic':       ['sky atlantic'],
+    // News
+    'cnn':               ['cnn international', 'cnn hd', 'cnn world'],
+    'cnbcinternational': ['cnbc world', 'cnbc tv18', 'cnbc awaaz'],
+    'bloomberg':         ['bloomberg tv', 'bloomberg hd'],
+    'aljazeeraenglish':  ['al jazeera', 'aljazeera english', 'al jazeera english'],
+    'ndtv24x7':          ['ndtv 24x7', 'ndtv', 'ndtv india'],
+    'aajtak':            ['aaj tak', 'aajtak news'],
+    'republicbharat':    ['republic bharat', 'republic tv india'],
+    // Kids
+    'cartoonnetwork':    ['cartoon network', 'cn'],
+    'nickelodeon':       ['nick', 'nickelodeon hd', 'nick india'],
+    'nickjr':            ['nick jr', 'nick junior'],
+    'pogo':              ['pogo tv'],
+    'disneyjunior':      ['disney junior', 'disney jr'],
+    'disneyxd':          ['disney xd'],
+    // Movies
+    'hbo':               ['hbo asia', 'hbo hd'],
+    'foxmovies':         ['fox movies', 'fox movies premium', 'star fox movies'],
+    'romedy':            ['romedy now'],
+    // Music
+    'mtv':               ['mtv india', 'mtv hd'],
+    'vh1':               ['vh1 india', 'vh1 hd'],
+};
+
+/** Build a flat normalized-alias → canonical key lookup (cached after first call) */
+let _aliasLookupCache = null;
+function buildAliasLookup() {
+    if (_aliasLookupCache) return _aliasLookupCache;
+    _aliasLookupCache = new Map();
+    for (const [canonical, aliases] of Object.entries(CHANNEL_ALIASES)) {
+        const normKey = normalizeChannelName(canonical).replace(/\s+/g, '');
+        _aliasLookupCache.set(normKey, canonical);
+        _aliasLookupCache.set(normalizeChannelName(canonical), canonical);
+        for (const alias of aliases) {
+            _aliasLookupCache.set(normalizeChannelName(alias).replace(/\s+/g, ''), canonical);
+            _aliasLookupCache.set(normalizeChannelName(alias), canonical);
+        }
+    }
+    return _aliasLookupCache;
+}
+
+/**
+ * Score a playlist channel title against an EPG channel (name + id).
+ * Returns { score: 0–100, stage: string, detail: string }
+ *
+ * Weighted formula: 0.40×tokenSet + 0.25×tokenSort + 0.20×levenshtein + 0.15×tokenOverlap
+ */
+function scoreChannelPair(chTitle, epgName, epgId) {
+    const normCh  = normalizeChannelName(chTitle);
+    const normEpg = normalizeChannelName(epgName || epgId || '');
+    const normId  = normalizeChannelName(epgId || '');
+
+    if (!normCh || !normEpg) return { score: 0, stage: 'none', detail: '' };
+
+    // Strict number mismatch guard: "Star Sports 1" must NOT map to "Star Sports 2"
+    const numsA   = (normCh.match(/\d+/g)  || []).sort().join(',');
+    const numsB   = (normEpg.match(/\d+/g) || []).sort().join(',');
+    const numsBId = (normId.match(/\d+/g)  || []).sort().join(',');
+    if (numsA) {
+        if ((numsB   && numsA !== numsB) ||
+            (numsBId && numsA !== numsBId)) {
+            return { score: 0, stage: 'number_mismatch', detail: '' };
         }
     }
 
-    if (mappingsToSave.length > 0) {
-        console.log(`[MAPPING] Saving ${mappingsToSave.length} mappings in bulk...`);
-        await window.iptvAPI.saveMappingsBulk(mappingsToSave);
+    // Stage 1 – Exact normalized match (confidence 100)
+    if (normCh === normEpg || normCh === normId) {
+        return { score: 100, stage: 'exact', detail: 'Exact normalized match' };
     }
 
-    if (mappedCount > 0) {
-        console.log(`[MAPPING] Auto-mapped ${mappedCount} new channels.`);
-        updateState(skipSave);
-        renderMappingColumns();
-        if (showSummaryAlert) showToast(`Successfully auto-mapped ${mappedCount} channels!`);
-    } else {
-        console.log('[MAPPING] No new channels could be auto-mapped.');
-        if (showSummaryAlert) showToast("No new channels could be auto-mapped.");
+    // Stage 2 – Alias dictionary (confidence 97)
+    const aliasMap = buildAliasLookup();
+    const chSlug   = normCh.replace(/\s+/g, '');
+    const epgSlug  = normEpg.replace(/\s+/g, '');
+    const chCan    = aliasMap.get(chSlug)  || aliasMap.get(normCh);
+    const epgCan   = aliasMap.get(epgSlug) || aliasMap.get(normEpg);
+    if (chCan && epgCan && chCan === epgCan) {
+        return { score: 97, stage: 'alias', detail: 'Alias dictionary match' };
     }
+
+    // Stages 3–6 – Weighted fuzzy scoring
+    const calcWeighted = (norm) => {
+        const ts    = tokenSetRatio(normCh, norm);
+        const tsort = tokenSortRatio(normCh, norm);
+        const lev   = levenshteinRatio(normCh, norm);
+        const to    = tokenOverlapScore(normCh, norm);
+        return { score: 0.40 * ts + 0.25 * tsort + 0.20 * lev + 0.15 * to, ts, tsort, lev, to };
+    };
+
+    const byName = calcWeighted(normEpg);
+    const byId   = (normId && normId !== normEpg) ? calcWeighted(normId) : { score: 0 };
+    const best   = byName.score >= (byId.score || 0) ? byName : byId;
+    const finalScore = Math.round(best.score);
+
+    // Dominant algorithm label for the UI
+    const dominant = Object.entries({
+        'Token Set Ratio':  best.ts   || 0,
+        'Token Sort Ratio': best.tsort || 0,
+        'Levenshtein':      best.lev   || 0,
+        'Token Overlap':    best.to    || 0,
+    }).sort((a, b) => b[1] - a[1])[0];
+
+    return {
+        score:  finalScore,
+        stage:  'fuzzy',
+        detail: `${dominant[0]}: ${Math.round(dominant[1])}`,
+    };
+}
+
+/** Legacy alias kept for any remaining call sites */
+function getChannelSimilarity(str1, str2) {
+    return scoreChannelPair(str1, str2, '').score / 100;
+}
+
+function showFuzzyMappingModal(suggestions, onConfirm, onCancel) {
+    // Remove existing modal if any
+    const existing = document.getElementById('fuzzy-mapping-modal');
+    if (existing) existing.remove();
+
+    // Create modal div
+    const modalDiv = document.createElement('div');
+    modalDiv.id = 'fuzzy-mapping-modal';
+
+    modalDiv.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(10, 10, 15, 0.65);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        font-family: 'Inter', sans-serif;
+        box-sizing: border-box;
+    `;
+
+    // Add dynamic keyframes to head if not present
+    if (!document.getElementById('fuzzy-modal-keyframes')) {
+        const style = document.createElement('style');
+        style.id = 'fuzzy-modal-keyframes';
+        style.textContent = `
+            @keyframes fuzzyFadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes fuzzyScaleUp {
+                from { transform: scale(0.96); opacity: 0; }
+                to { transform: scale(1); opacity: 1; }
+            }
+            .fuzzy-row {
+                background: rgba(255, 255, 255, 0.02);
+                border: 1px solid rgba(255, 255, 255, 0.04);
+                border-radius: 8px;
+                padding: 12px 16px;
+                display: flex;
+                align-items: center;
+                gap: 15px;
+                transition: all 0.2s ease;
+            }
+            .fuzzy-row:hover {
+                background: rgba(255, 255, 255, 0.04);
+                border-color: rgba(255, 255, 255, 0.08);
+            }
+            .fuzzy-checkbox {
+                width: 18px;
+                height: 18px;
+                border-radius: 4px;
+                accent-color: var(--primary-accent);
+                cursor: pointer;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    modalDiv.style.animation = 'fuzzyFadeIn 0.25s ease';
+
+    // Build the inner HTML
+    modalDiv.innerHTML = `
+        <div class="settings-card" style="
+            width: 700px;
+            max-width: 90%;
+            max-height: 85vh;
+            background: rgba(20, 20, 25, 0.8) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 16px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: fuzzyScaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-sizing: border-box;
+        ">
+            <!-- Header -->
+            <div style="
+                padding: 20px 25px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                background: rgba(255, 255, 255, 0.02);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            ">
+                <div>
+                    <h3 style="margin: 0; color: #fff; font-family: 'Outfit', sans-serif; font-size: 1.3em;">Fuzzy Mapping Suggestions</h3>
+                    <p style="margin: 5px 0 0 0; color: #888; font-size: 0.85em;">We detected these potential channel matches. Toggle selections below to confirm.</p>
+                </div>
+                <button id="fuzzy-modal-close-x" style="
+                    background: transparent;
+                    border: none;
+                    color: #888;
+                    font-size: 1.5em;
+                    cursor: pointer;
+                    transition: color 0.2s;
+                    line-height: 1;
+                " onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#888'">&times;</button>
+            </div>
+            
+            <!-- Selection Toolbar -->
+            <div style="
+                padding: 12px 25px;
+                background: rgba(0, 0, 0, 0.2);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 0.88rem;
+            ">
+                <span style="color: #aaa;" id="fuzzy-selected-count">0 of 0 selected</span>
+                <div style="display: flex; gap: 15px;">
+                    <button id="fuzzy-select-all" style="background: transparent; border: none; color: var(--primary-accent); cursor: pointer; font-weight: bold; outline: none; font-size: 0.95em;">Select All</button>
+                    <button id="fuzzy-select-none" style="background: transparent; border: none; color: #888; cursor: pointer; font-weight: bold; outline: none; font-size: 0.95em;">Deselect All</button>
+                </div>
+            </div>
+
+            <!-- Body / Suggestions List -->
+            <div id="fuzzy-mapping-list" style="
+                flex-grow: 1;
+                overflow-y: auto;
+                padding: 20px 25px;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            ">
+                ${suggestions.map((item, idx) => {
+        const pct  = Math.round(item.score);
+        const tier = item.tier || 'review';
+        let badgeStyle, tierPill;
+        if (tier === 'high') {
+            badgeStyle = `background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);`;
+            tierPill   = `<span style="font-size:0.64rem;background:rgba(16,185,129,0.15);color:#10b981;border-radius:3px;padding:1px 5px;margin-left:5px;font-weight:700;letter-spacing:.4px;">HIGH</span>`;
+        } else {
+            badgeStyle = `background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3);`;
+            tierPill   = `<span style="font-size:0.64rem;background:rgba(245,158,11,0.15);color:#f59e0b;border-radius:3px;padding:1px 5px;margin-left:5px;font-weight:700;letter-spacing:.4px;">REVIEW</span>`;
+        }
+        const isChecked = tier === 'high' ? 'checked' : '';
+        const detail    = item.detail || '';
+
+        return `
+                        <div class="fuzzy-row" style="box-sizing: border-box;">
+                            <input type="checkbox" class="fuzzy-checkbox" data-idx="${idx}" ${isChecked} style="flex-shrink: 0;">
+                            
+                            <!-- Content Box -->
+                            <div style="display: flex; flex-grow: 1; align-items: center; justify-content: space-between; gap: 15px; min-width: 0;">
+                                <!-- Playlist Channel -->
+                                <div style="flex: 1; min-width: 0; text-align: left;">
+                                    <span style="color: #ffffff; font-weight: 600; display: block; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.playlistTitle}">
+                                        ${item.playlistTitle}
+                                    </span>
+                                </div>
+
+                                <!-- Arrow & Score -->
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 3px; flex-shrink: 0; min-width: 120px;">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.8;">
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                        <polyline points="12 5 19 12 12 19"></polyline>
+                                    </svg>
+                                    <span style="font-size: 0.72rem; font-weight: bold; border-radius: 4px; padding: 2px 8px; letter-spacing: 0.3px; display:flex; align-items:center; ${badgeStyle}">
+                                        ${pct}%${tierPill}
+                                    </span>
+                                    ${detail ? `<span style="font-size:0.63rem;color:#64748b;text-align:center;margin-top:1px;">${detail}</span>` : ''}
+                                </div>
+
+                                <!-- Suggested EPG Channel -->
+                                <div style="flex: 1; min-width: 0; text-align: left;">
+                                    <span style="color: #e2e8f0; font-weight: 600; display: block; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.epgName}">
+                                        ${item.epgName}
+                                    </span>
+                                    <span style="color: #64748b; font-size: 0.78rem; display: block; margin-top: 2px;">
+                                        ${item.epgSource}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+    }).join('')}
+            </div>
+
+            <!-- Footer -->
+            <div style="
+                padding: 20px 25px;
+                border-top: 1px solid rgba(255, 255, 255, 0.08);
+                background: rgba(0, 0, 0, 0.2);
+                display: flex;
+                justify-content: flex-end;
+                gap: 12px;
+            ">
+                <button id="fuzzy-modal-cancel" class="playlist-btn" style="
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    color: #fff;
+                    padding: 10px 20px;
+                    border-radius: 8px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    font-size: 0.92rem;
+                ">Cancel</button>
+                <button id="fuzzy-modal-apply" class="playlist-btn" style="
+                    background: var(--primary-accent);
+                    color: #121212;
+                    border: none;
+                    padding: 10px 24px;
+                    border-radius: 8px;
+                    font-weight: 700;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    box-shadow: 0 4px 15px rgba(var(--primary-accent-rgb), 0.3);
+                    font-size: 0.92rem;
+                ">Apply Selected</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modalDiv);
+
+    // Setup interactive functionality
+    const checkboxes = modalDiv.querySelectorAll('.fuzzy-checkbox');
+    const countEl = modalDiv.querySelector('#fuzzy-selected-count');
+
+    function updateCount() {
+        const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+        countEl.textContent = `${checkedCount} of ${checkboxes.length} selected`;
+    }
+    updateCount();
+
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', updateCount);
+    });
+
+    modalDiv.querySelector('#fuzzy-select-all').addEventListener('click', () => {
+        checkboxes.forEach(cb => cb.checked = true);
+        updateCount();
+    });
+
+    modalDiv.querySelector('#fuzzy-select-none').addEventListener('click', () => {
+        checkboxes.forEach(cb => cb.checked = false);
+        updateCount();
+    });
+
+    const closeModal = () => {
+        modalDiv.style.animation = 'fuzzyFadeIn 0.2s ease reverse';
+        setTimeout(() => modalDiv.remove(), 180);
+    };
+
+    modalDiv.querySelector('#fuzzy-modal-close-x').addEventListener('click', () => {
+        closeModal();
+        if (onCancel) onCancel();
+    });
+
+    modalDiv.querySelector('#fuzzy-modal-cancel').addEventListener('click', () => {
+        closeModal();
+        if (onCancel) onCancel();
+    });
+
+    modalDiv.querySelector('#fuzzy-modal-apply').addEventListener('click', () => {
+        const selectedIndices = Array.from(checkboxes)
+            .filter(cb => cb.checked)
+            .map(cb => parseInt(cb.getAttribute('data-idx'), 10));
+
+        const confirmedMappings = selectedIndices.map(idx => suggestions[idx]);
+        closeModal();
+        if (onConfirm) onConfirm(confirmedMappings);
+    });
+}
+
+async function autoMapChannels(showSummaryAlert = false, skipSave = false) {
+    console.log('[MAPPING] Starting 6-stage EPG mapping pipeline...');
+    const playlistFilter = mappingSelectedPlaylist || 'all';
+    const epgFilterEl = document.getElementById('mapping-epg-filter');
+    const epgFilter = epgFilterEl ? epgFilterEl.value : 'all';
+
+    const filteredEpgs = !epgChannelsData ? [] : (
+        epgFilter === 'all'
+            ? epgChannelsData
+            : epgChannelsData.filter(epg => epg.source === epgFilter)
+    );
+
+    // Flat EPG key lookup for Stage 1 exact match
+    const epgLookup = {};
+    filteredEpgs.forEach(epg => {
+        if (epg.id)   epgLookup[epg.id.toLowerCase()]   = epg.id;
+        if (epg.name) epgLookup[epg.name.toLowerCase()] = epg.id;
+    });
+
+    const channelsToMap = playlistFilter === 'all'
+        ? allChannels
+        : allChannels.filter(ch => String(ch.playlistId) === String(playlistFilter));
+
+    // Deduplicate by title; skip already-mapped channels
+    const uniqueTitles = new Set();
+    const toProcess = [];
+    for (const ch of channelsToMap) {
+        const title = ch.title || 'Unknown Channel';
+        if (uniqueTitles.has(title) || channelMappings[title]) continue;
+        uniqueTitles.add(title);
+        toProcess.push(ch);
+    }
+
+    // Three result buckets
+    const silentMaps  = []; // score ≥ 95 — auto-save silently (no UI)
+    const highConf    = []; // score 90–94 — modal, pre-checked, green badge
+    const suggestList = []; // score 80–89 — modal, unchecked, amber badge
+
+    // ── Stage 1: Exact key match (tvg_id / tvg_name / normalized title) ─────
+    const unmatched = [];
+    for (const ch of toProcess) {
+        const title    = ch.title || 'Unknown Channel';
+        const tvgIdL   = ch.tvg_id   ? String(ch.tvg_id).toLowerCase()   : null;
+        const tvgNameL = ch.tvg_name ? String(ch.tvg_name).toLowerCase() : null;
+        const titleL   = title.toLowerCase();
+
+        const exactId = (tvgIdL   && epgLookup[tvgIdL])   ? epgLookup[tvgIdL]
+                      : (tvgNameL && epgLookup[tvgNameL]) ? epgLookup[tvgNameL]
+                      : epgLookup[titleL]                 ? epgLookup[titleL]
+                      : null;
+
+        if (exactId) {
+            silentMaps.push({ title, epgId: exactId });
+        } else {
+            unmatched.push(ch);
+        }
+    }
+
+    // ── Stages 2–6: Scored pipeline on remaining unmatched channels ──────────
+    if (unmatched.length > 0 && filteredEpgs.length > 0) {
+        console.log(`[MAPPING] Weighted pipeline: ${unmatched.length} unmatched vs ${filteredEpgs.length} EPG entries...`);
+
+        for (const ch of unmatched) {
+            const title = ch.title || 'Unknown Channel';
+            let bestScore = 0, bestEpg = null, bestResult = null;
+
+            for (const epg of filteredEpgs) {
+                const result = scoreChannelPair(title, epg.name, epg.id);
+                if (result.score > bestScore) {
+                    bestScore  = result.score;
+                    bestEpg    = epg;
+                    bestResult = result;
+                }
+            }
+
+            if (!bestEpg || bestScore < 80) continue;
+
+            const suggestion = {
+                playlistTitle: title,
+                epgId:         bestEpg.id,
+                epgName:       bestEpg.name || bestEpg.id,
+                epgSource:     bestEpg.source,
+                score:         bestScore,
+                detail:        bestResult.detail,
+                stage:         bestResult.stage,
+            };
+
+            if (bestScore >= 95) {
+                // Stage 2 alias hits (97) and very high fuzzy → silent
+                silentMaps.push({ title, epgId: bestEpg.id });
+            } else if (bestScore >= 90) {
+                suggestion.tier = 'high';
+                highConf.push(suggestion);
+            } else {
+                suggestion.tier = 'review';
+                suggestList.push(suggestion);
+            }
+        }
+    }
+
+    // ── Apply silent mappings immediately (no UI) ────────────────────────────
+    if (silentMaps.length > 0) {
+        console.log(`[MAPPING] Silently saving ${silentMaps.length} high-confidence mappings (≥95)...`);
+        for (const { title, epgId } of silentMaps) {
+            channelMappings[title] = epgId;
+        }
+        await window.iptvAPI.saveMappingsBulk(silentMaps);
+    }
+
+    // Fast/silent mode — skip modal entirely
+    if (skipSave) {
+        if (silentMaps.length > 0) {
+            updateState(true);
+            renderMappingColumns();
+        }
+        return;
+    }
+
+    const modalSuggestions = [...highConf, ...suggestList];
+
+    if (modalSuggestions.length === 0) {
+        updateState(false);
+        renderMappingColumns();
+        if (showSummaryAlert) {
+            showToast(silentMaps.length > 0
+                ? `Auto-mapped ${silentMaps.length} channels silently (high confidence).`
+                : 'No new channels could be auto-mapped.'
+            );
+        }
+        return;
+    }
+
+    // ── Show modal for 90–94 (pre-checked) and 80–89 (unchecked) ────────────
+    const hCount = highConf.length, sCount = suggestList.length;
+    console.log(`[MAPPING] Modal: ${hCount} high confidence, ${sCount} to review.`);
+
+    showFuzzyMappingModal(
+        modalSuggestions,
+        async (confirmedMappings) => {
+            const toSave = [];
+            confirmedMappings.forEach(m => {
+                channelMappings[m.playlistTitle] = m.epgId;
+                toSave.push({ title: m.playlistTitle, epgId: m.epgId });
+            });
+            if (toSave.length > 0) {
+                await window.iptvAPI.saveMappingsBulk(toSave);
+            }
+            updateState(false);
+            renderMappingColumns();
+            const total = silentMaps.length + toSave.length;
+            showToast(`Mapped ${total} channel${total !== 1 ? 's' : ''} (${silentMaps.length} silent + ${toSave.length} confirmed).`);
+        },
+        () => {
+            // Cancel — silent mappings are already saved
+            updateState(false);
+            renderMappingColumns();
+            if (silentMaps.length > 0) {
+                showToast(`Auto-mapped ${silentMaps.length} channel${silentMaps.length !== 1 ? 's' : ''} silently.`);
+            } else {
+                showToast('No channels were mapped.');
+            }
+        }
+    );
+
+    // Patch modal header text after it's inserted into the DOM
+    requestAnimationFrame(() => {
+        const h3 = document.querySelector('#fuzzy-mapping-modal h3');
+        const p  = document.querySelector('#fuzzy-mapping-modal p');
+        if (h3) h3.textContent = 'EPG Mapping Suggestions';
+        if (p) {
+            const parts = [
+                silentMaps.length ? `${silentMaps.length} auto-mapped silently` : '',
+                hCount            ? `${hCount} high confidence (pre-checked)` : '',
+                sCount            ? `${sCount} to review` : '',
+            ].filter(Boolean);
+            p.textContent = parts.join(' · ');
+        }
+    });
+}
+
+async function unmapAllChannelsFiltered() {
+    const playlistFilter = mappingSelectedPlaylist || 'all';
+    const epgFilterEl = document.getElementById('mapping-epg-filter');
+    const epgFilter = epgFilterEl ? epgFilterEl.value : 'all';
+
+    console.log(`[MAPPING] Starting bulk unmap. Playlist: ${playlistFilter}, EPG: ${epgFilter}`);
+
+    // Build lookup of EPG channels belonging to the selected EPG source
+    const epgIdsInFilter = new Set();
+    if (epgChannelsData) {
+        epgChannelsData.forEach(epg => {
+            if (epgFilter === 'all' || epg.source === epgFilter) {
+                if (epg.id) epgIdsInFilter.add(String(epg.id).toLowerCase());
+            }
+        });
+    }
+
+    // Build lookup of channel titles belonging to the selected playlist
+    const titlesInPlaylistFilter = new Set();
+    allChannels.forEach(ch => {
+        if (playlistFilter === 'all' || String(ch.playlistId) === String(playlistFilter)) {
+            if (ch.title) titlesInPlaylistFilter.add(ch.title);
+        }
+    });
+
+    const mappingsToDelete = [];
+    const titlesToUnmap = [];
+
+    // Find mappings that match the filters
+    for (const [title, mappedEpgId] of Object.entries(channelMappings)) {
+        // Filter by Playlist: the title must exist in the selected playlist(s)
+        if (!titlesInPlaylistFilter.has(title)) continue;
+
+        // Filter by EPG: the mapped EPG ID must belong to the selected EPG source(s)
+        if (mappedEpgId) {
+            const mappedEpgIdLow = String(mappedEpgId).toLowerCase();
+            if (!epgIdsInFilter.has(mappedEpgIdLow)) continue;
+        }
+
+        titlesToUnmap.push(title);
+        mappingsToDelete.push({ title, epgId: null });
+    }
+
+    if (mappingsToDelete.length === 0) {
+        showToast("No mapped channels found matching the current playlist/EPG filters.");
+        return;
+    }
+
+    showConfirmToast(`Are you sure you want to remove ${mappingsToDelete.length} mappings matching the current filters?`, async () => {
+        // Remove locally
+        titlesToUnmap.forEach(title => {
+            delete channelMappings[title];
+        });
+
+        // Save to DB in bulk
+        await window.iptvAPI.saveMappingsBulk(mappingsToDelete);
+
+        // Update EPG mappings state and render columns
+        updateState(false);
+        renderMappingColumns();
+        showToast(`Successfully removed ${mappingsToDelete.length} mappings!`);
+    });
 }
 
 function updateNavLockState() {
@@ -1875,7 +2647,7 @@ function updateNavLockState() {
     const btnLiveTv = document.getElementById('btn-live-tv');
     const btnEpg = document.getElementById('btn-epg');
     const btnSettings = document.getElementById('btn-settings');
-    
+
     if (btnLiveTv) {
         btnLiveTv.disabled = !hasPlaylists;
         btnLiveTv.style.opacity = hasPlaylists ? '1' : '0.3';
@@ -1891,7 +2663,7 @@ function updateNavLockState() {
         btnSettings.style.opacity = hasPlaylists ? '1' : '0.3';
         btnSettings.style.cursor = hasPlaylists ? 'pointer' : 'not-allowed';
     }
-    
+
     ['btn-movies', 'btn-vod', 'btn-recording'].forEach(id => {
         const btn = document.getElementById(id);
         if (btn) {
@@ -1967,7 +2739,7 @@ function renderMappingColumns() {
         let bg = 'transparent';
         let color = '#e0e0e0';
         let border = '1px solid #333';
-        
+
         if (mappingSelectedChannel === title) {
             bg = '#1a3a1a'; // Selected: Green highlight
             border = '1px solid #43CB44';
@@ -1985,7 +2757,7 @@ function renderMappingColumns() {
             </div>
         `);
     });
-    
+
     let chHtml = chHtmlArr.join('');
     if (matchingChannels.length > maxChDisplay) {
         chHtml += `<div style="color: #888; text-align: center; margin-top: 10px; font-size: 0.9em;">Showing ${maxChDisplay} of ${matchingChannels.length} channels. Use search to find more.</div>`;
@@ -2001,7 +2773,7 @@ function renderMappingColumns() {
         if (epgSearch && !String(e.name || '').toLowerCase().includes(epgSearch) && !String(e.id || '').toLowerCase().includes(epgSearch)) return false;
         return true;
     });
-    
+
     filteredEpgs.sort((a, b) => sortAlphaNum(a.name || a.id, b.name || b.id));
 
     const maxEpgDisplay = 300; // Limits DOM nodes for massive XML files
@@ -2024,7 +2796,7 @@ function renderMappingColumns() {
             </div>
         `);
     });
-    
+
     let epgHtml = epgHtmlArr.join('');
     if (filteredEpgs.length > maxEpgDisplay) {
         epgHtml += `<div style="color: #888; text-align: center; margin-top: 10px; font-size: 0.9em;">Showing ${maxEpgDisplay} of ${filteredEpgs.length} EPGs. Use search to find more.</div>`;
@@ -2035,13 +2807,13 @@ function renderMappingColumns() {
 
     // 3. Render Right Column (Mapped List)
     let mappedHtmlArr = [];
-    
+
     // Quick lookup for EPG names
     const epgNameLookup = {};
     const epgSourceLookup = {};
     if (epgChannelsData) {
-        epgChannelsData.forEach(e => { 
-            epgNameLookup[e.id] = e.name || e.id; 
+        epgChannelsData.forEach(e => {
+            epgNameLookup[e.id] = e.name || e.id;
             epgSourceLookup[e.id] = e.source;
         });
     }
@@ -2093,7 +2865,7 @@ function renderMappingColumns() {
             </div>
         `);
     });
-    
+
     let mappedHtml = mappedHtmlArr.length ? mappedHtmlArr.join('') : '<div style="color: #888; text-align: center; margin-top: 20px;">No mappings yet.</div>';
     if (filteredMapped.length > maxMappedDisplay) {
         mappedHtml += `<div style="color: #888; text-align: center; margin-top: 10px; font-size: 0.9em;">Showing ${maxMappedDisplay} of ${filteredMapped.length} mapped channels. Use search to find more.</div>`;
@@ -2190,13 +2962,13 @@ function renderMappingColumns() {
                 showToast("Select a channel and an EPG source first.");
                 return;
             }
-            
+
             const btn = e.target;
             btn.innerHTML = '⏳';
             btn.disabled = true;
 
             await applySingleMapping(mappingSelectedChannel, mappingSelectedEpg);
-            
+
             mappingSelectedChannel = null;
             mappingSelectedEpg = null;
             renderMappingColumns();
@@ -2207,13 +2979,13 @@ function renderMappingColumns() {
         el.addEventListener('click', async (e) => {
             e.stopPropagation();
             const title = el.getAttribute('data-title');
-            
+
             const btn = e.target;
             btn.innerHTML = '⏳';
             btn.disabled = true;
 
             await applySingleMapping(title, null); // null unmaps
-            
+
             if (mappingSelectedChannel === title) mappingSelectedChannel = null;
             renderMappingColumns();
         });
@@ -2224,6 +2996,8 @@ async function renderSettings() {
     const settingsView = document.getElementById('settings-view');
     console.log('[UI] Rendering settings view.');
     if (!settingsView) return;
+
+    const currentTheme = localStorage.getItem('iptv_app_theme') || 'default';
 
     // Fetch EPG channels list dynamically in background when settings tab is opened
     if (!epgChannelsData) {
@@ -2259,10 +3033,10 @@ async function renderSettings() {
     `).join('');
 
     const now = new Date();
-    const futureReminders = (savedReminders || []).filter(r => parseEpgTime(r.startTime) > now).sort((a,b) => parseEpgTime(a.startTime) - parseEpgTime(b.startTime));
-    
+    const futureReminders = (savedReminders || []).filter(r => parseEpgTime(r.startTime) > now).sort((a, b) => parseEpgTime(a.startTime) - parseEpgTime(b.startTime));
+
     let remindersHtml = futureReminders.length ? futureReminders.map((r, i) => {
-        const st = parseEpgTime(r.startTime).toLocaleString([], {weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+        const st = parseEpgTime(r.startTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         return `
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #2a2a2a; margin-bottom: 8px; border-radius: 6px;">
             <div style="display: flex; flex-direction: column; flex-grow: 1; overflow: hidden; min-width: 0;">
@@ -2281,6 +3055,7 @@ async function renderSettings() {
                 <h3 style="color: #bb86fc; margin: 0 0 10px 0; font-size: 1.25em; font-family: 'Outfit', 'Inter', sans-serif; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">Settings</h3>
                 <button class="settings-menu-btn active" data-target="card-epg">EPG Sources</button>
                 <button class="settings-menu-btn" data-target="card-playback">Playback Settings</button>
+                <button class="settings-menu-btn" data-target="card-theme">App Theme</button>
                 <button class="settings-menu-btn" data-target="card-reminders">Reminders</button>
                 <button class="settings-menu-btn" data-target="card-mapping">Channel Mapping</button>
                 <button class="settings-menu-btn" data-target="card-remote">Remote Control</button>
@@ -2292,18 +3067,59 @@ async function renderSettings() {
             <!-- Right Column Cards -->
             <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 30px;">
                 <!-- External EPG Sources Card -->
-                <div id="card-epg" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                <div id="card-epg" class="settings-card">
                     <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">External EPG Sources</h3>
                     <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Add multiple XMLTV EPG URLs to load automatically for your playlists. (Requires refreshing your playlist to take effect).</p>
-                    <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
-                        <input type="text" id="settings-new-epg" placeholder="http://.../epg.xml" style="flex: 1; min-width: 250px; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
+                        <input type="text" id="settings-new-epg" placeholder="http://.../epg.xml or local file path" style="flex: 1; min-width: 250px; background: #121212; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; outline: none; box-sizing: border-box;">
+                        <button id="settings-epg-browse-btn" class="playlist-btn" style="background: #3a3a3a; color: white; font-weight: bold; padding: 10px 15px; border-radius: 4px; border: none; cursor: pointer; white-space: nowrap; transition: background 0.2s ease;">Browse</button>
                         <button id="settings-add-epg-btn" class="playlist-btn" style="background: #bb86fc; color: black; font-weight: bold; padding: 10px 20px; white-space: nowrap;">Add EPG</button>
                     </div>
                     <div id="settings-epg-list">${epgListHtml || '<div style="color:#666; font-style: italic;">No external EPGs added.</div>'}</div>
                 </div>
 
+                <!-- Playback Settings -->
+                <div id="card-playback" class="settings-card">
+                    <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">Playback Settings</h3>
+                    <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Configure video player behaviors and automated navigation preferences.</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: #121212; padding: 15px; border-radius: 8px; border: 1px solid #2d2d2d;">
+                        <div style="margin-right: 15px;">
+                            <span style="color: #e0e0e0; font-weight: bold; display: block; margin-bottom: 4px; font-size: 0.95em;">Auto-Play Next Episode</span>
+                            <span style="color: #888; font-size: 0.85em;">Automatically resolves and plays the next episode with an interactive 30s countdown overlay.</span>
+                        </div>
+                        <label class="autoplay-toggle-container" style="position: relative; display: inline-block; width: 46px; height: 24px; flex-shrink: 0; cursor: pointer;">
+                            <input type="checkbox" id="settings-autoplay-toggle" style="opacity: 0; width: 0; height: 0;">
+                            <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #444; transition: .3s; border-radius: 24px;"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- App Theme Card -->
+                <div id="card-theme" class="settings-card">
+                    <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">App Theme Color</h3>
+                    <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Choose a curated, premium color palette for accent styling and background gradients.</p>
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                        <button class="theme-select-btn default ${currentTheme === 'default' ? 'active' : ''}" data-theme="default" style="flex: 1; min-width: 100px; background: #121212; border: 2px solid ${currentTheme === 'default' ? '#bb86fc' : '#222'}; border-radius: 8px; padding: 15px 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; transition: all 0.2s ease;">
+                            <span style="width: 24px; height: 24px; border-radius: 50%; background: #bb86fc; box-shadow: 0 0 10px rgba(187,134,252,0.4);"></span>
+                            <span style="color: #fff; font-size: 0.85em; font-weight: 600;">Purple</span>
+                        </button>
+                        <button class="theme-select-btn teal ${currentTheme === 'teal' ? 'active' : ''}" data-theme="teal" style="flex: 1; min-width: 100px; background: #121212; border: 2px solid ${currentTheme === 'teal' ? '#069494' : '#222'}; border-radius: 8px; padding: 15px 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; transition: all 0.2s ease;">
+                            <span style="width: 24px; height: 24px; border-radius: 50%; background: #069494; box-shadow: 0 0 10px rgba(6,148,148,0.2);"></span>
+                            <span style="color: #bbb; font-size: 0.85em; font-weight: 500;">Teal</span>
+                        </button>
+                        <button class="theme-select-btn green ${currentTheme === 'green' ? 'active' : ''}" data-theme="green" style="flex: 1; min-width: 100px; background: #121212; border: 2px solid ${currentTheme === 'green' ? '#07a872' : '#222'}; border-radius: 8px; padding: 15px 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; transition: all 0.2s ease;">
+                            <span style="width: 24px; height: 24px; border-radius: 50%; background: #07a872; box-shadow: 0 0 10px rgba(7,168,114,0.2);"></span>
+                            <span style="color: #bbb; font-size: 0.85em; font-weight: 500;">Green</span>
+                        </button>
+                        <button class="theme-select-btn black ${currentTheme === 'black' ? 'active' : ''}" data-theme="black" style="flex: 1; min-width: 100px; background: #121212; border: 2px solid ${currentTheme === 'black' ? '#e0e0e0' : '#222'}; border-radius: 8px; padding: 15px 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; transition: all 0.2s ease;">
+                            <span style="width: 24px; height: 24px; border-radius: 50%; background: #e0e0e0; box-shadow: 0 0 10px rgba(224,224,224,0.2);"></span>
+                            <span style="color: #bbb; font-size: 0.85em; font-weight: 500;">Black</span>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Reminders Card -->
-                <div id="card-reminders" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                <div id="card-reminders" class="settings-card">
                     <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">Upcoming Reminders</h3>
                     <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Manage your scheduled program notifications.</p>
                     <div id="settings-reminders-list" style="max-height: 300px; overflow-y: auto;">
@@ -2312,13 +3128,16 @@ async function renderSettings() {
                 </div>
 
                 <!-- 3-Column Channel Mapping UI -->
-                <div id="card-mapping" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; height: 600px; min-width: 0;">
+                <div id="card-mapping" class="settings-card" style="display: flex; flex-direction: column; height: 600px;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
                         <div style="flex: 1; min-width: 250px;">
                             <h3 style="color: #e0e0e0; margin: 0; font-family: 'Outfit', 'Inter', sans-serif;">Channel Mapping</h3>
                             <p style="color: #888; font-size: 0.9em; margin: 5px 0 15px 0;">Select a channel on the left and an EPG on the right. Instant apply updates Live TV/Guide immediately.</p>
                         </div>
-                        <button id="mapping-auto-map-btn" class="playlist-btn" style="background: #43CB44; color: black; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 0.9em; cursor: pointer; white-space: nowrap;">Auto Map</button>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="mapping-auto-map-btn" class="playlist-btn" style="background: #43CB44; color: black; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 0.9em; cursor: pointer; white-space: nowrap;">Auto Map</button>
+                            <button id="mapping-unmap-all-btn" class="playlist-btn" style="background: #ff5252; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 0.9em; cursor: pointer; white-space: nowrap;">Unmap All</button>
+                        </div>
                     </div>
                     
                     <div style="display: flex; gap: 15px; flex-grow: 1; min-height: 0; min-width: 0;">
@@ -2361,7 +3180,7 @@ async function renderSettings() {
                 </div>
 
                 <!-- Remote Control -->
-                <div id="card-remote" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                <div id="card-remote" class="settings-card">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                         <div>
                             <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">Remote Control</h3>
@@ -2378,7 +3197,7 @@ async function renderSettings() {
                 </div>
 
                 <!-- Recording Settings Card -->
-                <div id="card-dvr" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                <div id="card-dvr" class="settings-card">
                     <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">Recording Storage Path</h3>
                     <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Choose where recorded live streams (.ts files) will be saved on your computer.</p>
                     <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
@@ -2389,7 +3208,7 @@ async function renderSettings() {
                 </div>
 
                 <!-- TMDB Integration -->
-                <div id="card-tmdb" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
+                <div id="card-tmdb" class="settings-card">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                         <div>
                             <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">TMDB API Integration</h3>
@@ -2418,27 +3237,18 @@ async function renderSettings() {
                     </div>
                 </div>
 
-                <!-- Playback Settings -->
-                <div id="card-playback" style="background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #333; min-width: 0;">
-                    <h3 style="color: #e0e0e0; margin-top: 0; margin-bottom: 5px; font-family: 'Outfit', 'Inter', sans-serif;">Playback Settings</h3>
-                    <p style="color: #888; font-size: 0.9em; margin-bottom: 20px;">Configure video player behaviors and automated navigation preferences.</p>
-                    <div style="display: flex; justify-content: space-between; align-items: center; background: #121212; padding: 15px; border-radius: 8px; border: 1px solid #2d2d2d;">
-                        <div style="margin-right: 15px;">
-                            <span style="color: #e0e0e0; font-weight: bold; display: block; margin-bottom: 4px; font-size: 0.95em;">Auto-Play Next Episode</span>
-                            <span style="color: #888; font-size: 0.85em;">Automatically resolves and plays the next episode with an interactive 30s countdown overlay.</span>
-                        </div>
-                        <label class="autoplay-toggle-container" style="position: relative; display: inline-block; width: 46px; height: 24px; flex-shrink: 0; cursor: pointer;">
-                            <input type="checkbox" id="settings-autoplay-toggle" style="opacity: 0; width: 0; height: 0;">
-                            <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #444; transition: .3s; border-radius: 24px;"></span>
-                        </label>
-                    </div>
-                </div>
-
                 <!-- Danger Zone -->
-                <div id="card-danger" style="background: linear-gradient(135deg, rgba(207, 102, 121, 0.08), rgba(207, 102, 121, 0.02)); padding: 25px; border-radius: 12px; border: 1px solid rgba(207, 102, 121, 0.35); box-shadow: 0 8px 32px rgba(207, 102, 121, 0.1), inset 0 0 20px rgba(207, 102, 121, 0.05); min-width: 0; transition: all 0.3s ease;">
-                    <h3 style="color: #ff6b6b; margin-top: 0; margin-bottom: 8px; font-family: 'Outfit', 'Inter', sans-serif; font-weight: bold; text-shadow: 0 0 10px rgba(255,107,107,0.2);">Danger Zone</h3>
-                    <p style="color: rgba(255, 179, 179, 0.85); font-size: 0.9em; margin-bottom: 20px; font-family: 'Inter', sans-serif;">Completely wipe the database and reset the application to its default state. This action cannot be undone.</p>
-                    <button id="settings-factory-reset-btn" class="playlist-btn" style="background: #ff5252; color: white; font-weight: bold; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(255, 82, 82, 0.3);">Factory Reset</button>
+                <div id="card-danger" class="settings-card" style="background: linear-gradient(135deg, rgba(207, 102, 121, 0.08), rgba(207, 102, 121, 0.02)) !important; border: 1px solid rgba(207, 102, 121, 0.35) !important; box-shadow: 0 8px 32px rgba(207, 102, 121, 0.1), inset 0 0 20px rgba(207, 102, 121, 0.05) !important; display: flex; flex-direction: column; gap: 20px;">
+                    <div>
+                        <h3 style="color: #ff6b6b; margin-top: 0; margin-bottom: 8px; font-family: 'Outfit', 'Inter', sans-serif; font-weight: bold; text-shadow: 0 0 10px rgba(255,107,107,0.2);">Danger Zone</h3>
+                        <p style="color: rgba(255, 179, 179, 0.85); font-size: 0.9em; margin-bottom: 12px; font-family: 'Inter', sans-serif;">Completely wipe the database and reset the application to its default state. This action cannot be undone.</p>
+                        <button id="settings-factory-reset-btn" class="playlist-btn" style="background: #ff5252; color: white; font-weight: bold; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(255, 82, 82, 0.3);">Factory Reset</button>
+                    </div>
+                    <div style="border-top: 1px solid rgba(207, 102, 121, 0.2); padding-top: 15px;">
+                        <h4 style="color: #e0e0e0; margin-top: 0; margin-bottom: 8px; font-family: 'Outfit', 'Inter', sans-serif; font-weight: 500;">Clear Application Logs</h4>
+                        <p style="color: #aaa; font-size: 0.9em; margin-bottom: 12px; font-family: 'Inter', sans-serif;">Empty or delete all diagnostic log files to free up space or reset troubleshooting history.</p>
+                        <button id="settings-clear-logs-btn" class="playlist-btn" style="background: #e0aaff; color: black; font-weight: bold; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(224, 170, 255, 0.2);">Clear Logs</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2456,6 +3266,18 @@ async function renderSettings() {
     }
 
     // 1. Immediately attach all static event listeners to avoid input lockups
+    const browseEpgBtn = document.getElementById('settings-epg-browse-btn');
+    if (browseEpgBtn) {
+        browseEpgBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            console.log('[SETTINGS] Browse EPG button clicked.');
+            const filePaths = await window.iptvAPI.openFileDialog('epg');
+            if (filePaths && filePaths.length > 0) {
+                document.getElementById('settings-new-epg').value = filePaths[0];
+            }
+        });
+    }
+
     document.getElementById('settings-add-epg-btn').addEventListener('click', async () => {
         const val = document.getElementById('settings-new-epg').value.trim();
         console.log('[SETTINGS] Add EPG button clicked. Value:', val);
@@ -2478,6 +3300,8 @@ async function renderSettings() {
 
             await window.iptvAPI.updateEpg(combinedEpgs, null, true);
             epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
+
+            // await loadEpgLogos(); removed
 
             btn.textContent = originalText;
             btn.disabled = false;
@@ -2524,6 +3348,8 @@ async function renderSettings() {
                 epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
                 console.log('[API] getEpgChannels completed.');
 
+                // await loadEpgLogos(); removed
+
                 // 4. Show success feedback
                 btn.textContent = 'Refreshed ✔️';
                 showToast('EPG refreshed successfully!');
@@ -2552,7 +3378,7 @@ async function renderSettings() {
             console.log('[SETTINGS] Remove EPG button clicked for index:', idx);
             const epgSource = savedEpgs[idx];
             if (!epgSource) return;
-            
+
             showConfirmToast(`Are you sure you want to remove the EPG source "${epgSource}"?`, async () => {
                 const epgIdsToRemove = new Set();
                 if (epgChannelsData) {
@@ -2586,13 +3412,15 @@ async function renderSettings() {
                     await window.iptvAPI.clearCache(epgSource);
                     console.log('[API] Cache cleared for unused EPG:', epgSource);
                 }
-                
+
                 savedEpgs.splice(idx, 1);
                 await window.iptvAPI.removeExternalEpg(epgSource);
-                
+
                 if (epgChannelsData) {
                     epgChannelsData = epgChannelsData.filter(epg => epg.source !== epgSource);
                 }
+
+                // await loadEpgLogos(); removed
 
                 renderSettings();
                 showToast(`EPG source removed.`);
@@ -2606,7 +3434,7 @@ async function renderSettings() {
             console.log('[SETTINGS] Remove reminder button clicked for index:', idx);
             const reminderToRemove = futureReminders[idx];
             if (!reminderToRemove) return;
-            
+
             showConfirmToast(`Are you sure you want to remove the reminder for "${reminderToRemove.progTitle}"?`, () => {
                 const realIdx = savedReminders.findIndex(r => r.channelTitle === reminderToRemove.channelTitle && r.progTitle === reminderToRemove.progTitle && r.startTime === reminderToRemove.startTime);
                 if (realIdx > -1) {
@@ -2632,19 +3460,32 @@ async function renderSettings() {
         btn.disabled = false;
     });
 
+    document.getElementById('mapping-unmap-all-btn').addEventListener('click', async (e) => {
+        const btn = e.target;
+        console.log('[SETTINGS] Unmap All button clicked.');
+        const originalText = btn.textContent;
+        btn.textContent = '⏳';
+        btn.disabled = true;
+
+        await unmapAllChannelsFiltered();
+
+        btn.textContent = originalText;
+        btn.disabled = false;
+    });
+
     document.getElementById('settings-save-tmdb-btn').addEventListener('click', async (e) => {
         const btn = e.target;
         const apiKey = document.getElementById('settings-tmdb-key').value.trim();
         const apiToken = document.getElementById('settings-tmdb-token').value.trim();
         const statusSpan = document.getElementById('settings-tmdb-status');
-        
+
         const originalText = btn.textContent;
         btn.textContent = 'Testing connection... ⏳';
         btn.disabled = true;
-        
+
         try {
             const result = await window.iptvAPI.saveTmdbConfig({ apiKey, apiToken });
-            
+
             let statusColor = '#888';
             if (result.status === 'Connected') {
                 statusColor = '#43CB44';
@@ -2656,7 +3497,7 @@ async function renderSettings() {
                 statusColor = '#cf6679';
                 showToast(`TMDB Connection failed: ${result.error || 'Unknown error'}`, true);
             }
-            
+
             statusSpan.textContent = result.status;
             statusSpan.style.background = `${statusColor}22`;
             statusSpan.style.color = statusColor;
@@ -2713,6 +3554,45 @@ async function renderSettings() {
         }
     });
 
+    document.getElementById('settings-clear-logs-btn').addEventListener('click', async () => {
+        console.log('[SETTINGS] Clear logs button clicked.');
+        if (confirm("Are you sure you want to clear all application log files?")) {
+            const success = await window.iptvAPI.clearLogs();
+            if (success) {
+                showToast('Application logs cleared successfully!');
+            } else {
+                showToast('Failed to clear some log files.', true);
+            }
+        }
+    });
+
+    // App Theme selection listeners
+    document.querySelectorAll('.theme-select-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const selectedTheme = btn.getAttribute('data-theme');
+            applyAppTheme(selectedTheme);
+            localStorage.setItem('iptv_app_theme', selectedTheme);
+
+            // Update active UI state in settings
+            document.querySelectorAll('.theme-select-btn').forEach(b => {
+                b.classList.remove('active');
+                b.style.borderColor = '#222';
+            });
+            btn.classList.add('active');
+            if (selectedTheme === 'default') {
+                btn.style.borderColor = '#bb86fc';
+            } else if (selectedTheme === 'teal') {
+                btn.style.borderColor = '#069494';
+            } else if (selectedTheme === 'green') {
+                btn.style.borderColor = '#07a872';
+            } else if (selectedTheme === 'black') {
+                btn.style.borderColor = '#e0e0e0';
+            }
+
+            showToast(`Theme updated to ${selectedTheme.charAt(0).toUpperCase() + selectedTheme.slice(1)}!`);
+        });
+    });
+
     // Mapping Filter Events
     document.getElementById('mapping-playlist-filter').addEventListener('change', (e) => {
         mappingSelectedPlaylist = e.target.value;
@@ -2744,9 +3624,9 @@ async function renderSettings() {
     const updateActiveMenuButton = () => {
         if (settingsView.style.display === 'none') return;
         const containerRect = settingsView.getBoundingClientRect();
-        const cards = ['card-epg', 'card-reminders', 'card-mapping', 'card-remote', 'card-dvr', 'card-tmdb', 'card-danger'];
+        const cards = ['card-epg', 'card-playback', 'card-theme', 'card-reminders', 'card-mapping', 'card-remote', 'card-dvr', 'card-tmdb', 'card-danger'];
         let currentActive = 'card-epg';
-        
+
         for (const cardId of cards) {
             const el = document.getElementById(cardId);
             if (el) {
@@ -2757,11 +3637,11 @@ async function renderSettings() {
                 }
             }
         }
-        
+
         if (Math.abs((settingsView.scrollHeight - settingsView.scrollTop) - settingsView.clientHeight) < 10) {
             currentActive = 'card-danger';
         }
-        
+
         document.querySelectorAll('.settings-menu-btn').forEach(btn => {
             if (btn.getAttribute('data-target') === currentActive) {
                 btn.classList.add('active');
@@ -2770,7 +3650,7 @@ async function renderSettings() {
             }
         });
     };
-    
+
     settingsView.removeEventListener('scroll', window.updateSettingsActiveMenu);
     window.updateSettingsActiveMenu = updateActiveMenuButton;
     settingsView.addEventListener('scroll', window.updateSettingsActiveMenu);
@@ -2785,7 +3665,7 @@ async function renderSettings() {
         const tokenInput = document.getElementById('settings-tmdb-token');
         if (keyInput) keyInput.value = tmdbConfig.apiKey || '';
         if (tokenInput) tokenInput.value = tmdbConfig.apiToken || '';
-        
+
         const statusSpan = document.getElementById('settings-tmdb-status');
         if (statusSpan) {
             if (tmdbConfig.apiKey || tmdbConfig.apiToken) {
@@ -2808,11 +3688,11 @@ async function renderSettings() {
         window.iptvAPI.getIpAddress()
     ]).then(([rSettings, ipAddress]) => {
         remoteSettings = rSettings;
-        
+
         const toggle = document.getElementById('settings-remote-toggle');
         const status = document.getElementById('settings-remote-status');
         const configDiv = document.getElementById('settings-remote-config');
-        
+
         const port = remoteSettings.port || 8088;
         const remoteUrl = `http://${ipAddress}:${port}/remote`;
         let remoteUrlWithAuth = remoteUrl;
@@ -2828,7 +3708,7 @@ async function renderSettings() {
             status.textContent = remoteSettings.enabled ? 'Enabled' : 'Disabled';
             status.style.color = remoteSettings.enabled ? '#43CB44' : '#cf6679';
         }
-        
+
         if (configDiv) {
             configDiv.style.display = remoteSettings.enabled ? 'block' : 'none';
             configDiv.innerHTML = `
@@ -2869,63 +3749,63 @@ async function renderSettings() {
 
             // Dynamic Remote listeners
             document.getElementById('settings-save-remote-btn').addEventListener('click', async (btnEvt) => {
-                 const newPort = parseInt(document.getElementById('settings-remote-port').value) || 8088;
-                 const user = document.getElementById('settings-remote-user').value.trim();
-                 const pass = document.getElementById('settings-remote-pass').value.trim();
-                 
-                 if ((user.length > 0 || pass.length > 0) && (user.length < 5 || pass.length < 5)) {
-                     showToast('Username and Password must be at least 5 characters long, or completely blank to disable password protection.');
-                     document.getElementById('settings-remote-user').focus();
-                     return;
-                 }
-                 
-                 remoteSettings.port = newPort;
-                 remoteSettings.username = user;
-                 remoteSettings.password = pass;
-                 await window.iptvAPI.saveRemoteSettings(remoteSettings);
-                 
-                 const originalText = btnEvt.target.textContent;
-                 btnEvt.target.textContent = 'Saved ✔️';
-                 setTimeout(() => { 
-                     renderSettings();
-                 }, 1000);
+                const newPort = parseInt(document.getElementById('settings-remote-port').value) || 8088;
+                const user = document.getElementById('settings-remote-user').value.trim();
+                const pass = document.getElementById('settings-remote-pass').value.trim();
+
+                if ((user.length > 0 || pass.length > 0) && (user.length < 5 || pass.length < 5)) {
+                    showToast('Username and Password must be at least 5 characters long, or completely blank to disable password protection.');
+                    document.getElementById('settings-remote-user').focus();
+                    return;
+                }
+
+                remoteSettings.port = newPort;
+                remoteSettings.username = user;
+                remoteSettings.password = pass;
+                await window.iptvAPI.saveRemoteSettings(remoteSettings);
+
+                const originalText = btnEvt.target.textContent;
+                btnEvt.target.textContent = 'Saved ✔️';
+                setTimeout(() => {
+                    renderSettings();
+                }, 1000);
             });
 
             const revokeBtn = document.getElementById('settings-revoke-device-btn');
             if (revokeBtn) {
-                 revokeBtn.addEventListener('click', async () => {
-                     remoteSettings.activeDeviceId = null;
-                     await window.iptvAPI.saveRemoteSettings(remoteSettings);
-                     renderSettings();
-                     showToast('Paired device revoked.');
-                 });
+                revokeBtn.addEventListener('click', async () => {
+                    remoteSettings.activeDeviceId = null;
+                    await window.iptvAPI.saveRemoteSettings(remoteSettings);
+                    renderSettings();
+                    showToast('Paired device revoked.');
+                });
             }
 
             document.getElementById('settings-copy-remote-btn').addEventListener('click', (btnEvt) => {
-                 const url = btnEvt.target.getAttribute('data-url');
-                 window.iptvAPI.copyToClipboard(url);
-                 const originalText = btnEvt.target.textContent;
-                 btnEvt.target.textContent = 'Copied!';
-                 setTimeout(() => { btnEvt.target.textContent = originalText; }, 2000);
+                const url = btnEvt.target.getAttribute('data-url');
+                window.iptvAPI.copyToClipboard(url);
+                const originalText = btnEvt.target.textContent;
+                btnEvt.target.textContent = 'Copied!';
+                setTimeout(() => { btnEvt.target.textContent = originalText; }, 2000);
             });
         }
 
         if (toggle) {
             // Setup toggle listener now that settings loaded
             toggle.addEventListener('change', async (e) => {
-                 const isEnabled = e.target.checked;
-                 const configDivEl = document.getElementById('settings-remote-config');
-                 const statusSpanEl = document.getElementById('settings-remote-status');
-                 
-                 if (configDivEl) configDivEl.style.display = isEnabled ? 'block' : 'none';
-                 if (statusSpanEl) {
-                     statusSpanEl.textContent = isEnabled ? 'Enabled' : 'Disabled';
-                     statusSpanEl.style.color = isEnabled ? '#43CB44' : '#cf6679';
-                 }
-                 
-                 remoteSettings.enabled = isEnabled;
-                 await window.iptvAPI.saveRemoteSettings(remoteSettings);
-                 showToast(`Remote Control ${isEnabled ? 'Enabled' : 'Disabled'}`);
+                const isEnabled = e.target.checked;
+                const configDivEl = document.getElementById('settings-remote-config');
+                const statusSpanEl = document.getElementById('settings-remote-status');
+
+                if (configDivEl) configDivEl.style.display = isEnabled ? 'block' : 'none';
+                if (statusSpanEl) {
+                    statusSpanEl.textContent = isEnabled ? 'Enabled' : 'Disabled';
+                    statusSpanEl.style.color = isEnabled ? '#43CB44' : '#cf6679';
+                }
+
+                remoteSettings.enabled = isEnabled;
+                await window.iptvAPI.saveRemoteSettings(remoteSettings);
+                showToast(`Remote Control ${isEnabled ? 'Enabled' : 'Disabled'}`);
             });
         }
     }).catch(e => console.error('Error auto-loading remote settings:', e));
@@ -2934,10 +3814,10 @@ async function renderSettings() {
     const allEpgSources = savedPlaylists.map(p => p.epg).filter(e => e && e !== 'Not Configured');
     savedEpgs.forEach(e => { if (!allEpgSources.includes(e)) allEpgSources.push(e); });
     const combinedEpgs = allEpgSources.join(',');
-    
+
     window.iptvAPI.getEpgChannels(combinedEpgs).then(data => {
         epgChannelsData = data;
-        
+
         // Populate EPG filter list
         const epgFilter = document.getElementById('mapping-epg-filter');
         if (epgFilter) {
@@ -2945,13 +3825,13 @@ async function renderSettings() {
             const epgSourcesSet = new Set();
             if (epgChannelsData) epgChannelsData.forEach(e => { if (e.source) epgSourcesSet.add(e.source); });
             Array.from(epgSourcesSet).sort((a, b) => sortAlphaNum(getEpgName(a), getEpgName(b))).forEach(src => {
-                 const opt = document.createElement('option');
-                 opt.value = src;
-                 opt.textContent = getEpgName(src);
-                 epgFilter.appendChild(opt);
+                const opt = document.createElement('option');
+                opt.value = src;
+                opt.textContent = getEpgName(src);
+                epgFilter.appendChild(opt);
             });
         }
-        
+
         // Refresh mapping lists to overlay active EPG mapping names
         renderMappingColumns();
     }).catch(err => {
@@ -2965,7 +3845,7 @@ async function applySingleMapping(channelTitle, epgId) {
     console.log('[MAPPING] Applying single mapping:', { channelTitle, epgId });
     if (epgId) channelMappings[channelTitle] = epgId;
     else delete channelMappings[channelTitle];
-    
+
     await window.iptvAPI.saveMapping(channelTitle, epgId);
 
     updateState();
@@ -2980,7 +3860,7 @@ async function applySingleMapping(channelTitle, epgId) {
             }
         }
     }
-    
+
     // Update Guide if we happen to switch over to it or if it is currently visible
     const epgView = document.getElementById('epg-view');
     if (epgView && epgView.style.display === 'flex') {
@@ -2988,62 +3868,113 @@ async function applySingleMapping(channelTitle, epgId) {
     }
 }
 
+// ── Playlist structure version counter ────────────────────────────────────────
+// Increment whenever playlist channels are structurally changed (add/remove/sort).
+// updateState() skips the expensive allChannels rebuild if the version is the same.
+window._playlistsVersion = window._playlistsVersion || 0;
+window._lastBuiltVersion  = window._lastBuiltVersion  || -1;
+
+/** Call when playlist structure changes: channel add/remove/reorder/disable. */
+function markPlaylistsDirty() {
+    window._playlistsVersion++;
+    renderChannels._lastKey = null; // invalidate render guard
+}
+
 function updateState(skipSave = false) {
     console.log('[STATE] Updating global state and re-rendering.');
-    allChannels = [];
-    
-    savedPlaylists.sort((a, b) => sortAlphaNum(a.name, b.name));
 
-    const filterSelect = document.getElementById('playlist-filter');
-    let currentFilter = 'all';
-    if (filterSelect) {
-        currentFilter = filterSelect.value;
-        if (currentFilter === 'all' && !window.initialFilterLoaded) {
-            currentFilter = localStorage.getItem('iptv_playlist_filter') || 'all';
-            window.initialFilterLoaded = true;
+    const needsRebuild = (window._playlistsVersion !== window._lastBuiltVersion);
+
+    if (needsRebuild) {
+        allChannels = [];
+
+        savedPlaylists.sort((a, b) => sortAlphaNum(a.name, b.name));
+
+        const filterSelect = document.getElementById('playlist-filter');
+        let currentFilter = 'all';
+        if (filterSelect) {
+            currentFilter = filterSelect.value;
+            if (currentFilter === 'all' && !window.initialFilterLoaded) {
+                currentFilter = localStorage.getItem('iptv_playlist_filter') || 'all';
+                window.initialFilterLoaded = true;
+            }
+            filterSelect.innerHTML = '<option value="all">All Merged</option><option value="favs">Favourites</option>';
         }
-        filterSelect.innerHTML = '<option value="all">All Merged</option><option value="favs">Favourites</option>';
+
+        savedPlaylists.forEach(p => {
+            if (p.channels) {
+                p.channels.sort((a, b) => sortAlphaNum(a.title, b.title));
+            }
+            if (p.channels && !p.disabled) {
+                if (filterSelect) {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name;
+                    filterSelect.appendChild(opt);
+                }
+
+                // Group channels together as they appear in the playlist
+                let groupedChannels = {};
+                let groupOrder = [];
+
+                p.channels.forEach(c => {
+                    if (c.disabled) return;
+                    // Segregate Stalker Movies/Series out of Live channels
+                    const channelType = c.type || 'live';
+                    if (channelType !== 'live') return;
+
+                    c.playlistId = p.id; // Attach playlist ID for easy filtering
+                    const groupName = c.group || 'Uncategorized';
+                    if (!groupedChannels[groupName]) {
+                        groupedChannels[groupName] = [];
+                        groupOrder.push(groupName);
+                    }
+                    groupedChannels[groupName].push(c);
+                });
+
+                groupOrder.sort(sortAlphaNum).forEach(g => {
+                    groupedChannels[g].forEach(c => allChannels.push(c));
+                });
+            }
+        });
+
+        allChannels.sort((a, b) => sortAlphaNum(a.title, b.title));
+        window._lastBuiltVersion = window._playlistsVersion;
+        renderChannels._lastKey = null; // force a DOM refresh after rebuild
+
+        if (filterSelect && Array.from(filterSelect.options).some(o => o.value === currentFilter)) {
+            filterSelect.value = currentFilter;
+        } else if (filterSelect) {
+            filterSelect.value = 'all';
+            localStorage.setItem('iptv_playlist_filter', 'all');
+        }
+
+        let groupFilter = document.getElementById('group-filter');
+        if (groupFilter) groupFilter.remove();
+
+        let channelSearch = document.getElementById('channel-search');
+        if (!channelSearch && filterSelect) {
+            channelSearch = document.createElement('input');
+            channelSearch.id = 'channel-search';
+            channelSearch.type = 'text';
+            channelSearch.placeholder = 'Search channels...';
+            channelSearch.style.marginTop = '10px';
+            channelSearch.style.width = '100%';
+            channelSearch.style.padding = '8px';
+            channelSearch.style.borderRadius = '4px';
+            channelSearch.style.background = '#1e1e1e';
+            channelSearch.style.color = '#fff';
+            channelSearch.style.border = '1px solid #333';
+            channelSearch.style.boxSizing = 'border-box';
+            filterSelect.parentNode.insertBefore(channelSearch, filterSelect.nextSibling);
+            channelSearch.addEventListener('input', () => {
+                renderChannels();
+                renderLiveEpgGrid();
+            });
+        }
     }
 
-    savedPlaylists.forEach(p => {
-        if (p.channels) {
-            p.channels.sort((a, b) => sortAlphaNum(a.title, b.title));
-        }
-        if (p.channels && !p.disabled) {
-            if (filterSelect) {
-                const opt = document.createElement('option');
-                opt.value = p.id;
-                opt.textContent = p.name;
-                filterSelect.appendChild(opt);
-            }
-            
-            // Group channels together as they appear in the playlist
-            let groupedChannels = {};
-            let groupOrder = [];
-            
-            p.channels.forEach(c => {
-                if (c.disabled) return;
-                // Segregate Stalker Movies/Series out of Live channels
-                const channelType = c.type || 'live';
-                if (channelType !== 'live') return;
-                
-                c.playlistId = p.id; // Attach playlist ID for easy filtering
-                const groupName = c.group || 'Uncategorized';
-                if (!groupedChannels[groupName]) {
-                    groupedChannels[groupName] = [];
-                    groupOrder.push(groupName);
-                }
-                groupedChannels[groupName].push(c);
-            });
-            
-            groupOrder.sort(sortAlphaNum).forEach(g => {
-                groupedChannels[g].forEach(c => allChannels.push(c));
-            });
-        }
-    });
-    
-    allChannels.sort((a, b) => sortAlphaNum(a.title, b.title));
-
+    // Always recalculate the playing index (it may have changed via favourite/logo/mapping)
     if (streamActive) {
         const currentUrl = localStorage.getItem('lastPlayedChannelUrl');
         const detailName = document.getElementById('detail-name');
@@ -3053,37 +3984,7 @@ function updateState(skipSave = false) {
         currentPlayingChannelIndex = -1;
     }
 
-    if (filterSelect && Array.from(filterSelect.options).some(o => o.value === currentFilter)) {
-        filterSelect.value = currentFilter;
-    } else if (filterSelect) {
-        filterSelect.value = 'all';
-        localStorage.setItem('iptv_playlist_filter', 'all');
-    }
-
-    let groupFilter = document.getElementById('group-filter');
-    if (groupFilter) groupFilter.remove();
-
-    let channelSearch = document.getElementById('channel-search');
-    if (!channelSearch && filterSelect) {
-        channelSearch = document.createElement('input');
-        channelSearch.id = 'channel-search';
-        channelSearch.type = 'text';
-        channelSearch.placeholder = 'Search channels...';
-        channelSearch.style.marginTop = '10px';
-        channelSearch.style.width = '100%';
-        channelSearch.style.padding = '8px';
-        channelSearch.style.borderRadius = '4px';
-        channelSearch.style.background = '#1e1e1e';
-        channelSearch.style.color = '#fff';
-        channelSearch.style.border = '1px solid #333';
-        channelSearch.style.boxSizing = 'border-box';
-        filterSelect.parentNode.insertBefore(channelSearch, filterSelect.nextSibling);
-        channelSearch.addEventListener('input', () => {
-            renderChannels();
-            renderLiveEpgGrid();
-        });
-    }
-
+    renderChannels._lastKey = null; // Invalidate render guard so active-item highlight always refreshes
     renderChannels();
     renderPlaylists();
     if (!skipSave) {
@@ -3114,9 +4015,9 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(3, 0, 30, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 1000; display: flex; align-items: center; justify-content: center;';
         document.body.appendChild(modal);
     }
-    
+
     const isStalker = playlist.epg && playlist.epg.startsWith('stalker:');
-    
+
     const groupsMap = {};
     const stalkerParents = {};
 
@@ -3130,7 +4031,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             const parent = c.group || 'Categories';
             if (!stalkerParents[parent]) stalkerParents[parent] = [];
             stalkerParents[parent].push(c.title);
-            
+
             if (!groupsMap[c.title]) groupsMap[c.title] = { channels: [], category: c, categoryIndex: idx };
             else { groupsMap[c.title].category = c; groupsMap[c.title].categoryIndex = idx; }
         } else {
@@ -3139,10 +4040,10 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             groupsMap[g].channels.push({ channel: c, originalIndex: idx });
         }
     });
-    
+
     const tempDisabled = new Set();
     const tempSelected = new Set();
-    
+
     originalChannels.forEach((c, idx) => {
         if (c.disabled !== false) tempDisabled.add(idx);
     });
@@ -3169,20 +4070,20 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
     if (isStalker) {
         Object.keys(stalkerParents).sort(sortAlphaNum).forEach(parent => {
             groupsHtml += `<div style="padding: 10px 16px; background: rgba(187, 134, 252, 0.06); font-weight: 700; color: rgba(187, 134, 252, 0.8); font-size: 0.76em; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid rgba(187, 134, 252, 0.08); border-top: 1px solid rgba(187, 134, 252, 0.08); font-family: 'Inter', sans-serif;">${parent.replace(/</g, '&lt;')}</div>`;
-            
+
             stalkerParents[parent].sort(sortAlphaNum).forEach(g => {
                 const total = groupsMap[g].channels.length;
                 const enabled = groupsMap[g].channels.filter(item => !tempDisabled.has(item.originalIndex)).length;
                 const hasNew = groupsMap[g].channels.some(item => item.channel.isNew);
                 const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
-                
+
                 groupsHtml += `
                 <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; color: #d1d5db; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'Inter', sans-serif; font-size: 0.85em; border-radius: 0 6px 6px 0; margin: 1px 6px 1px 0;">
                     ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: rgba(255,255,255,0.3); font-size: 0.82em; float: right;">${enabled} (${total})</span>
                 </div>`;
             });
         });
-        
+
         const looseGroups = Object.keys(groupsMap).filter(g => !Object.values(stalkerParents).flat().includes(g));
         if (looseGroups.length > 0) {
             groupsHtml += `<div style="padding: 10px 16px; background: rgba(187, 134, 252, 0.06); font-weight: 700; color: rgba(187, 134, 252, 0.8); font-size: 0.76em; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid rgba(187, 134, 252, 0.08); border-top: 1px solid rgba(187, 134, 252, 0.08); font-family: 'Inter', sans-serif;">Other Channels</div>`;
@@ -3191,7 +4092,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                 const enabled = groupsMap[g].channels.filter(item => !tempDisabled.has(item.originalIndex)).length;
                 const hasNew = groupsMap[g].channels.some(item => item.channel.isNew);
                 const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
-                
+
                 groupsHtml += `
                 <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; color: #d1d5db; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'Inter', sans-serif; font-size: 0.85em; border-radius: 0 6px 6px 0; margin: 1px 6px 1px 0;">
                     ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: rgba(255,255,255,0.3); font-size: 0.82em; float: right;">${enabled} (${total})</span>
@@ -3204,7 +4105,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             const enabled = groupsMap[g].channels.filter(item => !tempDisabled.has(item.originalIndex)).length;
             const hasNew = groupsMap[g].channels.some(item => item.channel.isNew);
             const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
-            
+
             groupsHtml += `
             <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; color: #d1d5db; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'Inter', sans-serif; font-size: 0.85em; border-radius: 0 6px 6px 0; margin: 1px 6px 1px 0;">
                 ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: rgba(255,255,255,0.3); font-size: 0.82em; float: right;">${enabled} (${total})</span>
@@ -3268,7 +4169,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         }
 
         const sorter = (a, b) => sortAlphaNum(a.channel.title, b.channel.title);
-        
+
         const enabledList = [];
         const disabledList = [];
 
@@ -3292,7 +4193,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             const isSelected = tempSelected.has(originalIndex);
             const isNew = channel.isNew;
             const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-            
+
             const newLabel = isNew ? ' <span style="color: #FFD700;">(New)</span>' : '';
             const titleColor = isDisabled ? (isNew ? '#FFD700' : '#f0859a') : '#34d399';
 
@@ -3327,7 +4228,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                 const idx = parseInt(e.target.getAttribute('data-idx'));
                 if (e.target.checked) tempSelected.add(idx);
                 else tempSelected.delete(idx);
-                
+
                 const label = e.target.closest('label');
                 if (e.target.checked) {
                     label.style.background = 'rgba(187, 134, 252, 0.06)';
@@ -3341,7 +4242,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                 document.getElementById('modal-select-all').checked = allVisibleSelectedCheck;
             });
         });
-        
+
         document.querySelectorAll('.modal-group-item').forEach(el => {
             const g = el.getAttribute('data-group');
             if (!groupsMap[g]) return;
@@ -3370,18 +4271,18 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         el.addEventListener('click', async (e) => {
             const g = el.getAttribute('data-group');
             currentGroupFilter = g;
-            
+
             if (isStalker && groupsMap[g] && groupsMap[g].category && groupsMap[g].channels.length === 0) {
                 const listDiv = document.getElementById('modal-channels-list');
                 listDiv.innerHTML = getWinSpinnerHtml('Fetching channels...');
-                
+
                 try {
                     const cat = groupsMap[g].category;
                     const mac = playlist.epg.substring(8);
                     let categoryType = 'movie';
                     if (cat.type === 'itv_category') categoryType = 'itv';
                     else if (cat.type === 'series_category' || cat.type === 'vod_category') categoryType = 'series';
-                    
+
                     const fetched = await window.iptvAPI.loadStalkerCategory({
                         url: playlist.source,
                         mac: mac,
@@ -3390,22 +4291,22 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                         categoryName: cat.title,
                         isSeries: categoryType === 'series'
                     });
-                    
+
                     fetched.forEach(newCh => {
                         newCh.disabled = true;
                         newCh.isNew = true;
-                        
+
                         const newIdx = originalChannels.length;
                         originalChannels.push(newCh);
                         tempDisabled.add(newIdx);
                         groupsMap[g].channels.push({ channel: newCh, originalIndex: newIdx });
                     });
-                    
+
                 } catch (err) {
                     showToast("Failed to fetch channels for category.");
                 }
             }
-            
+
             renderChannelsList();
         });
     });
@@ -3453,11 +4354,11 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
     document.getElementById('modal-save-btn').addEventListener('click', async () => {
         modal.style.display = 'none';
         modal.innerHTML = '';
-        
+
         showGlobalSpinner("Importing channels and VOD...");
         // Yield to allow UI spinner rendering
         await new Promise(resolve => setTimeout(resolve, 100));
-        
+
         originalChannels.forEach((c, idx) => {
             c.disabled = tempDisabled.has(idx);
             delete c.isNew;
@@ -3475,41 +4376,43 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             } else {
                 savedPlaylists.push(playlist);
             }
-            
+            markPlaylistsDirty();
+
             updateState(true);
-            
+
             const isStalker = playlist.epg && playlist.epg.startsWith('stalker:');
             if (isStalker) {
-                updateState(); 
+                updateState();
             } else {
                 let allEpgSources = savedEpgs.slice();
                 if (playlist.epg && playlist.epg !== 'Not Configured' && !allEpgSources.includes(playlist.epg)) {
                     allEpgSources.push(playlist.epg);
                 }
-                
+
                 if (!window.activeEpgParsing) window.activeEpgParsing = new Set();
                 if (playlist.epg && playlist.epg !== 'Not Configured') {
                     window.activeEpgParsing.add(playlist.epg);
                 }
                 updateState(true);
-                
+
                 if (allEpgSources.length > 0) {
                     console.log('[API] Calling updateEpg after adding playlist.');
                     const combinedEpgs = allEpgSources.join(',');
                     await window.iptvAPI.updateEpg(combinedEpgs, null, true);
                     epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
                     await autoMapChannels(false, true);
-                    updateState(); 
+                    // await loadEpgLogos(); removed
+                    updateState();
                 } else {
-                    updateState(); 
+                    updateState();
                 }
-                
+
                 if (playlist.epg && playlist.epg !== 'Not Configured') {
                     window.activeEpgParsing.delete(playlist.epg);
                 }
-                updateState(); 
+                updateState();
             }
-            
+
             editingPlaylistIndex = -1;
             const importCancelBtn = document.getElementById('import-cancel-btn');
             const importStalkerCancelBtn = document.getElementById('import-stalker-cancel-btn');
@@ -3522,7 +4425,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             if (importStalkerName) importStalkerName.value = '';
             if (importStalkerUrl) importStalkerUrl.value = '';
             if (importStalkerMac) importStalkerMac.value = '';
-            
+
             if (document.getElementById('import-submit-btn')) {
                 document.getElementById('import-submit-btn').textContent = 'Import';
                 document.getElementById('import-submit-btn').disabled = false;
@@ -3552,7 +4455,7 @@ function renderPlaylists() {
     const container = document.getElementById('playlist-cards');
     if (!container) return;
     container.innerHTML = '';
-    
+
     if (clearBtn) {
         clearBtn.style.display = savedPlaylists.length > 0 ? 'block' : 'none';
     }
@@ -3596,7 +4499,7 @@ function renderPlaylists() {
         let disabledChannels = 0;
         let groups = new Set();
         let enabledGroups = new Set();
-        
+
         if (playlist.channels) {
             playlist.channels.forEach(ch => {
                 if (ch.type !== 'live') return;
@@ -3644,7 +4547,7 @@ function renderPlaylists() {
 
         const isStalker = playlist.epg && playlist.epg.startsWith('stalker:');
         let statsHtml = '';
-        
+
         if (isStalker) {
             const mac = playlist.epg.substring(8);
             statsHtml = `
@@ -3675,10 +4578,10 @@ function renderPlaylists() {
                         <button class="playlist-btn delete delete-btn" data-index="${index}">Delete</button>
                     </div>
                     <div style="display: flex; gap: 10px;">
-                        ${playlist.disabled 
-                            ? `<button class="playlist-btn enable-btn" data-index="${index}" style="background: #43CB44; color: black; border: none; font-weight: bold;">Enable</button>` 
-                            : `<button class="playlist-btn disable-btn" data-index="${index}">Disable</button>`
-                        }
+                        ${playlist.disabled
+                ? `<button class="playlist-btn enable-btn" data-index="${index}" style="background: #43CB44; color: black; border: none; font-weight: bold;">Enable</button>`
+                : `<button class="playlist-btn disable-btn" data-index="${index}">Disable</button>`
+            }
                     </div>
                 </div>
             </div>
@@ -3701,7 +4604,7 @@ function renderPlaylists() {
             console.log('[EVENT] Edit playlist button clicked for index:', idx);
             const playlist = savedPlaylists[idx];
             editingPlaylistIndex = idx;
-            
+
             if (playlist.epg && playlist.epg.startsWith('stalker:')) {
                 const stalkerTab = document.getElementById('tab-playlist-stalker');
                 if (stalkerTab) stalkerTab.click();
@@ -3709,7 +4612,7 @@ function renderPlaylists() {
                 if (importStalkerUrl) importStalkerUrl.value = playlist.source;
                 const mac = playlist.epg.substring(8);
                 if (importStalkerMac) importStalkerMac.value = mac;
-                
+
                 if (importStalkerSubmitBtn) importStalkerSubmitBtn.textContent = 'Update';
                 if (importStalkerCancelBtn) importStalkerCancelBtn.style.display = 'block';
             } else if (playlist.source.startsWith('http://') || playlist.source.startsWith('https://')) {
@@ -3737,7 +4640,7 @@ function renderPlaylists() {
                 if (importSubmitBtn) importSubmitBtn.textContent = 'Update';
                 if (importCancelBtn) importCancelBtn.style.display = 'block';
             }
-            
+
             const view = document.getElementById('playlist-view');
             if (view) view.scrollTo({ top: 0, behavior: 'smooth' });
         });
@@ -3758,9 +4661,9 @@ function renderPlaylists() {
             const targetPlaylist = savedPlaylists[idx];
             const source = targetPlaylist.source;
             const epgSource = targetPlaylist.epg !== 'Not Configured' ? targetPlaylist.epg : '';
-            
+
             const isStalker = targetPlaylist.epg && targetPlaylist.epg.startsWith('stalker:');
-            
+
             let allEpgSources = savedEpgs.slice();
             if (epgSource && !allEpgSources.includes(epgSource)) {
                 allEpgSources.push(epgSource);
@@ -3785,15 +4688,15 @@ function renderPlaylists() {
                     console.log('[API] Calling parseM3u for refresh.');
                     result = await window.iptvAPI.parseM3u(source, null, null, true);
                 }
-                
+
                 if (result && !result.error && (Array.isArray(result) || result.channels)) {
                     let channels = Array.isArray(result) ? result : result.channels;
-                    
+
                     if (isStalker && targetPlaylist.channels) {
-                        const existingLive = targetPlaylist.channels.filter(c => 
-                            c.type !== 'itv_category' && 
-                            c.type !== 'vod_category' && 
-                            c.type !== 'movie_category' && 
+                        const existingLive = targetPlaylist.channels.filter(c =>
+                            c.type !== 'itv_category' &&
+                            c.type !== 'vod_category' &&
+                            c.type !== 'movie_category' &&
                             c.type !== 'series_category'
                         );
                         channels = [...channels, ...existingLive];
@@ -3819,18 +4722,18 @@ function renderPlaylists() {
                             }
                         }
                     });
-                    
+
                     if (newCount > 0) {
                         showToast(`Refresh complete: Found ${newCount} new channels.`);
                     } else {
                         showToast(`Refresh complete: No new channels found.`);
                     }
-                    
+
                     let finalEpgSource = targetPlaylist.epg;
                     if (!isStalker && result.epg_url && (!targetPlaylist.epg || targetPlaylist.epg === 'Not Configured')) {
                         finalEpgSource = result.epg_url;
                     }
-                    
+
                     const tempPlaylist = {
                         id: targetPlaylist.id,
                         source: targetPlaylist.source,
@@ -3841,20 +4744,21 @@ function renderPlaylists() {
                         editIndex: idx,
                         exp_date: result.exp_date || targetPlaylist.exp_date || null
                     };
-                    
+
                     if (newCount > 0) {
                         openManageChannelsModal(-1, tempPlaylist);
                     } else {
                         savedPlaylists[idx] = tempPlaylist;
+                        markPlaylistsDirty();
                         updateState();
                     }
                 } else {
                     showToast('Failed to refresh playlist: ' + (result ? result.error : 'Unknown error'));
                 }
-            } catch(err) {
+            } catch (err) {
                 showToast('Refresh error: ' + err.message);
             }
-            
+
             e.target.textContent = originalText;
             e.target.disabled = false;
         });
@@ -3870,6 +4774,7 @@ function renderPlaylists() {
                 if (playlist.source) window.iptvAPI.clearCache(playlist.source);
                 await window.iptvAPI.deletePlaylist(playlist.id);
                 savedPlaylists.splice(idx, 1);
+                markPlaylistsDirty();
                 updateState(true); // skip slow full-save since it's already deleted in the database
                 showToast(`Playlist "${playlist.name}" deleted.`);
             });
@@ -3881,6 +4786,7 @@ function renderPlaylists() {
             const idx = e.target.getAttribute('data-index');
             console.log('[EVENT] Enable playlist button clicked for index:', idx);
             savedPlaylists[idx].disabled = false;
+            markPlaylistsDirty();
             updateState();
         });
     });
@@ -3890,6 +4796,7 @@ function renderPlaylists() {
             const idx = e.target.getAttribute('data-index');
             console.log('[EVENT] Disable playlist button clicked for index:', idx);
             savedPlaylists[idx].disabled = true;
+            markPlaylistsDirty();
             updateState();
         });
     });
@@ -4006,13 +4913,12 @@ function updatePlayingChannelIndicator(options = {}) {
 
     if (options.scroll) {
         setTimeout(() => {
-                activeEl.scrollIntoView({ behavior: 'smooth', block: options.block || 'nearest' });
+            activeEl.scrollIntoView({ behavior: 'smooth', block: options.block || 'nearest' });
         }, 100);
     }
 }
 
 function renderChannels() {
-    console.log('[UI] Rendering channel list.');
     refreshCurrentPlayingChannelIndex();
     const filterSelect = document.getElementById('playlist-filter');
     const filterVal = filterSelect ? filterSelect.value : 'all';
@@ -4020,10 +4926,18 @@ function renderChannels() {
     const channelSearch = document.getElementById('channel-search');
     const searchVal = channelSearch ? channelSearch.value.toLowerCase() : '';
 
+    // ── Render guard: skip full DOM rebuild if nothing visible has changed ────
+    const expandedKey = JSON.stringify([...window.expandedGroups]);
+    const renderKey   = `${filterVal}|${searchVal}|${expandedKey}|${allChannels.length}|${currentPlayingChannelIndex}`;
+    if (renderChannels._lastKey === renderKey) return;
+    renderChannels._lastKey = renderKey;
+    // ─────────────────────────────────────────────────────────────────────────
+
+    console.log('[UI] Rendering channel list.');
     const previousScroll = channelList.scrollTop;
 
     let html = '';
-    
+
     if (filterVal === 'favs') {
         const favsList = [];
         allChannels.forEach((channel, index) => {
@@ -4038,11 +4952,11 @@ function renderChannels() {
         if (favsList.length === 0) {
             html = `<div style="padding: 20px; color: #888; text-align: center;">No channels found.</div>`;
         } else {
-            favsList.forEach(({channel, index}) => {
+            favsList.forEach(({ channel, index }) => {
                 const rawTitle = channel.title || 'Unknown Channel';
                 const safeTitle = rawTitle.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.ico';
-                
+
                 const favClass = channel.favourite ? 'fav-btn active' : 'fav-btn';
                 const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
 
@@ -4062,10 +4976,10 @@ function renderChannels() {
 
         allChannels.forEach((channel, index) => {
             if (filterVal !== 'all' && String(channel.playlistId) !== String(filterVal)) return;
-            
+
             const rawTitle = channel.title || 'Unknown Channel';
             if (searchVal && !rawTitle.toLowerCase().includes(searchVal)) return;
-            
+
             const rawGroup = channel.group || 'Uncategorized';
             const channelGroup = rawGroup.trim();
             let groupKey = channelGroup;
@@ -4088,23 +5002,23 @@ function renderChannels() {
             sortedGroups.forEach(groupName => {
                 const channelsInGroup = groupedChannels[groupName];
                 const safeGroupName = groupName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                
+
                 const isExpanded = searchVal ? true : window.expandedGroups.has(groupName);
                 const expandIcon = isExpanded ? '▼' : '▶';
-                
+
                 const attrGroupName = String(groupName).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 html += `<div class="group-item" data-group="${attrGroupName}" tabindex="0" style="cursor: pointer; outline: none;">
                     <span>${safeGroupName} <span style="color:#888;font-size:0.8em;font-weight:normal;">(${channelsInGroup.length})</span></span>
                     <span class="group-expand-icon" style="color:#888;font-size:0.8em;">${expandIcon}</span>
                 </div>`;
-                
+
                 if (isExpanded) {
                     html += `<div class="group-channels-container" style="background: transparent;">`;
-                    channelsInGroup.forEach(({channel, index}) => {
+                    channelsInGroup.forEach(({ channel, index }) => {
                         const rawTitle = channel.title || 'Unknown Channel';
                         const safeTitle = rawTitle.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                         const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : 'assets/logo.ico';
-                        
+
                         const favClass = channel.favourite ? 'fav-btn active' : 'fav-btn';
                         const favBtnHtml = `<button class="${favClass}" data-fav-index="${index}" title="Toggle Favourite"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>`;
 
@@ -4132,12 +5046,12 @@ function renderChannels() {
 
     // Attach error handlers after inserting into DOM to bypass CSP inline restrictions
     channelList.querySelectorAll('img').forEach(img => {
-        img.onerror = function() {
+        img.onerror = function () {
             this.onerror = null;
             this.src = 'assets/logo.ico';
         };
     });
-    
+
     if (!window.initialScrollLoaded) {
         window.initialScrollLoaded = true;
         // If a startup autoplay is pending, skip restoring the old scroll so the
@@ -4169,7 +5083,7 @@ if (filterElement) {
 // Use Event Delegation to handle clicks for all channels efficiently
 channelList.addEventListener('click', (e) => {
     console.log('[EVENT] Click detected on channel list.');
-    
+
     const groupItem = e.target.closest('.group-item');
     if (groupItem) {
         const groupName = groupItem.getAttribute('data-group');
@@ -4212,7 +5126,7 @@ channelList.addEventListener('click', (e) => {
     if (item) {
         const index = item.getAttribute('data-index');
         const channel = allChannels[index];
-            if (channel) embedStream(channel, 'nearest');
+        if (channel) embedStream(channel, 'nearest');
     }
 });
 
@@ -4237,6 +5151,7 @@ if (clearBtn) {
             savedPlaylists = [];
             savedEpgs = [];
             channelMappings = {};
+            markPlaylistsDirty();
             updateState(true); // skip slow full-save since database is already cleared
             switchTab('playlist', document.getElementById('btn-playlist'));
             showToast("All playlists and cached data deleted.");
@@ -4274,32 +5189,32 @@ function getPlaybackProgressId(channel) {
 function getItemProgress(item, type) {
     const tmdbId = item.tmdb_id || item.tmdbId || '';
     const title = item.name || item.title;
-    
+
     // Find all progress rows that match this item
     const matches = allPlaybackProgress.filter(p => {
         if (tmdbId && p.tmdb_id == tmdbId) return true;
         if ((item.url || item.cmd) && p.stream_url === (item.url || item.cmd)) return true;
         if (title && p.title === title) return true;
-        
+
         // Match series episodes by ID prefix (for Stalker or M3U series without TMDB ID)
         if (type === 'vod' || type === 'series') {
             if (p.id.startsWith(`stalker:${title}:`)) return true;
         }
         return false;
     });
-    
+
     if (matches.length === 0) return null;
-    
+
     if (type === 'movie' || (type === 'vod' && item.type !== 'series')) {
         return matches[0]; // For movies, there is only one match
     }
-    
+
     // For series, sort by last_watched to find the active episode
     matches.sort((a, b) => new Date(b.last_watched) - new Date(a.last_watched));
-    
+
     const latest = matches[0];
     const allCompleted = matches.every(m => m.completed === 1);
-    
+
     return {
         position: latest.position,
         duration: latest.duration,
@@ -4318,16 +5233,16 @@ async function saveCurrentPlaybackProgress() {
     if (!currentChannel) return;
     const progressId = getPlaybackProgressId(currentChannel);
     if (!progressId) return;
-    
+
     const position = window.currentPlaybackTime || 0;
     const duration = window.currentPlaybackDuration || 0;
     if (position <= 0 || duration <= 0) return;
-    
+
     // Only save progress if watched for more than 5 seconds
     if (position < 5) return;
-    
+
     const completed = (position / duration >= 0.90) ? 1 : 0;
-    
+
     const params = {
         id: progressId,
         tmdb_id: currentChannel.tmdbId || null,
@@ -4339,7 +5254,7 @@ async function saveCurrentPlaybackProgress() {
         duration: duration,
         completed: completed
     };
-    
+
     await window.iptvAPI.savePlaybackProgress(params);
 }
 
@@ -4369,11 +5284,11 @@ function showResumePromptModal(savedSeconds, onChoice) {
         `;
         document.body.appendChild(modal);
     }
-    
+
     const minutes = Math.floor(savedSeconds / 60);
     const seconds = Math.floor(savedSeconds % 60);
     const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    
+
     modal.innerHTML = `
         <div style="background: rgba(30, 30, 40, 0.95); border: 1px solid rgba(187, 134, 252, 0.2); border-radius: 16px; padding: 30px; max-width: 400px; width: 90%; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
             <h3 style="color: #bb86fc; margin: 0 0 15px 0; font-size: 1.5em; font-weight: 700;">Resume Playback</h3>
@@ -4384,15 +5299,15 @@ function showResumePromptModal(savedSeconds, onChoice) {
             </div>
         </div>
     `;
-    
+
     modal.style.display = 'flex';
-    
+
     const startOverBtn = document.getElementById('resume-btn-start-over');
     const resumeBtn = document.getElementById('resume-btn-resume');
-    
+
     startOverBtn.replaceWith(startOverBtn.cloneNode(true));
     resumeBtn.replaceWith(resumeBtn.cloneNode(true));
-    
+
     document.getElementById('resume-btn-start-over').addEventListener('click', () => {
         modal.style.display = 'none';
         onChoice(false);
@@ -4408,7 +5323,7 @@ window.iptvAPI.onMpvFileLoaded(() => {
     window.isFileLoaded = true;
     window.isSwitchingStream = false;
     settlePlayerBoundsAfterLayout();
-    
+
     if (window.pendingResumeSeekTime !== null && window.pendingResumeSeekTime !== undefined) {
         const seekTime = window.pendingResumeSeekTime;
         window.pendingResumeSeekTime = null; // Clear immediately
@@ -4419,14 +5334,14 @@ window.iptvAPI.onMpvFileLoaded(() => {
 
 window.iptvAPI.onMpvPropChange((name, value) => {
     // console.log('[API RECV] onMpvPropChange', { name, value });
-    
+
     if (name === 'duration' && value !== null) {
         window.currentPlaybackDuration = value;
     }
 
     if (name === 'playback-time') {
         if (!window.isFileLoaded) return; // Ignore stale values from previous streams
-        
+
         const isFirstPlaybackFrame = !window.hasStartedPlayback;
         window.hasStartedPlayback = true;
         if (isFirstPlaybackFrame) {
@@ -4437,17 +5352,17 @@ window.iptvAPI.onMpvPropChange((name, value) => {
             clearTimeout(window.playbackTimeout);
             window.playbackTimeout = null;
         }
-        
+
         if (value !== null) {
             window.currentPlaybackTime = value;
-            
+
             if (window.pendingSeekPosition !== undefined && window.pendingSeekPosition !== null) {
                 const targetSeek = window.pendingSeekPosition;
                 window.pendingSeekPosition = null;
                 console.log('[STREAM RESUME] Executing pending seek to:', targetSeek);
                 window.iptvAPI.sendMpvCommand(['seek', targetSeek, 'absolute']);
             }
-            
+
             // Throttle progress saves to once every 5 seconds
             const now = Date.now();
             if (!window.lastProgressSaveTime || (now - window.lastProgressSaveTime >= 5000)) {
@@ -4499,18 +5414,18 @@ async function embedStream(channel, scrollMode = 'start') {
     console.log('[STREAM] Embedding stream for channel:', channel.title);
     streamActive = true;
     window.currentPlaybackHeaders = null;
-    
+
     if (window.activeEpgTrackingInterval) {
         clearInterval(window.activeEpgTrackingInterval);
         window.activeEpgTrackingInterval = null;
     }
-    
+
     if (window.playbackTimeout) {
         clearTimeout(window.playbackTimeout);
         window.playbackTimeout = null;
     }
     window.hasStartedPlayback = false;
-    
+
     currentPlayingChannelIndex = allChannels.findIndex(c => c.url === channel.url && c.title === channel.title);
     window.currentPlaybackChannel = channel;
 
@@ -4525,9 +5440,9 @@ async function embedStream(channel, scrollMode = 'start') {
 
     const fsBtn = document.getElementById('fullscreen-btn');
     if (fsBtn) fsBtn.style.display = 'block';
-    
+
     localStorage.setItem('lastPlayedChannelUrl', channel.url);
-    
+
     let finalStreamUrl = channel.url;
     const playlist = savedPlaylists.find(p => String(p.id) === String(channel.playlistId));
 
@@ -4539,7 +5454,7 @@ async function embedStream(channel, scrollMode = 'start') {
         const parts = finalStreamUrl.substring(18).split('|');
         const cmd = parts[0];
         const seriesNum = parts[1];
-        
+
         if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
             const mac = playlist.epg.substring(8);
             const resolved = await window.iptvAPI.resolveStalkerLink({ url: playlist.source, mac, type: 'vod', cmd, series: seriesNum });
@@ -4567,7 +5482,7 @@ async function embedStream(channel, scrollMode = 'start') {
         const parts = finalStreamUrl.substring(12).split('|');
         const type = parts[0];
         const cmd = parts.slice(1).join('|');
-        
+
         if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
             const mac = playlist.epg.substring(8);
             const resolved = await window.iptvAPI.resolveStalkerLink({ url: playlist.source, mac, type, cmd });
@@ -4597,7 +5512,7 @@ async function embedStream(channel, scrollMode = 'start') {
         const streamId = parts[1];
         let extension = null;
         let directSourceUrl = null;
-        
+
         if (type === 'live') {
             extension = null;
             if (parts[2]) {
@@ -4609,23 +5524,23 @@ async function embedStream(channel, scrollMode = 'start') {
                 directSourceUrl = decodeURIComponent(parts[3]);
             }
         }
-        
+
         if (playlist && playlist.source && playlist.source.startsWith('xtream-credentials:')) {
             const credParts = playlist.source.substring(19).split('|');
             const server = credParts[0];
             const username = credParts[1];
             const password = credParts[2];
-            
-            const resolvedSource = await window.iptvAPI.resolveXtreamLink({ 
-                server, 
-                username, 
-                password, 
-                streamId, 
-                type, 
+
+            const resolvedSource = await window.iptvAPI.resolveXtreamLink({
+                server,
+                username,
+                password,
+                streamId,
+                type,
                 extension,
                 directSourceUrl
             });
-            
+
             if (resolvedSource && resolvedSource.url) {
                 finalStreamUrl = resolvedSource.url;
                 window.currentPlaybackHeaders = resolvedSource.headers || null;
@@ -4673,7 +5588,7 @@ async function embedStream(channel, scrollMode = 'start') {
         detailLogo.style.maxWidth = '100px';
         detailLogo.style.maxHeight = '100px';
         detailLogo.style.objectFit = 'contain';
-        detailLogo.onerror = function() {
+        detailLogo.onerror = function () {
             this.onerror = null;
             this.src = 'assets/logo.ico';
         };
@@ -4684,21 +5599,21 @@ async function embedStream(channel, scrollMode = 'start') {
         detailRes.style.display = 'none'; // Hide the resolution display entirely
         // Safely hide the parent label container ("Resolution:") if it exists
         if (detailRes.parentElement && detailRes.parentElement.tagName === 'DIV') {
-            detailRes.parentElement.style.display = 'none'; 
+            detailRes.parentElement.style.display = 'none';
         }
     }
-    
+
     const parsedSeries = parseM3uSeriesName(channel.title);
     const hasSeriesPattern = channel.title && (
-        /s\d+\s*e\d+/i.test(channel.title) || 
+        /s\d+\s*e\d+/i.test(channel.title) ||
         /season\s*\d+\s*episode\s*\d+/i.test(channel.title) ||
         /\d+x\d+/i.test(channel.title)
     );
-    const isMovieOrEpisode = channel.type === 'movie' || 
-                             channel.type === 'series' || 
-                             channel.type === 'episode' || 
-                             hasSeriesPattern ||
-                             (channel.url && (channel.url.startsWith('stalker-series') || channel.url.startsWith('stalker-cmd:vod')));
+    const isMovieOrEpisode = channel.type === 'movie' ||
+        channel.type === 'series' ||
+        channel.type === 'episode' ||
+        hasSeriesPattern ||
+        (channel.url && (channel.url.startsWith('stalker-series') || channel.url.startsWith('stalker-cmd:vod')));
 
     if (isMovieOrEpisode) {
         loadAndRenderTmdbSynopsis(channel);
@@ -4721,12 +5636,13 @@ async function embedStream(channel, scrollMode = 'start') {
         const epgIds = [mappedId, channel.tvg_id, channel.tvg_name].filter(Boolean);
         console.log('[API] Calling getEpg for current stream.');
         const epgData = await window.iptvAPI.getEpg(epgIds, null, null);
-        
+
         let programmes = [];
         for (const id of epgIds) {
-            if (epgData[id] && epgData[id].length > 0) { programmes = epgData[id]; break; }
+            const lowId = id.toLowerCase();
+            if (epgData[lowId] && epgData[lowId].length > 0) { programmes = epgData[lowId]; break; }
         }
-        
+
         const detailProgram = document.getElementById('detail-program');
         const detailTimeslot = document.getElementById('detail-timeslot');
         const detailDescription = document.getElementById('detail-description');
@@ -4736,7 +5652,7 @@ async function embedStream(channel, scrollMode = 'start') {
                 detailProgram.textContent = currentProg.title || 'No Title';
                 const pStart = parseEpgTime(currentProg.start);
                 const pEnd = parseEpgTime(currentProg.stop);
-                const timeStr = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                const timeStr = `${pStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${pEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
                 if (detailTimeslot) {
                     detailTimeslot.textContent = timeStr;
                     detailTimeslot.style.display = 'block';
@@ -4755,9 +5671,9 @@ async function embedStream(channel, scrollMode = 'start') {
                 }
             }
         }
-        
+
         renderLiveEpgGrid();
-        
+
         // Setup pending EPG payload to send to MPV Lua script
         let progTitle = '', progDesc = '', progTime = '';
         if (currentProg) {
@@ -4765,16 +5681,16 @@ async function embedStream(channel, scrollMode = 'start') {
             progDesc = currentProg.desc || '';
             const pStart = parseEpgTime(currentProg.start);
             const pEnd = parseEpgTime(currentProg.stop);
-            progTime = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+            progTime = `${pStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${pEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
         }
-        
+
         window.pendingEpgUpdate = {
             title: channel.title || '',
             progTitle: progTitle,
             progDesc: progDesc,
             progTime: progTime
         };
-        
+
         // Periodically track EPG changes to dynamically update details card and OSC
         window.activeEpgTrackingInterval = setInterval(() => {
             updatePlayingChannelEpg(channel);
@@ -4810,11 +5726,11 @@ async function embedStream(channel, scrollMode = 'start') {
     }
 
     const rect = playerContainer.getBoundingClientRect();
-    
+
     // We keep window.pendingResumeSeekTime intact until file-loaded fires
     window.isFileLoaded = false;
     window.isSwitchingStream = true;
-    
+
     console.log('[API] Calling playMpvEmbedded. Final URL:', finalStreamUrl);
     window.iptvAPI.playMpvEmbedded({
         url: finalStreamUrl,
@@ -4839,10 +5755,10 @@ async function embedStream(channel, scrollMode = 'start') {
             streamActive = false;
             currentPlayingChannelIndex = -1;
             clearPlayingChannelIndicator();
-            
+
             // Stop MPV rendering
             window.iptvAPI.sendMpvCommand('stop');
-            
+
             const playerOverlay = document.getElementById('player-overlay');
             if (playerOverlay) {
                 playerOverlay.innerHTML = `
@@ -4861,10 +5777,10 @@ async function embedStream(channel, scrollMode = 'start') {
 // Hook Stalker query / header fallback retries when MPV triggers unrecognized format error
 window.iptvAPI.onStreamFailedRetry(async () => {
     if (!streamActive || !window.currentPlaybackChannel) return;
-    
+
     window.playbackFallbackCount = (window.playbackFallbackCount || 0) + 1;
     let url = window.currentPlaybackFinalUrl || '';
-    
+
     if (window.playbackFallbackCount > 3) {
         console.log('[MPV FALLBACK SYSTEM] Exceeded maximum fallback attempts (3). Halting stream.');
         // Show "not available" message for movie/episode/series types
@@ -4889,16 +5805,16 @@ window.iptvAPI.onStreamFailedRetry(async () => {
         }
         return;
     }
-    
+
     console.log(`[MPV FALLBACK SYSTEM] Stream failed. Triggering recovery and fallback attempt #${window.playbackFallbackCount}`);
-    
+
     // Rerun the resolver dynamically to get a fresh PlaybackSource if it's an Xtream Codes or Stalker stream
     let freshUrl = '';
     let freshHeaders = null;
-    
+
     const channel = window.currentPlaybackChannel;
     const playlist = savedPlaylists.find(p => String(p.id) === String(channel.playlistId));
-    
+
     if (channel.url.startsWith('xtream-stream:') && playlist && playlist.source.startsWith('xtream-credentials:')) {
         try {
             console.log('[MPV FALLBACK SYSTEM] Running dynamic Xtream Codes link re-resolver...');
@@ -4907,7 +5823,7 @@ window.iptvAPI.onStreamFailedRetry(async () => {
             const streamId = parts[1];
             let extension = null;
             let directSourceUrl = null;
-            
+
             if (type === 'live') {
                 extension = null;
                 if (parts[2]) directSourceUrl = decodeURIComponent(parts[2]);
@@ -4915,22 +5831,22 @@ window.iptvAPI.onStreamFailedRetry(async () => {
                 extension = parts[2] || null;
                 if (parts[3]) directSourceUrl = decodeURIComponent(parts[3]);
             }
-            
+
             const credParts = playlist.source.substring(19).split('|');
             const server = credParts[0];
             const username = credParts[1];
             const password = credParts[2];
-            
-            const resolvedSource = await window.iptvAPI.resolveXtreamLink({ 
-                server, 
-                username, 
-                password, 
-                streamId, 
-                type, 
+
+            const resolvedSource = await window.iptvAPI.resolveXtreamLink({
+                server,
+                username,
+                password,
+                streamId,
+                type,
                 extension,
                 directSourceUrl
             });
-            
+
             if (resolvedSource && resolvedSource.url) {
                 freshUrl = resolvedSource.url;
                 freshHeaders = resolvedSource.headers || null;
@@ -4946,7 +5862,7 @@ window.iptvAPI.onStreamFailedRetry(async () => {
             if (playlist && playlist.epg && playlist.epg.startsWith('stalker:') && !stalkerUrl.startsWith('stalker-cmd:')) {
                 stalkerUrl = `stalker-cmd:${channel.type === 'live' ? 'itv' : 'vod'}|${stalkerUrl}`;
             }
-            
+
             if (stalkerUrl.startsWith('stalker-series-ep:')) {
                 const parts = stalkerUrl.substring(18).split('|');
                 const cmd = parts[0];
@@ -4967,7 +5883,7 @@ window.iptvAPI.onStreamFailedRetry(async () => {
             console.error('[MPV FALLBACK SYSTEM] Stalker re-resolution failed:', err.message);
         }
     }
-    
+
     if (freshUrl) {
         url = freshUrl;
         window.currentPlaybackFinalUrl = freshUrl;
@@ -4975,7 +5891,7 @@ window.iptvAPI.onStreamFailedRetry(async () => {
             window.currentPlaybackHeaders = freshHeaders;
         }
     }
-    
+
     // Strategy 1: If there is a play_token parameter in URL, strip it out or alter query formats
     if (window.playbackFallbackCount === 1) {
         if (url.includes('play_token=')) {
@@ -4991,7 +5907,7 @@ window.iptvAPI.onStreamFailedRetry(async () => {
             console.log('[MPV FALLBACK SYSTEM] Strategy 1: Append force_auth flag:', url);
         }
     }
-    
+
     // Strategy 2: Strip standard transport extension (e.g. remove .mkv, .mp4, .ts, etc if portal is strict)
     if (window.playbackFallbackCount === 2) {
         if (url.includes('.mkv')) {
@@ -5009,7 +5925,7 @@ window.iptvAPI.onStreamFailedRetry(async () => {
             console.log('[MPV FALLBACK SYSTEM] Strategy 2: Stripping all URL queries:', url);
         }
     }
-    
+
     // Strategy 3: Attempt playing raw feed without Bearer authorization or with stripped MAC parameters
     if (window.playbackFallbackCount === 3) {
         if (url.includes('mac=')) {
@@ -5026,7 +5942,7 @@ window.iptvAPI.onStreamFailedRetry(async () => {
         clearTimeout(window.playbackTimeout);
         window.playbackTimeout = null;
     }
-    
+
     const rect = playerContainer.getBoundingClientRect();
     window.iptvAPI.playMpvEmbedded({
         url: url,
@@ -5055,20 +5971,20 @@ window.iptvAPI.onMpvExit((code) => {
     console.log('[API RECV] onMpvExit with code:', code);
     hideAutoplayOverlay();
     window.isSwitchingStream = false;
-    
+
     if (window.playbackTimeout) {
         clearTimeout(window.playbackTimeout);
         window.playbackTimeout = null;
     }
-    
+
     // Save current playback progress before cleanup
     saveCurrentPlaybackProgress();
-    
+
     if (streamActive) {
         streamActive = false;
         currentPlayingChannelIndex = -1;
         clearPlayingChannelIndicator();
- 
+
         const playerOverlay = document.getElementById('player-overlay');
         if (playerOverlay) {
             playerOverlay.innerHTML = `
@@ -5078,12 +5994,12 @@ window.iptvAPI.onMpvExit((code) => {
                 </div>
             `;
         }
- 
+
         const fsBtn = document.getElementById('fullscreen-btn');
         if (fsBtn) fsBtn.style.display = 'none';
     }
 });
- 
+
 window.iptvAPI.onMpvRestorePlayback(async () => {
     console.log('[RESTORE] Main process requested playback restore.');
     if (window.currentPlaybackChannel) {
@@ -5107,30 +6023,30 @@ window.iptvAPI.onMpvRestorePlayback(async () => {
 window.iptvAPI.onMpvStopped(() => {
     console.log('[API RECV] onMpvStopped');
     hideAutoplayOverlay();
-    
+
     if (window.isSwitchingStream) {
         console.log('[API RECV] Ignoring onMpvStopped because we are switching streams.');
         return;
     }
-    
+
     if (streamActive && !window.hasStartedPlayback) {
         console.log('[API RECV] Ignoring onMpvStopped because a new stream is currently loading.');
         return;
     }
-    
+
     if (window.playbackTimeout) {
         clearTimeout(window.playbackTimeout);
         window.playbackTimeout = null;
     }
-    
+
     // Save current playback progress before cleanup
     saveCurrentPlaybackProgress();
-    
+
     if (streamActive) {
         streamActive = false;
         currentPlayingChannelIndex = -1;
         clearPlayingChannelIndicator();
- 
+
         const playerOverlay = document.getElementById('player-overlay');
         if (playerOverlay) {
             playerOverlay.innerHTML = `
@@ -5140,18 +6056,18 @@ window.iptvAPI.onMpvStopped(() => {
                 </div>
             `;
         }
- 
+
         const fsBtn = document.getElementById('fullscreen-btn');
         if (fsBtn) fsBtn.style.display = 'none';
     }
-    
+
     // Switch back to origin VOD details view if stopped from a movie or series
     if (window.activeDetailsStreamInfo) {
         const streamInfo = window.activeDetailsStreamInfo;
         const originTab = streamInfo.type === 'series' ? 'vod' : 'movies';
         const tabBtnId = originTab === 'series' || originTab === 'vod' ? 'btn-vod' : 'btn-movies';
         const tabBtn = document.getElementById(tabBtnId);
-        
+
         if (tabBtn) {
             switchTab(originTab, tabBtn);
             // Re-open the movie details modal!
@@ -5183,17 +6099,17 @@ window.iptvAPI.onRemotePlayChannel(({ url, title, position, type, tmdbId, season
             episodeNum: episodeNum || null
         };
     }
-    
+
     switchTab('live-tv', document.getElementById('btn-live-tv'));
     window.currentPlaybackChannel = targetChannel;
-    
+
     embedStream(targetChannel);
     showToast(`Playing ${targetChannel.title}`);
-    
+
     if (position && parseFloat(position) > 0) {
         window.pendingSeekPosition = parseFloat(position);
     }
-    
+
     if (mainWindow && !mainWindow.isMinimized()) {
         mainWindow.focus();
     }
@@ -5220,38 +6136,51 @@ function triggerBoundsUpdate() {
     }
 }
 
+// ── Debounced MPV bounds settling ────────────────────────────────────────────
+// Replaces the old scatter-fire pattern (5 setTimeout × 2 rAF = 15 IPC calls)
+// with a 2-shot approach: one immediate pass + one debounced final settle.
+// This eliminates ~13 redundant IPC bridge crossings on every transition.
+let _boundsSettleImmediate = null;
+let _boundsSettleFinal     = null;
 function settlePlayerBoundsAfterLayout() {
-    for (let delay of [0, 16, 50, 120, 250]) {
-        setTimeout(() => {
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    triggerBoundsUpdate();
-                });
-            });
-        }, delay);
-    }
+    // Cancel any pending settle calls
+    if (_boundsSettleFinal) { clearTimeout(_boundsSettleFinal); _boundsSettleFinal = null; }
+    if (_boundsSettleImmediate) { cancelAnimationFrame(_boundsSettleImmediate); }
+
+    // Shot 1 — immediate rAF (catches the first layout pass)
+    _boundsSettleImmediate = requestAnimationFrame(() => {
+        requestAnimationFrame(triggerBoundsUpdate);
+    });
+
+    // Shot 2 — debounced final settle (catches late CSS reflows, Electron animation end)
+    _boundsSettleFinal = setTimeout(() => {
+        requestAnimationFrame(() => requestAnimationFrame(triggerBoundsUpdate));
+        _boundsSettleFinal = null;
+    }, 260);
 }
 
-// Use ResizeObserver to track exact pixel coordinates perfectly
+// Use ResizeObserver to track exact pixel coordinates perfectly.
+// Debounce via rAF to coalesce rapid resize events into a single IPC call.
+let _resizeRaf = null;
 const resizeObserver = new ResizeObserver(() => {
-    console.log('[EVENT] ResizeObserver triggered, updating MPV bounds.');
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            setTimeout(triggerBoundsUpdate, 0);
-        });
+    if (_resizeRaf) cancelAnimationFrame(_resizeRaf);
+    _resizeRaf = requestAnimationFrame(() => {
+        requestAnimationFrame(triggerBoundsUpdate);
+        _resizeRaf = null;
     });
 });
 resizeObserver.observe(playerContainer);
 
-// Forward mouse events directly to the embedded MPV Lua script
+// Forward mouse events directly to the embedded MPV Lua script (scaled by Device Pixel Ratio for High-DPI alignments)
 let lastMouseMove = 0;
 playerContainer.addEventListener('mousemove', (e) => {
     const now = Date.now();
     if (now - lastMouseMove > 30) {
         lastMouseMove = now;
         const rect = playerContainer.getBoundingClientRect();
-        const x = Math.round(e.clientX - rect.left);
-        const y = Math.round(e.clientY - rect.top);
+        const dpr = window.devicePixelRatio || 1;
+        const x = Math.round((e.clientX - rect.left) * dpr);
+        const y = Math.round((e.clientY - rect.top) * dpr);
         window.iptvAPI.sendMpvCommand(`script-message-to aivue electron-mouse-move ${x} ${y}`);
     }
 });
@@ -5310,7 +6239,7 @@ let vodGridScrollTop = 0;   // saved scroll position for the vod category list
 
 function switchTab(tabId, clickedBtn) {
     console.log('[UI] Switching tab to:', tabId);
-    
+
     // Close any open overlay modals when navigating away
     const detailsModal = document.getElementById('premium-details-modal');
     if (detailsModal) detailsModal.style.display = 'none';
@@ -5338,7 +6267,7 @@ function switchTab(tabId, clickedBtn) {
     // Update active styling
     navButtons.forEach(btn => btn.classList.remove('active'));
     if (clickedBtn) clickedBtn.classList.add('active');
-    
+
     // Toggle visibility for "Live TV" / "Playlist" views
     const isLive = tabId === 'live-tv';
     const isPlaylist = tabId === 'playlist';
@@ -5350,22 +6279,25 @@ function switchTab(tabId, clickedBtn) {
 
     if (sidebar) sidebar.style.setProperty('display', isLive ? 'flex' : 'none', 'important');
     if (mainView) mainView.style.setProperty('display', isLive ? 'flex' : 'none', 'important');
-    
+
     if (isLive) {
         setTimeout(() => {
             renderLiveEpgGrid();
+            // renderChannels() has its own render guard — calling it here is always
+            // safe; it will be a no-op if the list hasn't changed since last render.
             renderChannels();
+            settlePlayerBoundsAfterLayout();
         }, 50);
     }
-    
+
     const playlistView = document.getElementById('playlist-view');
     if (playlistView) playlistView.style.setProperty('display', isPlaylist ? 'flex' : 'none', 'important');
-    
+
     const epgView = document.getElementById('epg-view');
     if (epgView) epgView.style.setProperty('display', isEpg ? 'flex' : 'none', 'important');
-    
+
     if (isEpg) renderFullEpg();
-    
+
     const settingsView = document.getElementById('settings-view');
     if (settingsView) settingsView.style.setProperty('display', isSettings ? 'flex' : 'none', 'important');
 
@@ -5409,17 +6341,28 @@ function switchTab(tabId, clickedBtn) {
     }, 100);
 }
 
-document.getElementById('btn-live-tv').addEventListener('click', function() { if (!this.disabled) switchTab('live-tv', this); });
-document.getElementById('btn-playlist').addEventListener('click', function() { switchTab('playlist', this); });
-document.getElementById('btn-epg').addEventListener('click', function() { if (!this.disabled) switchTab('epg', this); });
-document.getElementById('btn-settings').addEventListener('click', function() { if (!this.disabled) switchTab('settings', this); });
-document.getElementById('btn-movies').addEventListener('click', function() { if (!this.disabled) switchTab('movies', this); });
-document.getElementById('btn-vod').addEventListener('click', function() { if (!this.disabled) switchTab('vod', this); });
-document.getElementById('btn-recording').addEventListener('click', function() { switchTab('recording', this); });
+document.getElementById('btn-live-tv').addEventListener('click', function () { if (!this.disabled) switchTab('live-tv', this); });
+document.getElementById('btn-playlist').addEventListener('click', function () { switchTab('playlist', this); });
+document.getElementById('btn-epg').addEventListener('click', function () { if (!this.disabled) switchTab('epg', this); });
+document.getElementById('btn-settings').addEventListener('click', function () { if (!this.disabled) switchTab('settings', this); });
+document.getElementById('btn-movies').addEventListener('click', function () { if (!this.disabled) switchTab('movies', this); });
+document.getElementById('btn-vod').addEventListener('click', function () { if (!this.disabled) switchTab('vod', this); });
+document.getElementById('btn-recording').addEventListener('click', function () { switchTab('recording', this); });
 
 let laneObserver = null;
 let loadedMovieLanes = {};
 let loadedVodLanes = {};
+
+function applyAppTheme(themeName) {
+    console.log('[Theme] Applying theme:', themeName);
+    const themeClasses = ['theme-teal', 'theme-green', 'theme-black'];
+    themeClasses.forEach(cls => document.body.classList.remove(cls));
+    if (themeName !== 'default' && themeName !== 'purple') {
+        document.body.classList.add(`theme-${themeName}`);
+    }
+    // Re-inject dynamic premium styles to ensure any var replacements resolve correctly
+    injectPremiumStyles();
+}
 
 function injectPremiumStyles() {
     if (document.getElementById('premium-catalog-styles')) {
@@ -5427,7 +6370,7 @@ function injectPremiumStyles() {
     }
     const style = document.createElement('style');
     style.id = 'premium-catalog-styles';
-    style.innerHTML = `
+    let cssText = `
         /* Premium Global Purple to Black Seamless Background Gradient */
         body {
             background: linear-gradient(180deg, #3c096c 0%, #240046 35%, #10002b 70%, #03001e 100%) !important;
@@ -5997,6 +6940,10 @@ function injectPremiumStyles() {
             to { transform: scale(1); opacity: 1; }
         }
     `;
+    cssText = cssText.replace(/#bb86fc/g, 'var(--primary-accent)');
+    cssText = cssText.replace(/187,\s*134,\s*252/g, 'var(--primary-accent-rgb)');
+    cssText = cssText.replace(/linear-gradient\(180deg,\s*#3c096c[^)]*\)/gi, 'var(--bg-gradient)');
+    style.innerHTML = cssText;
     document.head.appendChild(style);
 }
 
@@ -6009,7 +6956,7 @@ async function getEpisodesForSeries(streamInfo) {
         if (!playlist) return [];
 
         let episodes = [];
-        
+
         if (playlist.epg && playlist.epg.startsWith('stalker:')) {
             const url = playlist.source;
             const mac = playlist.epg.substring(8);
@@ -6045,7 +6992,7 @@ async function getEpisodesForSeries(streamInfo) {
                 });
             }
         }
-        
+
         // Sort episodes by season then episode number
         episodes.sort((a, b) => {
             const aS = parseInt(a.season || 1);
@@ -6053,7 +7000,7 @@ async function getEpisodesForSeries(streamInfo) {
             if (aS !== bS) return aS - bS;
             return parseInt(a.episodeNum || 1) - parseInt(b.episodeNum || 1);
         });
-        
+
         return episodes;
     } catch (e) {
         console.error('[AUTOPLAY] Error fetching series episodes:', e);
@@ -6076,16 +7023,16 @@ function hideAutoplayOverlay() {
 
 function showAutoplayOverlay(nextEp) {
     if (!window.isAutoplayEnabled) return;
-    
+
     hideAutoplayOverlay();
     nextEpisodeToPlay = nextEp;
-    
+
     const overlay = document.getElementById('autoplay-countdown-overlay');
     const titleEl = document.getElementById('autoplay-next-title');
     const descEl = document.getElementById('autoplay-countdown-text');
-    
+
     if (!overlay || !titleEl || !descEl) return;
-    
+
     // Set next episode display title
     let displayTitle = `S${nextEp.season}E${nextEp.episodeNum}`;
     if (nextEp.name) {
@@ -6097,14 +7044,14 @@ function showAutoplayOverlay(nextEp) {
         }
         displayTitle += ` - ${cleanName || nextEp.name}`;
     }
-    
+
     titleEl.textContent = displayTitle;
     titleEl.setAttribute('title', displayTitle);
-    
+
     autoplayCountdown = 15; // 15 seconds countdown
     descEl.textContent = `Playing in ${autoplayCountdown} seconds...`;
     overlay.style.display = 'block';
-    
+
     autoplayInterval = setInterval(() => {
         autoplayCountdown--;
         if (autoplayCountdown <= 0) {
@@ -6118,13 +7065,13 @@ function showAutoplayOverlay(nextEp) {
 
 async function playNextEpisode() {
     if (!nextEpisodeToPlay || !window.currentPlaybackChannel) return;
-    
+
     const nextEp = nextEpisodeToPlay;
     nextEpisodeToPlay = null;
     hideAutoplayOverlay();
-    
+
     console.log('[AUTOPLAY] Autoplaying next episode:', nextEp);
-    
+
     let epDisplayName = nextEp.name || `Episode ${nextEp.episodeNum}`;
     const playlist = savedPlaylists.find(p => p.id.toString() === (window.currentPlaybackChannel.playlistId ? window.currentPlaybackChannel.playlistId.toString() : ''));
     if (nextEp.name && playlist && !playlist.epg?.startsWith('stalker:')) {
@@ -6132,7 +7079,7 @@ async function playNextEpisode() {
         const cleaned = nextEp.name.replace(cleanPrefix, '').trim();
         if (cleaned) epDisplayName = cleaned;
     }
-    
+
     const nextChannel = {
         title: `${window.currentPlaybackChannel.seriesTitle} - S${nextEp.season}E${nextEp.episodeNum} - ${epDisplayName}`,
         url: nextEp.url,
@@ -6145,7 +7092,7 @@ async function playNextEpisode() {
         episodeNum: nextEp.episodeNum,
         tmdbData: window.currentPlaybackChannel.tmdbData
     };
-    
+
     embedStream(nextChannel);
     showToast(`Autoplaying: S${nextEp.season}E${nextEp.episodeNum}`);
 }
@@ -6154,10 +7101,10 @@ function findNextEpisode() {
     if (!window.currentPlaybackChannel || window.currentPlaybackChannel.type !== 'episode' || !window.currentPlayingSeriesEpisodes || window.currentPlayingSeriesEpisodes.length === 0) {
         return null;
     }
-    
+
     const currentSeason = parseInt(window.currentPlaybackChannel.season || 1);
     const currentEpNum = parseInt(window.currentPlaybackChannel.episodeNum || 1);
-    
+
     // Find the next episode in the sorted list
     return window.currentPlayingSeriesEpisodes.find(ep => {
         const epS = parseInt(ep.season || 1);
@@ -6171,7 +7118,7 @@ function findNextEpisode() {
 
 function parseM3uSeriesName(title) {
     let name = (title || '').trim();
-    
+
     // Pattern 1: S01E02 or similar
     let match = name.match(/^(.*?)\s*[-_.]?\s*s(\d+)\s*[-_.]?\s*e(\d+)/i);
     if (match) {
@@ -6181,7 +7128,7 @@ function parseM3uSeriesName(title) {
             episode: parseInt(match[3])
         };
     }
-    
+
     // Pattern 2: Season 1 Episode 2
     match = name.match(/^(.*?)\s+season\s+(\d+)\s+episode\s+(\d+)/i);
     if (match) {
@@ -6201,7 +7148,7 @@ function parseM3uSeriesName(title) {
             episode: parseInt(match[2])
         };
     }
-    
+
     // Pattern 4: 1x02 (season 1, episode 2)
     match = name.match(/^(.*?)\s+(\d+)x(\d+)/i);
     if (match) {
@@ -6211,7 +7158,7 @@ function parseM3uSeriesName(title) {
             episode: parseInt(match[3])
         };
     }
-    
+
     // Pattern 5: Ending with S01 or Season 1
     match = name.match(/^(.*?)\s*[-_.]?\s*s(\d+)$/i);
     if (match) {
@@ -6221,7 +7168,7 @@ function parseM3uSeriesName(title) {
             episode: 1
         };
     }
-    
+
     return {
         seriesTitle: name,
         season: 1,
@@ -6232,9 +7179,9 @@ function parseM3uSeriesName(title) {
 async function openMovieDetailsModal(streamInfo) {
     const modal = document.getElementById('premium-details-modal');
     if (!modal) return;
-    
+
     window.activeDetailsStreamInfo = streamInfo;
-    
+
     document.getElementById('details-title').textContent = streamInfo.title;
     document.getElementById('details-rating').textContent = '★ --';
     document.getElementById('details-year').textContent = '----';
@@ -6244,32 +7191,32 @@ async function openMovieDetailsModal(streamInfo) {
     document.getElementById('details-genres').textContent = '-';
     document.getElementById('details-crew').textContent = '-';
     document.getElementById('details-cast').textContent = '-';
-    
+
     const bannerUrl = streamInfo.logo || 'assets/logo.ico';
     document.getElementById('details-backdrop-banner').style.backgroundImage = `linear-gradient(to top, #181818, rgba(24, 24, 24, 0.7) 40%, rgba(24, 24, 24, 0) 80%), url(${bannerUrl})`;
-    
+
     const playBtn = document.getElementById('details-play-btn');
     const resumeBtn = document.getElementById('details-resume-btn');
     const episodesSection = document.getElementById('details-episodes-section');
-    
+
     episodesSection.style.display = 'none';
     playBtn.style.display = 'flex';
     if (resumeBtn) resumeBtn.style.display = 'none';
-    
+
     playBtn.replaceWith(playBtn.cloneNode(true));
     if (resumeBtn) resumeBtn.replaceWith(resumeBtn.cloneNode(true));
     const newPlayBtn = document.getElementById('details-play-btn');
     const newResumeBtn = document.getElementById('details-resume-btn');
-    
+
     let savedProgress = null;
     const progId = getPlaybackProgressId(streamInfo);
-    
+
     newPlayBtn.addEventListener('click', async () => {
         modal.style.display = 'none';
         switchTab('live-tv', document.getElementById('btn-live-tv'));
         embedStream(streamInfo);
     });
-    
+
     if (newResumeBtn) {
         newResumeBtn.addEventListener('click', () => {
             modal.style.display = 'none';
@@ -6289,9 +7236,9 @@ async function openMovieDetailsModal(streamInfo) {
             }
         });
     }
-    
+
     modal.style.display = 'flex';
-    
+
     let tmdbData = null;
     if (streamInfo.tmdbData) {
         tmdbData = streamInfo.tmdbData;
@@ -6307,7 +7254,7 @@ async function openMovieDetailsModal(streamInfo) {
             tmdbData = res;
         }
     }
-    
+
     if (tmdbData) {
         if (tmdbData.logo_path) {
             document.getElementById('details-title').innerHTML = `<img src="${tmdbData.logo_path}" alt="${(tmdbData.title || streamInfo.title).replace(/"/g, '&quot;')}" style="max-height: 120px; max-width: 100%; object-fit: contain; filter: drop-shadow(0 4px 15px rgba(0,0,0,0.8));">`;
@@ -6318,28 +7265,28 @@ async function openMovieDetailsModal(streamInfo) {
         if (tmdbData.backdrop_path) {
             document.getElementById('details-backdrop-banner').style.backgroundImage = `linear-gradient(to top, #181818, rgba(24, 24, 24, 0.7) 40%, rgba(24, 24, 24, 0) 80%), url(${tmdbData.backdrop_path})`;
         }
-        
+
         if (tmdbData.vote_average) {
             document.getElementById('details-rating').textContent = `★ ${parseFloat(tmdbData.vote_average).toFixed(1)}`;
         }
-        
+
         const releaseDate = tmdbData.release_date || tmdbData.first_air_date;
         if (releaseDate) {
             document.getElementById('details-year').textContent = new Date(releaseDate).getFullYear();
         }
-        
+
         if (tmdbData.runtime) {
             document.getElementById('details-duration').textContent = `${tmdbData.runtime}m`;
         } else if (tmdbData.episode_run_time && tmdbData.episode_run_time.length > 0) {
             document.getElementById('details-duration').textContent = `${tmdbData.episode_run_time[0]}m`;
         }
-        
+
         document.getElementById('details-overview').textContent = tmdbData.overview || 'No synopsis available.';
-        
+
         if (tmdbData.genres && tmdbData.genres.length > 0) {
             document.getElementById('details-genres').textContent = tmdbData.genres.map(g => g.name).join(', ');
         }
-        
+
         if (tmdbData.credits) {
             const crew = tmdbData.credits.crew || [];
             const directors = crew.filter(c => c.job === 'Director').map(c => c.name);
@@ -6351,7 +7298,7 @@ async function openMovieDetailsModal(streamInfo) {
                     document.getElementById('details-crew').textContent = creators.map(c => c.name).join(', ');
                 }
             }
-            
+
             const cast = tmdbData.credits.cast || [];
             if (cast.length > 0) {
                 document.getElementById('details-cast').textContent = cast.slice(0, 5).map(c => c.name).join(', ');
@@ -6360,30 +7307,30 @@ async function openMovieDetailsModal(streamInfo) {
     } else {
         document.getElementById('details-overview').textContent = 'No detailed information found on TMDB.';
     }
-    
+
     if (streamInfo.type === 'series') {
         episodesSection.style.display = 'block';
-        
+
         const epGrid = document.getElementById('details-episodes-grid');
         const seasonSelect = document.getElementById('details-season-select');
-        
+
         epGrid.innerHTML = getWinSpinnerHtml('Loading episodes...');
         seasonSelect.innerHTML = '';
-        
+
         // Re-clone play button to support series-specific first episode playback
         const seriesPlayBtn = document.getElementById('details-play-btn');
         seriesPlayBtn.replaceWith(seriesPlayBtn.cloneNode(true));
         const finalPlayBtn = document.getElementById('details-play-btn');
-        
+
         try {
             const playlist = savedPlaylists.find(p => p.id.toString() === streamInfo.playlistId.toString());
             let episodes = [];
-            
+
             if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
                 const url = playlist.source;
                 const mac = playlist.epg.substring(8);
                 const seriesId = streamInfo.tvg_id;
-                
+
                 episodes = await window.iptvAPI.getStalkerEpisodes({ url, mac, seriesId });
             } else {
                 // Group related flat M3U series channels
@@ -6406,7 +7353,7 @@ async function openMovieDetailsModal(streamInfo) {
                         }
                     });
                 }
-                
+
                 // Fallback: clicked item itself is the only episode
                 if (episodes.length === 0) {
                     episodes.push({
@@ -6419,15 +7366,15 @@ async function openMovieDetailsModal(streamInfo) {
                     });
                 }
             }
-            
+
             if (!episodes || episodes.length === 0) {
                 epGrid.innerHTML = '<div style="color: #888; padding: 20px;">No episodes found.</div>';
-                
+
                 // Default click to play the whole series details entry
                 finalPlayBtn.addEventListener('click', async () => {
                     modal.style.display = 'none';
                     switchTab('live-tv', document.getElementById('btn-live-tv'));
-                    
+
                     const progId = getPlaybackProgressId(streamInfo);
                     if (progId) {
                         const saved = await window.iptvAPI.getPlaybackProgress(progId);
@@ -6445,20 +7392,20 @@ async function openMovieDetailsModal(streamInfo) {
                 });
                 return;
             }
-            
+
             const seasons = {};
             episodes.forEach(ep => {
                 const sNum = ep.season || 1;
                 if (!seasons[sNum]) seasons[sNum] = [];
                 seasons[sNum].push(ep);
             });
-            
+
             Object.keys(seasons).forEach(sNum => {
                 seasons[sNum].sort((a, b) => parseInt(a.episodeNum || 0) - parseInt(b.episodeNum || 0));
             });
-            
+
             const sortedSeasons = Object.keys(seasons).sort((a, b) => parseInt(a) - parseInt(b));
-            
+
             // Reconfigure Play Button to play the first episode of the first season
             const firstSeason = sortedSeasons[0];
             const firstEp = seasons[firstSeason] ? seasons[firstSeason][0] : null;
@@ -6472,7 +7419,7 @@ async function openMovieDetailsModal(streamInfo) {
                 finalPlayBtn.addEventListener('click', async () => {
                     modal.style.display = 'none';
                     switchTab('live-tv', document.getElementById('btn-live-tv'));
-                    
+
                     const episodeChannel = {
                         title: `${streamInfo.title} - S${firstSeason}E${firstEp.episodeNum} - ${firstEpDisplayName}`,
                         url: firstEp.url,
@@ -6485,7 +7432,7 @@ async function openMovieDetailsModal(streamInfo) {
                         episodeNum: firstEp.episodeNum,
                         tmdbData: tmdbData
                     };
-                    
+
                     const progId = getPlaybackProgressId(episodeChannel);
                     if (progId) {
                         const saved = await window.iptvAPI.getPlaybackProgress(progId);
@@ -6505,7 +7452,7 @@ async function openMovieDetailsModal(streamInfo) {
                 finalPlayBtn.addEventListener('click', async () => {
                     modal.style.display = 'none';
                     switchTab('live-tv', document.getElementById('btn-live-tv'));
-                    
+
                     const progId = getPlaybackProgressId(streamInfo);
                     if (progId) {
                         const saved = await window.iptvAPI.getPlaybackProgress(progId);
@@ -6522,25 +7469,25 @@ async function openMovieDetailsModal(streamInfo) {
                     embedStream(streamInfo);
                 });
             }
-            
+
             const renderSeason = async (seasonNum) => {
                 epGrid.innerHTML = '';
                 const eps = seasons[seasonNum] || [];
                 const cardsMap = {};
-                
+
                 eps.forEach(ep => {
                     const card = document.createElement('div');
                     card.className = 'details-episode-card';
                     card.style.flex = '1 1 calc(33.33% - 10px)';
                     card.style.minWidth = '220px';
-                    
+
                     let epDisplayName = ep.name || `Episode ${ep.episodeNum}`;
                     if (ep.name && playlist && !playlist.epg?.startsWith('stalker:')) {
                         const cleanPrefix = new RegExp(`^.*?\\b(s\\d+e\\d+|\\d+x\\d+|episode\\s*\\d+|ep\\s*\\d+)\\b\\s*[-_.:]?\\s*`, 'i');
                         const cleaned = ep.name.replace(cleanPrefix, '').trim();
                         if (cleaned) epDisplayName = cleaned;
                     }
-                    
+
                     card.innerHTML = `
                         <div class="details-episode-thumbnail-wrapper">
                             <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.03); color: #bb86fc; font-size: 1.8em; font-weight: bold; font-family: 'Outfit', sans-serif;">
@@ -6561,11 +7508,11 @@ async function openMovieDetailsModal(streamInfo) {
                             <p class="details-episode-overview">Episode details loading...</p>
                         </div>
                     `;
-                    
+
                     card.addEventListener('click', async () => {
                         modal.style.display = 'none';
                         switchTab('live-tv', document.getElementById('btn-live-tv'));
-                        
+
                         const episodeChannel = {
                             title: `${streamInfo.title} - S${seasonNum}E${ep.episodeNum} - ${epDisplayName}`,
                             url: ep.url,
@@ -6578,7 +7525,7 @@ async function openMovieDetailsModal(streamInfo) {
                             episodeNum: ep.episodeNum,
                             tmdbData: tmdbData
                         };
-                        
+
                         const progId = getPlaybackProgressId(episodeChannel);
                         if (progId) {
                             const saved = await window.iptvAPI.getPlaybackProgress(progId);
@@ -6594,11 +7541,11 @@ async function openMovieDetailsModal(streamInfo) {
                         }
                         embedStream(episodeChannel);
                     });
-                    
+
                     epGrid.appendChild(card);
                     cardsMap[ep.episodeNum] = card;
                 });
-                
+
                 // Asynchronously request TMDB season details
                 if (tmdbData && tmdbData.tmdbId) {
                     try {
@@ -6607,7 +7554,7 @@ async function openMovieDetailsModal(streamInfo) {
                             tmdbId: tmdbData.tmdbId,
                             seasonNumber: seasonNum
                         });
-                        
+
                         if (tmdbSeason && tmdbSeason.episodes && !tmdbSeason.error) {
                             tmdbSeason.episodes.forEach(tmdbEp => {
                                 const card = cardsMap[tmdbEp.episode_number];
@@ -6628,7 +7575,7 @@ async function openMovieDetailsModal(streamInfo) {
                                     }
                                 }
                             });
-                            
+
                             eps.forEach(ep => {
                                 const card = cardsMap[ep.episodeNum];
                                 if (card) {
@@ -6667,7 +7614,7 @@ async function openMovieDetailsModal(streamInfo) {
                     });
                 }
             };
-            
+
             seasonSelect.innerHTML = '';
             sortedSeasons.forEach(sNum => {
                 const opt = document.createElement('option');
@@ -6675,13 +7622,13 @@ async function openMovieDetailsModal(streamInfo) {
                 opt.textContent = `Season ${sNum}`;
                 seasonSelect.appendChild(opt);
             });
-            
+
             seasonSelect.replaceWith(seasonSelect.cloneNode(true));
             const newSeasonSelect = document.getElementById('details-season-select');
             newSeasonSelect.addEventListener('change', (e) => {
                 renderSeason(e.target.value);
             });
-            
+
             if (sortedSeasons.length > 0) {
                 renderSeason(sortedSeasons[0]);
             }
@@ -6714,15 +7661,15 @@ async function renderMovies() {
     console.log('[CATALOG] Rendering Movies Catalog');
     injectPremiumStyles();
     initTmdbObserver();
-    
+
     const grid = document.getElementById('movies-grid');
     const empty = document.getElementById('movies-empty');
     if (!grid) return;
     grid.innerHTML = '';
-    
+
     const headerContainer = document.getElementById('movies-header-container');
     if (headerContainer) headerContainer.remove();
-    
+
     let hasMovies = false;
     let playlistsWithMovies = [];
     savedPlaylists.forEach(p => {
@@ -6740,13 +7687,13 @@ async function renderMovies() {
             }
         }
     });
-    
+
     if (!hasMovies) {
         if (empty) empty.style.display = 'block';
         return;
     }
     if (empty) empty.style.display = 'none';
-    
+
     const renderFolder = (title, count, onClick) => {
         const card = document.createElement('div');
         card.className = 'catalog-folder-card';
@@ -6867,7 +7814,7 @@ async function renderMovies() {
                 renderMovies();
             });
         });
-        
+
         Object.keys(m3uGroups).sort(sortAlphaNum).forEach(groupName => {
             renderFolder(groupName, m3uGroups[groupName].length, () => {
                 movieGridScrollTop = document.getElementById('movies-view')?.scrollTop || 0;
@@ -6936,17 +7883,17 @@ async function renderMovies() {
             items.forEach(item => {
                 const card = document.createElement('div');
                 card.className = 'catalog-card';
-                
+
                 const title = item.name || item.title;
                 const logoUrl = item.logo || 'assets/logo.ico';
                 const tmdbId = item.tmdb_id || item.tmdbId || '';
-                
+
                 card.dataset.title = title;
                 card.dataset.type = 'movie';
                 if (tmdbId) {
                     card.dataset.tmdbId = tmdbId;
                 }
-                
+
                 let progressOverlayHtml = '';
                 const progress = getItemProgress(item, 'movie');
                 if (progress) {
@@ -6966,7 +7913,7 @@ async function renderMovies() {
                         `;
                     }
                 }
-                
+
                 card.innerHTML = `
                     <div class="catalog-poster-wrapper">
                         <img class="catalog-poster" src="${logoUrl}" alt="${title}" onerror="this.onerror=null; this.src='assets/logo.ico';">
@@ -6979,7 +7926,7 @@ async function renderMovies() {
                         </div>
                     </div>
                 `;
-                
+
                 card.addEventListener('click', () => {
                     const streamInfo = {
                         title: title,
@@ -6990,14 +7937,14 @@ async function renderMovies() {
                         tvg_id: item.id || item.tvg_id,
                         tmdbId: tmdbId
                     };
-                    
+
                     if (card.dataset.tmdbLoaded === 'true' && card.dataset.tmdbData) {
                         streamInfo.tmdbData = JSON.parse(card.dataset.tmdbData);
                     }
-                    
+
                     openMovieDetailsModal(streamInfo);
                 });
-                
+
                 grid.appendChild(card);
                 if (tmdbObserver) tmdbObserver.observe(card);
             });
@@ -7062,15 +8009,15 @@ async function renderVod() {
     console.log('[CATALOG] Rendering VOD/Series Catalog');
     injectPremiumStyles();
     initTmdbObserver();
-    
+
     const grid = document.getElementById('vod-grid');
     const empty = document.getElementById('vod-empty');
     if (!grid) return;
     grid.innerHTML = '';
-    
+
     const headerContainer = document.getElementById('vod-header-container');
     if (headerContainer) headerContainer.remove();
-    
+
     let hasSeries = false;
     let playlistsWithSeries = [];
     savedPlaylists.forEach(p => {
@@ -7088,13 +8035,13 @@ async function renderVod() {
             }
         }
     });
-    
+
     if (!hasSeries) {
         if (empty) empty.style.display = 'block';
         return;
     }
     if (empty) empty.style.display = 'none';
-    
+
     const renderFolder = (title, count, onClick) => {
         const card = document.createElement('div');
         card.className = 'catalog-folder-card';
@@ -7215,7 +8162,7 @@ async function renderVod() {
                 renderVod();
             });
         });
-        
+
         Object.keys(m3uGroups).sort(sortAlphaNum).forEach(groupName => {
             renderFolder(groupName, m3uGroups[groupName].length, () => {
                 vodGridScrollTop = document.getElementById('vod-view')?.scrollTop || 0;
@@ -7284,17 +8231,17 @@ async function renderVod() {
             items.forEach(item => {
                 const card = document.createElement('div');
                 card.className = 'catalog-card';
-                
+
                 const title = item.name || item.title;
                 const logoUrl = item.logo || 'assets/logo.ico';
                 const tmdbId = item.tmdb_id || item.tmdbId || '';
-                
+
                 card.dataset.title = title;
                 card.dataset.type = 'series';
                 if (tmdbId) {
                     card.dataset.tmdbId = tmdbId;
                 }
-                
+
                 let progressOverlayHtml = '';
                 const progress = getItemProgress(item, 'vod');
                 if (progress) {
@@ -7314,7 +8261,7 @@ async function renderVod() {
                         `;
                     }
                 }
-                
+
                 card.innerHTML = `
                     <div class="catalog-poster-wrapper">
                         <img class="catalog-poster" src="${logoUrl}" alt="${title}" onerror="this.onerror=null; this.src='assets/logo.ico';">
@@ -7327,7 +8274,7 @@ async function renderVod() {
                         </div>
                     </div>
                 `;
-                
+
                 card.addEventListener('click', () => {
                     const streamInfo = {
                         title: title,
@@ -7338,14 +8285,14 @@ async function renderVod() {
                         tvg_id: item.id || item.tvg_id,
                         tmdbId: tmdbId
                     };
-                    
+
                     if (card.dataset.tmdbLoaded === 'true' && card.dataset.tmdbData) {
                         streamInfo.tmdbData = JSON.parse(card.dataset.tmdbData);
                     }
-                    
+
                     openMovieDetailsModal(streamInfo);
                 });
-                
+
                 grid.appendChild(card);
                 if (tmdbObserver) tmdbObserver.observe(card);
             });
@@ -7406,44 +8353,44 @@ async function renderVod() {
 
 async function openEpisodesModal(playlistId, seriesId, seriesTitle, seriesPosterUrl = null) {
     console.log('[UI] Opening episodes modal for:', seriesTitle, 'playlist:', playlistId, 'seriesId:', seriesId);
-    
+
     const modal = document.getElementById('episodes-modal');
     const modalTitle = document.getElementById('episodes-modal-title');
     const seasonsSidebar = document.getElementById('seasons-sidebar');
     const episodesGrid = document.getElementById('episodes-grid');
     const loader = document.getElementById('episodes-loading');
     const countBadge = document.getElementById('episodes-count-badge');
-    
+
     if (!modal) return;
-    
+
     modalTitle.textContent = seriesTitle;
     if (seasonsSidebar) seasonsSidebar.innerHTML = '';
     if (episodesGrid) episodesGrid.innerHTML = '';
     if (loader) loader.style.display = 'block';
     if (countBadge) countBadge.textContent = '0 Episodes';
-    
+
     modal.style.display = 'flex';
-    
+
     try {
         const playlist = savedPlaylists.find(p => p.id.toString() === playlistId.toString());
         if (!playlist || !playlist.epg || !playlist.epg.startsWith('stalker:')) {
             throw new Error("Stalker playlist credentials not found.");
         }
-        
+
         const url = playlist.source;
         const mac = playlist.epg.substring(8);
-        
+
         console.log('[API] Fetching episodes for series:', seriesId);
         const episodes = await window.iptvAPI.getStalkerEpisodes({ url, mac, seriesId });
-        
+
         if (loader) loader.style.display = 'none';
-        
+
         if (!episodes || episodes.length === 0) {
             if (episodesGrid) episodesGrid.innerHTML = '<div style="color: #888; padding: 20px;">No episodes found for this series.</div>';
             if (countBadge) countBadge.textContent = '0 Episodes';
             return;
         }
-        
+
         const seasons = {};
         episodes.forEach(ep => {
             const sNum = ep.season || 1;
@@ -7452,38 +8399,38 @@ async function openEpisodesModal(playlistId, seriesId, seriesTitle, seriesPoster
             }
             seasons[sNum].push(ep);
         });
-        
+
         Object.keys(seasons).forEach(sNum => {
             seasons[sNum].sort((a, b) => parseInt(a.episodeNum || 0) - parseInt(b.episodeNum || 0));
         });
-        
+
         const sortedSeasons = Object.keys(seasons).sort((a, b) => parseInt(a) - parseInt(b));
-        
+
         const renderSeasonEpisodes = (seasonNum) => {
             if (!episodesGrid) return;
             episodesGrid.innerHTML = '';
-            
+
             const seasonEpisodes = seasons[seasonNum] || [];
             if (countBadge) {
                 countBadge.textContent = `${seasonEpisodes.length} Episode${seasonEpisodes.length === 1 ? '' : 's'}`;
             }
-            
+
             seasonEpisodes.forEach(ep => {
                 const epCard = document.createElement('button');
                 epCard.className = 'episode-card';
                 epCard.style.width = '100%';
                 epCard.style.textAlign = 'left';
-                
+
                 epCard.innerHTML = `
                     <div class="episode-num">${ep.episodeNum || ''}</div>
                     <div class="episode-name" title="${ep.name}">${ep.name || `Episode ${ep.episodeNum}`}</div>
                 `;
-                
+
                 epCard.addEventListener('click', async () => {
                     console.log('[CATALOG] Playing Series Episode:', ep.name, ep.url);
                     modal.style.display = 'none';
                     switchTab('live-tv', document.getElementById('btn-live-tv'));
-                    
+
                     const seriesPoster = seriesPosterUrl || playlist.channels.find(c => c.tvg_id === seriesId)?.logo || 'assets/logo.ico';
                     const episodeChannel = {
                         title: `${seriesTitle} - S${seasonNum}E${ep.episodeNum} - ${ep.name || 'Episode'}`,
@@ -7495,7 +8442,7 @@ async function openEpisodesModal(playlistId, seriesId, seriesTitle, seriesPoster
                         season: seasonNum,
                         episodeNum: ep.episodeNum
                     };
-                    
+
                     const progId = getPlaybackProgressId(episodeChannel);
                     if (progId) {
                         const saved = await window.iptvAPI.getPlaybackProgress(progId);
@@ -7511,31 +8458,31 @@ async function openEpisodesModal(playlistId, seriesId, seriesTitle, seriesPoster
                     }
                     embedStream(episodeChannel);
                 });
-                
+
                 episodesGrid.appendChild(epCard);
             });
         };
-        
+
         if (seasonsSidebar) {
             sortedSeasons.forEach((seasonNum, index) => {
                 const tab = document.createElement('button');
                 tab.className = `season-tab ${index === 0 ? 'active' : ''}`;
                 tab.textContent = `Season ${seasonNum}`;
-                
+
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.season-tab').forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
                     renderSeasonEpisodes(seasonNum);
                 });
-                
+
                 seasonsSidebar.appendChild(tab);
             });
         }
-        
+
         if (sortedSeasons.length > 0) {
             renderSeasonEpisodes(sortedSeasons[0]);
         }
-        
+
     } catch (err) {
         console.error('[UI ERR] Failed to open episodes modal:', err);
         if (loader) loader.style.display = 'none';
@@ -7558,7 +8505,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    
+
     // Custom Window Control actions
     const winMinimize = document.getElementById('win-btn-minimize');
     const winMaximize = document.getElementById('win-btn-maximize');
@@ -7579,7 +8526,7 @@ document.addEventListener('DOMContentLoaded', () => {
             window.iptvAPI.closeWindow();
         });
     }
-    
+
     // Autoplay Overlay buttons setup
     const playNowBtn = document.getElementById('autoplay-play-now-btn');
     const cancelBtn = document.getElementById('autoplay-cancel-btn');
@@ -7602,7 +8549,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             try {
                 window.iptvAPI.closeMpvTrackSelector();
-            } catch (err) {}
+            } catch (err) { }
         }
     });
 });
@@ -7611,17 +8558,17 @@ function updateHeaderTime() {
     const el = document.getElementById('header-time-date');
     if (!el) return;
     const now = new Date();
-    
+
     const weekday = now.toLocaleDateString('en-US', { weekday: 'short' });
     const month = now.toLocaleDateString('en-US', { month: 'short' });
     const day = now.getDate();
-    
+
     let hours = now.getHours();
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
     hours = hours ? hours : 12;
-    
+
     el.textContent = `${weekday} • ${month} ${day} • ${hours}:${minutes} ${ampm}`;
 }
 
@@ -7637,18 +8584,18 @@ window.iptvAPI.onFullscreenChange((isFullscreen) => {
     const liveTopHalf = document.getElementById('live-top-half');
     const playerWrapper = document.getElementById('player-wrapper');
     const topHeader = document.getElementById('top-header');
-    
+
     const isLiveViewActive = document.getElementById('btn-live-tv').classList.contains('active');
 
     if (sidebar) sidebar.style.setProperty('display', (isFullscreen || !isLiveViewActive) ? 'none' : 'flex', 'important');
     if (navBar) navBar.style.setProperty('display', 'none', 'important');
     if (topHeader) topHeader.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
-    
+
     if (channelDetails) channelDetails.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
     if (liveBottomHalf) liveBottomHalf.style.setProperty('display', isFullscreen ? 'none' : 'flex', 'important');
-    
+
     if (liveTopHalf) liveTopHalf.style.setProperty('height', isFullscreen ? '100%' : '50%', 'important');
-    
+
     if (playerWrapper) {
         if (isFullscreen) {
             playerWrapper.style.setProperty('padding', '0', 'important');
@@ -7709,12 +8656,12 @@ async function backgroundAutoUpdate() {
     console.log('[BACKGROUND] Starting background auto-update process.');
     let hasUpdates = false;
     let epgSourcesToUpdate = new Set(savedEpgs);
-    
+
     for (let i = 0; i < savedPlaylists.length; i++) {
         const p = savedPlaylists[i];
         console.log(`[BACKGROUND] Checking playlist for update: ${p.name}`);
         if (p.disabled || !p.source) continue;
-        
+
         const isStalker = p.epg && p.epg.startsWith('stalker:');
         if (!isStalker && !p.source.startsWith('http') && !p.source.startsWith('https')) continue;
 
@@ -7729,10 +8676,10 @@ async function backgroundAutoUpdate() {
         if (result && !result.error && (Array.isArray(result) || result.channels)) {
             let channels = Array.isArray(result) ? result : result.channels;
             if (isStalker && p.channels) {
-                const existingLive = p.channels.filter(c => 
-                    c.type !== 'itv_category' && 
-                    c.type !== 'vod_category' && 
-                    c.type !== 'movie_category' && 
+                const existingLive = p.channels.filter(c =>
+                    c.type !== 'itv_category' &&
+                    c.type !== 'vod_category' &&
+                    c.type !== 'movie_category' &&
                     c.type !== 'series_category'
                 );
                 channels = [...channels, ...existingLive];
@@ -7756,6 +8703,7 @@ async function backgroundAutoUpdate() {
             });
 
             savedPlaylists[i].channels = channels;
+            markPlaylistsDirty();
             if (!isStalker && result.epg_url && (!savedPlaylists[i].epg || savedPlaylists[i].epg === 'Not Configured')) {
                 savedPlaylists[i].epg = result.epg_url;
             }
@@ -7763,25 +8711,26 @@ async function backgroundAutoUpdate() {
                 savedPlaylists[i].exp_date = result.exp_date;
             }
             hasUpdates = true;
-            
+
             if (!isStalker && p.epg && p.epg !== 'Not Configured') epgSourcesToUpdate.add(p.epg);
         }
     }
-    
+
     console.log('[BACKGROUND] Playlist updates found:', hasUpdates);
-    
+
     if (hasUpdates) {
         if (epgSourcesToUpdate.size > 0) {
             if (!window.activeEpgParsing) window.activeEpgParsing = new Set();
             epgSourcesToUpdate.forEach(epg => window.activeEpgParsing.add(epg));
             updateState(true); // Skip save if EPG will be updated next
-            
+
             const combinedEpgs = Array.from(epgSourcesToUpdate).join(',');
             await window.iptvAPI.updateEpg(combinedEpgs, null, true);
             epgChannelsData = await window.iptvAPI.getEpgChannels(combinedEpgs);
             await autoMapChannels(false, true); // SKIP SAVE
             console.log('[BACKGROUND] EPG data updated.');
-            
+            // await loadEpgLogos(); removed
+
             epgSourcesToUpdate.forEach(epg => window.activeEpgParsing.delete(epg));
             // EPG preloading skipped to load only on view.
             updateState(); // FINAL SAVE
@@ -7794,6 +8743,10 @@ async function backgroundAutoUpdate() {
 // Load saved channels on startup
 window.addEventListener('DOMContentLoaded', async () => {
     console.log('[LIFECYCLE] DOMContentLoaded event fired.');
+
+    // Load and apply the saved application theme
+    const savedTheme = localStorage.getItem('iptv_app_theme') || 'default';
+    applyAppTheme(savedTheme);
 
     // Initialize premium details modal events
     initDetailsModalEvents();
@@ -7835,7 +8788,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             }
         });
         // Fallback 
-        if (epgBtn.innerHTML.includes('EPG')) epgBtn.innerHTML = epgBtn.innerHTML.replace(/\bEPG\b/i, 'Guide');
+    if (epgBtn.innerHTML.includes('EPG')) epgBtn.innerHTML = epgBtn.innerHTML.replace(/\bEPG\b/i, 'Guide');
     }
 
     console.log('[API] Calling getMappings on startup.');
@@ -7855,13 +8808,18 @@ window.addEventListener('DOMContentLoaded', async () => {
                 epg: 'Not Configured',
                 disabled: false
             }];
+            markPlaylistsDirty();
         } else {
             savedPlaylists = data;
+            markPlaylistsDirty();
         }
-        
+
+        // Load EPG logo mapping on startup
+        // await loadEpgLogos(); removed
+
         console.log('[STARTUP] EPG pre-loading skipped to load only on view.');
         updateState();
-        
+
         if (allChannels.length > 0) {
             switchTab('live-tv', document.getElementById('btn-live-tv'));
             // Autoplay last played channel
@@ -7887,7 +8845,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                 allChannels.forEach(channel => {
                     if (filterVal === 'favs' && !channel.favourite) return;
                     if (filterVal !== 'all' && filterVal !== 'favs' && String(channel.playlistId) !== String(filterVal)) return;
-                    
+
                     const channelGroup = channel.group || 'Uncategorized';
                     if (!groupedChannels[channelGroup]) {
                         groupedChannels[channelGroup] = [];
@@ -7916,7 +8874,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         switchTab('playlist', document.getElementById('btn-playlist'));
         if (window.iptvAPI.hideSplash) window.iptvAPI.hideSplash();
     }
-    
+
     // Begin non-blocking background auto-update process (Delayed to allow the UI to finish rendering first)
     setTimeout(() => {
         const lastUpdate = localStorage.getItem('lastBackgroundUpdate');
@@ -7925,7 +8883,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             backgroundAutoUpdate();
             localStorage.setItem('lastBackgroundUpdate', now.toString());
         }
-        
+
         setInterval(() => {
             backgroundAutoUpdate();
             localStorage.setItem('lastBackgroundUpdate', Date.now().toString());
@@ -7934,7 +8892,41 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 
 
-    // Check for Reminders periodically
+    // Handle dynamically cached logos from background
+window.electron.ipcRenderer.on('logo-cached', (event, { originalUrl, cachedUrl }) => {
+    // 1. Update savedPlaylists — the source of truth for renderChannels()
+    // Without this, the next renderChannels() call re-injects the stale remote URL
+    if (typeof savedPlaylists !== 'undefined') {
+        savedPlaylists.forEach(p => {
+            if (p.channels) {
+                p.channels.forEach(ch => {
+                    if (ch.logo === originalUrl) ch.logo = cachedUrl;
+                });
+            }
+        });
+    }
+
+    // 2. Update allChannels in-memory array (populated from savedPlaylists at render time)
+    if (typeof allChannels !== 'undefined') {
+        allChannels.forEach(ch => {
+            if (ch.logo === originalUrl) ch.logo = cachedUrl;
+        });
+    }
+
+    // 3. Dynamically replace any currently visible image elements in the DOM
+    // CSS escapes are needed for URLs in querySelector attributes
+    try {
+        const safeUrl = originalUrl.replace(/"/g, '\\"');
+        const images = document.querySelectorAll(`img[src="${safeUrl}"]`);
+        images.forEach(img => {
+            img.src = cachedUrl;
+        });
+    } catch (e) {
+        console.warn('Failed to dynamically replace cached logo in DOM', e);
+    }
+});
+
+// Update stream info overlay periodically
     setInterval(() => {
         // console.log('[REMINDER] Checking for upcoming reminders.'); // Too noisy
         const now = new Date();
@@ -7995,7 +8987,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (focusables.length > 0) {
             focusables[0].focus();
         }
-        
+
         setInterval(() => {
             if (!document.hasFocus()) return;
             if (!document.activeElement || document.activeElement === document.body) {
@@ -8015,7 +9007,7 @@ function updateMpvEpgPayload(title, overview, time) {
         progDesc: overview || '',
         progTime: time || ''
     };
-    
+
     if (window.hasStartedPlayback) {
         const encoded = encodeURIComponent(JSON.stringify(epgUpdatePayload));
         window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`);
@@ -8026,47 +9018,48 @@ function updateMpvEpgPayload(title, overview, time) {
 
 async function updatePlayingChannelEpg(channel) {
     if (!channel || channel.type === 'movie' || channel.type === 'series' || channel.type === 'episode') return;
-    
+
     const mappedId = channelMappings[channel.title];
     const epgIds = [mappedId, channel.tvg_id, channel.tvg_name].filter(Boolean);
     if (epgIds.length === 0) return;
-    
+
     try {
         const epgData = await window.iptvAPI.getEpg(epgIds, null, null);
-        
+
         let programmes = [];
         for (const id of epgIds) {
-            if (epgData[id] && epgData[id].length > 0) { programmes = epgData[id]; break; }
+            const lowId = id.toLowerCase();
+            if (epgData[lowId] && epgData[lowId].length > 0) { programmes = epgData[lowId]; break; }
         }
-        
+
         const currentProg = getCurrentProgram(programmes);
         if (!currentProg) return;
-        
+
         const pStart = parseEpgTime(currentProg.start);
         const pEnd = parseEpgTime(currentProg.stop);
-        const timeStr = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-        
+        const timeStr = `${pStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${pEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
         const detailProgram = document.getElementById('detail-program');
         if (detailProgram && detailProgram.textContent !== currentProg.title) {
             console.log('[EPG TRACKER] Program changed to:', currentProg.title);
-            
+
             detailProgram.textContent = currentProg.title || 'No Title';
-            
+
             const detailTimeslot = document.getElementById('detail-timeslot');
             if (detailTimeslot) {
                 detailTimeslot.textContent = timeStr;
                 detailTimeslot.style.display = 'block';
             }
-            
+
             const detailDescription = document.getElementById('detail-description');
             if (detailDescription) {
                 detailDescription.textContent = currentProg.desc || 'No description available.';
                 detailDescription.style.display = 'block';
             }
-            
+
             // Also update the OSC inside MPV
             updateMpvEpgPayload(currentProg.title, currentProg.desc || '', timeStr);
-            
+
             // Also update pendingEpgUpdate payload
             window.pendingEpgUpdate = {
                 title: channel.title || '',
