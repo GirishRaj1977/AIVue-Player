@@ -2294,6 +2294,15 @@ async function loadChannelsFromDb() {
             console.error('[loadChannelsFromDb] EPG logos load error:', logoErr.message);
         }
 
+        // Pre-compute normalized EPG IDs for O(1) logo matching below
+        const normalizedEpgLogoKeys = {};
+        for (const epgId of Object.keys(epgLogos)) {
+            const norm = normalizeName(epgId);
+            if (norm && !normalizedEpgLogoKeys[norm]) {
+                normalizedEpgLogoKeys[norm] = epgId;
+            }
+        }
+
         const result = [];
         for (const p of playlists) {
             const pChannels = await getChannels.all(p.id);
@@ -2323,13 +2332,8 @@ async function loadChannelsFromDb() {
                     
                     if (!matchedEpgId && c.title) {
                         const normTitle = normalizeName(c.title);
-                        if (normTitle) {
-                            for (const epgId of Object.keys(epgLogos)) {
-                                if (normalizeName(epgId) === normTitle) {
-                                    matchedEpgId = epgId;
-                                    break;
-                                }
-                            }
+                        if (normTitle && normalizedEpgLogoKeys[normTitle]) {
+                            matchedEpgId = normalizedEpgLogoKeys[normTitle];
                         }
                     }
                     
@@ -2363,15 +2367,23 @@ async function loadChannelsFromDb() {
             // Queue background downloads for any logos not yet cached locally
             // We track which epg_id's were actually used so we only download needed ones
             const usedEpgIds = new Set();
+            
+            // Pre-compute reverse lookup for epgLogoRemote (url -> {key, info}) to avoid O(N*M) loop
+            const epgLogoRemoteByUrl = {};
+            for (const [key, info] of Object.entries(epgLogoRemote)) {
+                if (!epgLogoRemoteByUrl[info.url]) {
+                    epgLogoRemoteByUrl[info.url] = { key, info };
+                }
+            }
+
             for (const c of mappedChannels) {
                 if (c.logo && (c.logo.startsWith('http://') || c.logo.startsWith('https://'))) {
                     // Find which epg_id resolved to this logo
-                    for (const [key, info] of Object.entries(epgLogoRemote)) {
-                        if (info.url === c.logo) {
-                            if (!usedEpgIds.has(key)) {
-                                usedEpgIds.add(key);
-                                queueLogoDownload(info.epgId, info.url);
-                            }
+                    const match = epgLogoRemoteByUrl[c.logo];
+                    if (match) {
+                        if (!usedEpgIds.has(match.key)) {
+                            usedEpgIds.add(match.key);
+                            queueLogoDownload(match.info.epgId, match.info.url);
                         }
                     }
                 }
