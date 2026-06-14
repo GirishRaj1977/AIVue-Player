@@ -211,7 +211,7 @@ function sendEnded() {
 function renderNextLog() {
     if (currentLogIndex >= startupLogs.length) {
         progressFill.style.width = '100%';
-        setTimeout(sendEnded, 400); // Small pause for UX completion
+        setTimeout(sendEnded, 2500); // 2.5s pause to allow main UI (EPG + player) to fully load in background
         return;
     }
     

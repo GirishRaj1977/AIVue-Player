@@ -483,6 +483,12 @@ function createWindow() {
 
     mainWindow.loadFile('index.html');
 
+    mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+        if (level > 0) { // level 1 is warning, level 2 is error
+            console.error(`[RENDERER-LOG] L${level}: ${message} (${sourceId}:${line})`);
+        }
+    });
+
     // Wait until the HTML is fully rendered and ready to display
     mainWindow.once('ready-to-show', () => {
         isMainReadyToShow = true;
@@ -2050,14 +2056,16 @@ async function saveChannelsToDb(playlists) {
         return false;
     }
     const insertPlaylist = db.prepare(`
-        INSERT INTO playlists (id, name, source_url, epg_url, is_disabled, exp_date)
-        VALUES (@id, @name, @source, @epg, @disabled, @exp_date)
+        INSERT INTO playlists (id, name, source_url, epg_url, is_disabled, exp_date, stalker_username, stalker_password)
+        VALUES (@id, @name, @source, @epg, @disabled, @exp_date, @stalker_username, @stalker_password)
         ON CONFLICT(id) DO UPDATE SET
             name = @name,
             source_url = @source,
             epg_url = @epg,
             is_disabled = @disabled,
-            exp_date = @exp_date
+            exp_date = @exp_date,
+            stalker_username = @stalker_username,
+            stalker_password = @stalker_password
     `);
 
     const clearChannels = db.prepare(`DELETE FROM channels WHERE playlist_id = ?`);
@@ -2079,7 +2087,9 @@ async function saveChannelsToDb(playlists) {
                 source: p.source || '',
                 epg: p.epg || 'Not Configured',
                 disabled: p.disabled ? 1 : 0,
-                exp_date: p.exp_date || null
+                exp_date: p.exp_date || null,
+                stalker_username: p.username || null,
+                stalker_password: p.password || null
             });
 
             await clearChannels.run(p.id.toString());
@@ -2396,8 +2406,19 @@ async function loadChannelsFromDb() {
                 epg: p.epg_url,
                 disabled: p.is_disabled === 1,
                 exp_date: p.exp_date,
+                username: p.stalker_username,
+                password: p.stalker_password,
                 channels: mappedChannels
             });
+            
+            if (p.epg_url && p.epg_url.startsWith('stalker:')) {
+                const mac = p.epg_url.substring(8);
+                const baseUrl = getStalkerUrl(p.source_url);
+                stalkerCredentialsMap.set(`${baseUrl}|${mac}`, {
+                    username: p.stalker_username || '',
+                    password: p.stalker_password || ''
+                });
+            }
         }
         return result;
     } catch (e) {
@@ -2836,6 +2857,7 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
 
 const stalkerTokens = new Map();
 const stalkerAuthPromises = new Map();
+const stalkerCredentialsMap = new Map();
 
 async function authenticateStalker(baseUrl, mac, forceFresh = false) {
     const url = getStalkerUrl(baseUrl);
@@ -2853,28 +2875,35 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
     }
 
     const authPromise = (async () => {
+        const creds = stalkerCredentialsMap.get(cacheKey) || {};
+        const username = creds.username || '';
+        const password = creds.password || '';
+
+        const sn = crypto.createHash('md5').update(mac + 'sn').digest('hex');
+        const deviceId = crypto.createHash('sha256').update(mac + 'device1').digest('hex').toUpperCase();
+        const deviceId2 = crypto.createHash('sha256').update(mac + 'device2').digest('hex').toUpperCase();
+        const stbType = 'MAG250';
+        
         const handshakeUrl = `${url}?type=stb&action=handshake&key=&js=true`;
         const headers = {
-            'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
-            'X-User-Agent': 'Model: MAG250; Link: Ethernet',
+            'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 4 rev: 2116 Mobile Safari/533.3',
+            'X-User-Agent': `Model: ${stbType}; Link: Ethernet`,
             'Accept': '*/*',
             'Referer': url.replace('/server/load.php', '/c/index.html').replace('/portal.php', '/c/index.html'),
-            'Cookie': `mac=${mac}; stb_lang=en; timezone=GMT`
+            'Cookie': `mac=${mac}; stb_lang=en; timezone=GMT; sn=${sn}`
         };
 
         let phpSessionId = '';
         let token = '';
         
-        try {
-            const response = await fetch(handshakeUrl, { headers, signal: AbortSignal.timeout(15000) });
-            const setCookie = response.headers.get('set-cookie');
+        const extractPhpSessionId = (res) => {
+            const setCookie = res.headers.get('set-cookie');
             if (setCookie) {
                 const match = setCookie.match(/PHPSESSID=([^;]+)/);
                 if (match) phpSessionId = match[1];
             }
-            if (!phpSessionId && typeof response.headers.getSetCookie === 'function') {
-                const cookiesList = response.headers.getSetCookie();
-                for (const cookie of cookiesList) {
+            if (!phpSessionId && typeof res.headers.getSetCookie === 'function') {
+                for (const cookie of res.headers.getSetCookie()) {
                     const match = cookie.match(/PHPSESSID=([^;]+)/);
                     if (match) {
                         phpSessionId = match[1];
@@ -2882,51 +2911,31 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
                     }
                 }
             }
+        };
+
+        try {
+            const response = await fetch(handshakeUrl, { headers, signal: AbortSignal.timeout(15000) });
+            extractPhpSessionId(response);
             
             const text = await response.text();
-            if (!text || !text.trim()) {
-                console.warn('[STALKER ERR] Empty handshake response from', handshakeUrl);
-            } else {
+            if (text && text.trim()) {
                 try {
                     const handshakeData = JSON.parse(text);
                     token = handshakeData.js?.token || '';
-                } catch (err) {
-                    console.error('[STALKER ERR] Invalid JSON in handshake');
-                    console.error('URL:', handshakeUrl);
-                    console.error('Status:', response.status);
-                    console.error('Body:', text.substring(0, 1000));
-                }
+                } catch (err) { }
             }
         } catch (e) {
             console.error('[STALKER ERR] Handshake network failed:', e.message);
         }
         
-        const cookieHeader = `mac=${mac}; stb_lang=en; timezone=GMT` + (phpSessionId ? `; PHPSESSID=${phpSessionId}` : '');
-        const authHeaders = {
-            ...headers,
-            'Cookie': cookieHeader
-        };
+        let cookieHeader = `mac=${mac}; stb_lang=en; timezone=GMT; sn=${sn}` + (phpSessionId ? `; PHPSESSID=${phpSessionId}` : '');
+        let authHeaders = { ...headers, 'Cookie': cookieHeader };
+        if (token) authHeaders['Authorization'] = `Bearer ${token}`;
         
-        const profileUrl = `${url}?type=stb&action=get_profile&mac=${encodeURIComponent(mac)}&hd=1&auth_second_step=1`;
+        const profileUrl = `${url}?type=stb&action=get_profile&mac=${encodeURIComponent(mac)}&sn=${sn}&stb_type=${stbType}&device_id=${deviceId}&device_id2=${deviceId2}&hd=1&auth_second_step=1`;
         try {
             const response = await fetch(profileUrl, { headers: authHeaders, signal: AbortSignal.timeout(15000) });
-            
-            // Capture PHPSESSID from profile request as well!
-            const setCookie = response.headers.get('set-cookie');
-            if (setCookie) {
-                const match = setCookie.match(/PHPSESSID=([^;]+)/);
-                if (match) phpSessionId = match[1];
-            }
-            if (!phpSessionId && typeof response.headers.getSetCookie === 'function') {
-                const cookiesList = response.headers.getSetCookie();
-                for (const cookie of cookiesList) {
-                    const match = cookie.match(/PHPSESSID=([^;]+)/);
-                    if (match) {
-                        phpSessionId = match[1];
-                        break;
-                    }
-                }
-            }
+            extractPhpSessionId(response);
 
             const profileData = await response.json();
             if (profileData.js?.token) {
@@ -2934,6 +2943,42 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
             }
         } catch (e) {
             console.error('[STALKER ERR] Profile auth failed:', e.message);
+        }
+        
+        if (username && password) {
+            try {
+                cookieHeader = `mac=${mac}; stb_lang=en; timezone=GMT; sn=${sn}` + (phpSessionId ? `; PHPSESSID=${phpSessionId}` : '');
+                const doAuthHeaders = {
+                    ...headers,
+                    'Cookie': cookieHeader,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                };
+                if (token) doAuthHeaders['Authorization'] = `Bearer ${token}`;
+
+                const bodyParams = new URLSearchParams();
+                bodyParams.append('type', 'stb');
+                bodyParams.append('action', 'do_auth');
+                bodyParams.append('login', username);
+                bodyParams.append('password', password);
+                bodyParams.append('device_id', deviceId);
+                bodyParams.append('device_id2', deviceId2);
+                bodyParams.append('JsHttpRequest', '1-xml');
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: doAuthHeaders,
+                    body: bodyParams.toString(),
+                    signal: AbortSignal.timeout(15000)
+                });
+                extractPhpSessionId(response);
+                
+                const authData = await response.json();
+                if (authData.js?.token) {
+                    token = authData.js.token;
+                }
+            } catch (e) {
+                console.error('[STALKER ERR] do_auth step failed:', e.message);
+            }
         }
         
         const session = { phpSessionId, token, timestamp: Date.now() };
@@ -3034,6 +3079,11 @@ async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = 
                 console.warn(`[STALKER] Session error in JSON response: ${parsed.error || parsed.message || parsed.js?.error}. Re-authenticating...`);
                 stalkerTokens.delete(cacheKey);
                 return stalkerRequest(baseUrl, mac, action, extraParams, true);
+            }
+            if (action === 'create_link' && (!parsed || !parsed.js || !parsed.js.cmd || typeof parsed.js.cmd !== 'string' || !parsed.js.cmd.trim()) && !isRetry) {
+                console.warn(`[STALKER] Empty cmd in create_link response. Implicit expiry detected. Re-authenticating...`);
+                stalkerTokens.delete(cacheKey);
+                return stalkerRequest(baseUrl, mac, action, extraParams, true, true); // forceFresh=true
             }
             if (isRetry) {
                 console.log(`[STALKER] Retry succeeded for ${action}!`);
@@ -3314,9 +3364,12 @@ function trimCountryPrefix(text) {
     return current;
 }
 
-ipcMain.handle('parse-stalker', async (event, { url, mac }) => {
+ipcMain.handle('parse-stalker', async (event, { url, mac, username, password }) => {
     try {
         console.log('[STALKER IPC] Starting Stalker parsing for url:', url, 'mac:', mac);
+        
+        const baseUrl = getStalkerUrl(url);
+        stalkerCredentialsMap.set(`${baseUrl}|${mac}`, { username: username || '', password: password || '' });
         
         let allParsed = [];
         let expireDate = null;

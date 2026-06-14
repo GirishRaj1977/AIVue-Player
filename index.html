@@ -8,6 +8,7 @@
     <!-- Content Security Policy to prevent Electron warnings -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http: aivue-logo:">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="styles/premium.css">
 </head>
 <body>
     <!-- Premium Top Header -->
@@ -241,9 +242,11 @@
 
     <!-- Movies View -->
     <div id="movies-view" style="display: none; flex-grow: 1; flex-direction: column; overflow-y: auto;">
-        <div id="movies-back-btn-container" style="display: none; margin-bottom: 4px; align-self: flex-start;"></div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 20px;">
-            <h2 id="movies-title-header" style="color: #bb86fc; margin: 0; font-family: 'Inter', sans-serif !important;">Movies</h2>
+        <div style="position: sticky; top: 0; z-index: 100; background: transparent; padding: 20px 24px 10px 24px; display: flex; justify-content: space-between; align-items: center; gap: 20px;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div id="movies-back-btn-container" style="display: none;"></div>
+                <h2 id="movies-title-header" style="color: #bb86fc; margin: 0; font-family: 'Inter', sans-serif !important;">Movies</h2>
+            </div>
             <div style="position: relative; width: 300px;">
                 <input type="text" id="movies-search" placeholder="Search movies..." style="width: 100%; padding: 10px 15px 10px 40px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 20px; outline: none; font-size: 0.95em; transition: 0.3s; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);">
                 <svg viewBox="0 0 24 24" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; fill: rgba(255,255,255,0.5);"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
@@ -259,9 +262,11 @@
 
     <!-- VOD / Series View -->
     <div id="vod-view" style="display: none; flex-grow: 1; flex-direction: column; overflow-y: auto;">
-        <div id="vod-back-btn-container" style="display: none; margin-bottom: 4px; align-self: flex-start;"></div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 20px;">
-            <h2 id="vod-title-header" style="color: #bb86fc; margin: 0; font-family: 'Inter', sans-serif !important;">TV Series</h2>
+        <div style="position: sticky; top: 0; z-index: 100; background: transparent; padding: 20px 24px 10px 24px; display: flex; justify-content: space-between; align-items: center; gap: 20px;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div id="vod-back-btn-container" style="display: none;"></div>
+                <h2 id="vod-title-header" style="color: #bb86fc; margin: 0; font-family: 'Inter', sans-serif !important;">TV Series</h2>
+            </div>
             <div style="position: relative; width: 300px;">
                 <input type="text" id="vod-search" placeholder="Search series..." style="width: 100%; padding: 10px 15px 10px 40px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 20px; outline: none; font-size: 0.95em; transition: 0.3s; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);">
                 <svg viewBox="0 0 24 24" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; fill: rgba(255,255,255,0.5);"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
@@ -398,7 +403,14 @@
         </div>
     </div>
     
-    <!-- Link to your frontend logic -->
+        <!-- Link to your frontend logic -->
+    <script src="state.js"></script>
+    <script src="utils.js"></script>
+    <script src="ui-components.js"></script>
+    <script src="epg-matching.js"></script>
+    <script src="epg-mapping-ui.js"></script>
+    <script src="player.js"></script>
+    <script src="ui-virtualizer.js"></script>
     <script src="renderer.js"></script>
     <script src="navigation.js"></script>
     <script src="tmdb-renderer.js"></script>

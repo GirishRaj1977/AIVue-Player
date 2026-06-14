@@ -181,6 +181,8 @@ try {
             
             await db.exec("ALTER TABLE playlists ADD COLUMN exp_date TEXT").catch(() => {});
             await db.exec("ALTER TABLE epg_logos ADD COLUMN cached_logo TEXT").catch(() => {});
+            await db.exec("ALTER TABLE playlists ADD COLUMN stalker_username TEXT").catch(() => {});
+            await db.exec("ALTER TABLE playlists ADD COLUMN stalker_password TEXT").catch(() => {});
             
             // Clean up any malformed database rows from previous named parameter binding bugs
             await db.exec(`

@@ -58,7 +58,8 @@ async function processAndImportPlaylist(tempPlaylist, result, isStalker) {
     openManageChannelsModal(-1, tempPlaylist);
 }
 
-async function addPlaylist(source, customName, epgSource, editIndex = -1) {
+async function addPlaylist(source, customName, epgSource, editIndex = -1, username = '', password = '') {
+    customName = formatPlaylistName(customName) || formatPlaylistName(source);
     console.log('[PLAYLIST] Adding/editing playlist:', { source, customName, epgSource, editIndex });
     showGlobalSpinner("Authenticating...");
     try {
@@ -66,7 +67,7 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
         let result;
         if (isStalker) {
             console.log('[API] Calling parseStalker for new playlist.');
-            result = await window.iptvAPI.parseStalker({ url: source, mac: epgSource.substring(8) });
+            result = await window.iptvAPI.parseStalker({ url: source, mac: epgSource.substring(8), username, password });
         } else {
             console.log('[API] Calling parseM3u for new playlist.');
             result = await window.iptvAPI.parseM3u(source);
@@ -138,6 +139,11 @@ async function addPlaylist(source, customName, epgSource, editIndex = -1) {
                 editIndex: editIndex,
                 exp_date: result.exp_date || null
             };
+            
+            if (isStalker) {
+                if (username) tempPlaylist.username = username;
+                if (password) tempPlaylist.password = password;
+            }
             
             await processAndImportPlaylist(tempPlaylist, result, isStalker);
             return 'pending';
@@ -391,7 +397,14 @@ if (importStalkerSubmitBtn) {
         }
         let epgSource = `stalker:${mac.toUpperCase()}`;
         
-        const success = await addPlaylist(source, name, epgSource, editingPlaylistIndex);
+        let username = '';
+        let password = '';
+        const stalkerUserEl = document.getElementById('import-stalker-username');
+        const stalkerPassEl = document.getElementById('import-stalker-password');
+        if (stalkerUserEl) username = stalkerUserEl.value.trim();
+        if (stalkerPassEl) password = stalkerPassEl.value.trim();
+        
+        const success = await addPlaylist(source, name, epgSource, editingPlaylistIndex, username, password);
         
         if (success && success !== 'pending') {
             editingPlaylistIndex = -1;
@@ -399,6 +412,8 @@ if (importStalkerSubmitBtn) {
             if (importStalkerName) importStalkerName.value = '';
             if (importStalkerUrl) importStalkerUrl.value = '';
             if (importStalkerMac) importStalkerMac.value = '';
+            if (stalkerUserEl) stalkerUserEl.value = '';
+            if (stalkerPassEl) stalkerPassEl.value = '';
         }
     });
 }
