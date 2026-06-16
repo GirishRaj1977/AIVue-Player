@@ -1,5 +1,6 @@
 import sys
 import json
+import stalker_parser
 import urllib.request
 import urllib.error
 import os
@@ -258,12 +259,7 @@ def attach_epg(channels, epg_data, channel_mappings={}):
             )
     return channels
 
-def main():
-    if len(sys.argv) < 2:
-        print(json.dumps({"error": "No M3U source provided"}))
-        sys.exit(1)
-
-    source = sys.argv[1]
+def process_source(source):
 
     if source == "--epg-only":
         epg_source_arg = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -449,6 +445,40 @@ def main():
             
     except Exception as e:
         print(json.dumps({"error": str(e)}))
+
+def main():
+    if len(sys.argv) < 2:
+        print(json.dumps({"error": "No M3U source provided"}))
+        sys.exit(1)
+        
+    source = sys.argv[1]
+    
+    if source == "--stalker":
+        base_url = sys.argv[2] if len(sys.argv) > 2 else ""
+        mac = sys.argv[3] if len(sys.argv) > 3 else ""
+        username = sys.argv[4] if len(sys.argv) > 4 else ""
+        password = sys.argv[5] if len(sys.argv) > 5 else ""
+        try:
+            channels = stalker_parser.fetch_stalker_channels(base_url, mac, username, password)
+            print(json.dumps({"channels": channels, "epg_url": None, "exp_date": None}))
+        except Exception as e:
+            print(json.dumps({"error": str(e)}))
+        sys.exit(0)
+        
+    if source == "--resolve-stalker":
+        base_url = sys.argv[2] if len(sys.argv) > 2 else ""
+        mac = sys.argv[3] if len(sys.argv) > 3 else ""
+        cmd = sys.argv[4] if len(sys.argv) > 4 else ""
+        username = sys.argv[5] if len(sys.argv) > 5 else ""
+        password = sys.argv[6] if len(sys.argv) > 6 else ""
+        try:
+            url = stalker_parser.resolve_stalker_stream(base_url, mac, cmd, username, password)
+            print(json.dumps({"url": url}))
+        except Exception as e:
+            print(json.dumps({"error": str(e)}))
+        sys.exit(0)
+        
+    process_source(source)
 
 if __name__ == '__main__':
     main()
