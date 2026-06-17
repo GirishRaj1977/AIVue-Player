@@ -59,29 +59,33 @@ def fetch_content(url):
 
         return content, content_type
 
+import io
+
 def parse_epg(content, epg_data=None, filter_ids=None):
     if epg_data is None:
         epg_data = {}
     filter_ids_low = set(str(x).lower() for x in filter_ids) if filter_ids else None
     try:
-        root = ET.fromstring(content)
-        for prog in root.findall('programme'):
-            ch_id = prog.get('channel')
-            if not ch_id:
-                continue
-            ch_id_low = ch_id.lower()
-            if filter_ids_low and ch_id_low not in filter_ids_low:
-                continue
-            start = prog.get('start')
-            stop = prog.get('stop')
-            title_elem = prog.find('title')
-            title = title_elem.text if title_elem is not None else "Unknown"
-            desc_elem = prog.find('desc')
-            desc = desc_elem.text if desc_elem is not None else ""
-            
-            if ch_id_low not in epg_data:
-                epg_data[ch_id_low] = []
-            epg_data[ch_id_low].append({"start": start, "stop": stop, "title": title, "desc": desc})
+        # Wrap string in StringIO to support streaming iterparse
+        f = io.StringIO(content)
+        context = ET.iterparse(f, events=('end',))
+        for event, elem in context:
+            if elem.tag == 'programme':
+                ch_id = elem.get('channel')
+                if ch_id:
+                    ch_id_low = ch_id.lower()
+                    if not filter_ids_low or ch_id_low in filter_ids_low:
+                        start = elem.get('start')
+                        stop = elem.get('stop')
+                        title_elem = elem.find('title')
+                        title = title_elem.text if title_elem is not None else "Unknown"
+                        desc_elem = elem.find('desc')
+                        desc = desc_elem.text if desc_elem is not None else ""
+                        
+                        if ch_id_low not in epg_data:
+                            epg_data[ch_id_low] = []
+                        epg_data[ch_id_low].append({"start": start, "stop": stop, "title": title, "desc": desc})
+                elem.clear() # Free memory
     except Exception:
         pass
     return epg_data
@@ -217,6 +221,67 @@ def parse_m3u(content, source=""):
             if 'logo' not in current_channel:
                 current_channel['logo'] = ""
                 
+            # Classify stream type
+            title_lower = current_channel.get('title', '').lower()
+            group_lower = current_channel.get('group', '').lower()
+            url_lower = url.lower()
+            
+            # Match series patterns
+            has_series_pattern = bool(
+                re.search(r's\d+\s*e\d+', title_lower) or 
+                re.search(r'season\s*\d+\s*episode\s*\d+', title_lower) or 
+                re.search(r'\d+x\d+', title_lower)
+            )
+            
+            # A channel is VOD if its group or name suggests movies/series, and its URL is not a typical live stream
+            group_indicates_vod = (
+                "movie" in group_lower or
+                "cinema" in group_lower or
+                "films" in group_lower or
+                "vod" in group_lower or
+                "flick" in group_lower or
+                "theater" in group_lower or
+                "theatre" in group_lower or
+                "filme" in group_lower or
+                "pelicula" in group_lower or
+                "series" in group_lower or
+                "shows" in group_lower or
+                "season" in group_lower or
+                "episode" in group_lower or
+                "serial" in group_lower or
+                "novela" in group_lower or
+                has_series_pattern
+            )
+            
+            is_live_url = (
+                ".m3u8" in url_lower or
+                "/live" in url_lower or
+                "/stream" in url_lower or
+                "live-tv" in url_lower or
+                "/ch/" in url_lower
+            )
+            
+            is_vod_extension = url_lower.split('?')[0].endswith(('.mp4', '.mkv', '.avi', '.divx', '.flv', '.mov', '.wmv'))
+            
+            if (group_indicates_vod and not is_live_url) or is_vod_extension:
+                is_series = (
+                    "series" in group_lower or 
+                    "shows" in group_lower or 
+                    "season" in group_lower or 
+                    "episode" in group_lower or 
+                    "serial" in group_lower or 
+                    "novela" in group_lower or
+                    "/series/" in url_lower or
+                    "/episodes/" in url_lower or
+                    has_series_pattern
+                )
+                if is_series:
+                    current_channel['type'] = 'series'
+                else:
+                    current_channel['type'] = 'movie'
+            else:
+                current_channel['type'] = 'live'
+                
             channels.append(current_channel)
             current_channel = {} # Reset for the next channel
 
@@ -276,15 +341,18 @@ def process_source(source):
                             content = f.read()
                     
                     if content:
-                        root = ET.fromstring(content)
-                        for ch in root.findall('channel'):
-                            ch_id = ch.get('id')
-                            if not ch_id: continue
-                            display_name = ch.find('display-name')
-                            name = display_name.text if display_name is not None and display_name.text else ch_id
-                            icon_elem = ch.find('icon')
-                            icon = icon_elem.get('src', '') if icon_elem is not None else ''
-                            epg_channels.append({"id": ch_id, "name": name, "source": epg_source, "icon": icon})
+                        f = io.StringIO(content)
+                        context = ET.iterparse(f, events=('end',))
+                        for event, elem in context:
+                            if elem.tag == 'channel':
+                                ch_id = elem.get('id')
+                                if ch_id:
+                                    display_name = elem.find('display-name')
+                                    name = display_name.text if display_name is not None and display_name.text else ch_id
+                                    icon_elem = elem.find('icon')
+                                    icon = icon_elem.get('src', '') if icon_elem is not None else ''
+                                    epg_channels.append({"id": ch_id, "name": name, "source": epg_source, "icon": icon})
+                                elem.clear()
                 except Exception:
                     pass
         print(json.dumps(epg_channels))
@@ -304,25 +372,24 @@ def process_source(source):
                         with open(epg_source, 'r', encoding='utf-8', errors='ignore') as f:
                             content = f.read()
                     if content:
-                        root = ET.fromstring(content)
-                        for ch in root.findall('channel'):
-                            ch_id = ch.get('id')
-                            if not ch_id:
-                                continue
-                            icon_elem = ch.find('icon')
-                            if icon_elem is not None:
-                                src = icon_elem.get('src', '')
-                                if src:
-                                    # Store by channel ID (primary key)
-                                    logo_map[ch_id.lower()] = src
-                                    # Also store by display-name for channels with numeric IDs
-                                    # This enables fuzzy matching by channel name (e.g. "Aaj Tak.in")
-                                    if ch_id.isdigit():
-                                        display_name_elem = ch.find('display-name')
-                                        if display_name_elem is not None and display_name_elem.text:
-                                            dn = display_name_elem.text.strip()
-                                            if dn:
-                                                logo_map[dn.lower()] = src
+                        f = io.StringIO(content)
+                        context = ET.iterparse(f, events=('end',))
+                        for event, elem in context:
+                            if elem.tag == 'channel':
+                                ch_id = elem.get('id')
+                                if ch_id:
+                                    icon_elem = elem.find('icon')
+                                    if icon_elem is not None:
+                                        src = icon_elem.get('src', '')
+                                        if src:
+                                            logo_map[ch_id.lower()] = src
+                                            if ch_id.isdigit():
+                                                display_name_elem = elem.find('display-name')
+                                                if display_name_elem is not None and display_name_elem.text:
+                                                    dn = display_name_elem.text.strip()
+                                                    if dn:
+                                                        logo_map[dn.lower()] = src
+                                elem.clear()
                 except Exception:
                     pass
         print(json.dumps(logo_map))
@@ -474,6 +541,33 @@ def main():
         try:
             url = stalker_parser.resolve_stalker_stream(base_url, mac, cmd, username, password)
             print(json.dumps({"url": url}))
+        except Exception as e:
+            print(json.dumps({"error": str(e)}))
+        sys.exit(0)
+        
+    if source == "--stalker-categories":
+        base_url = sys.argv[2] if len(sys.argv) > 2 else ""
+        mac = sys.argv[3] if len(sys.argv) > 3 else ""
+        content_type = sys.argv[4] if len(sys.argv) > 4 else "itv"
+        username = sys.argv[5] if len(sys.argv) > 5 else ""
+        password = sys.argv[6] if len(sys.argv) > 6 else ""
+        try:
+            categories = stalker_parser.fetch_stalker_categories(base_url, mac, content_type, username, password)
+            print(json.dumps({"categories": categories}))
+        except Exception as e:
+            print(json.dumps({"error": str(e)}))
+        sys.exit(0)
+
+    if source == "--stalker-channels":
+        base_url = sys.argv[2] if len(sys.argv) > 2 else ""
+        mac = sys.argv[3] if len(sys.argv) > 3 else ""
+        content_type = sys.argv[4] if len(sys.argv) > 4 else "itv"
+        category_id = sys.argv[5] if len(sys.argv) > 5 else "*"
+        username = sys.argv[6] if len(sys.argv) > 6 else ""
+        password = sys.argv[7] if len(sys.argv) > 7 else ""
+        try:
+            channels = stalker_parser.fetch_stalker_channels_for_category(base_url, mac, content_type, category_id, username, password)
+            print(json.dumps({"channels": channels}))
         except Exception as e:
             print(json.dumps({"error": str(e)}))
         sys.exit(0)

@@ -84,5 +84,6 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     setConfirmToastActive: (active) => ipcRenderer.send('set-confirm-toast-active', active),
     closeMpvTrackSelector: () => ipcRenderer.send('close-mpv-track-selector'),
     log: (category, level, message) => ipcRenderer.send('write-log', { category, level, message }),
-    onTriggerRendererBoundsSync: (callback) => ipcRenderer.on('trigger-renderer-bounds-sync', () => callback())
+    onTriggerRendererBoundsSync: (callback) => ipcRenderer.on('trigger-renderer-bounds-sync', () => callback()),
+    onLogoCached: (callback) => ipcRenderer.on('logo-cached', (_event, data) => callback(data.originalUrl, data.cachedUrl))
 });

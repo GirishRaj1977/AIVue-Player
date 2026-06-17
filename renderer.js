@@ -1246,7 +1246,6 @@ function updateState(skipSave = false) {
             }
         });
 
-        allChannels.sort((a, b) => sortAlphaNum(a.title, b.title));
         window._lastBuiltVersion = window._playlistsVersion;
         renderChannels._lastKey = null; // force a DOM refresh after rebuild
 
@@ -5487,38 +5486,40 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 
     // Handle dynamically cached logos from background
-window.electron.ipcRenderer.on('logo-cached', (event, { originalUrl, cachedUrl }) => {
-    // 1. Update savedPlaylists — the source of truth for renderChannels()
-    // Without this, the next renderChannels() call re-injects the stale remote URL
-    if (typeof savedPlaylists !== 'undefined') {
-        savedPlaylists.forEach(p => {
-            if (p.channels) {
-                p.channels.forEach(ch => {
+    if (window.iptvAPI && window.iptvAPI.onLogoCached) {
+        window.iptvAPI.onLogoCached((originalUrl, cachedUrl) => {
+            // 1. Update savedPlaylists — the source of truth for renderChannels()
+            // Without this, the next renderChannels() call re-injects the stale remote URL
+            if (typeof savedPlaylists !== 'undefined') {
+                savedPlaylists.forEach(p => {
+                    if (p.channels) {
+                        p.channels.forEach(ch => {
+                            if (ch.logo === originalUrl) ch.logo = cachedUrl;
+                        });
+                    }
+                });
+            }
+
+            // 2. Update allChannels in-memory array (populated from savedPlaylists at render time)
+            if (typeof allChannels !== 'undefined') {
+                allChannels.forEach(ch => {
                     if (ch.logo === originalUrl) ch.logo = cachedUrl;
                 });
             }
-        });
-    }
 
-    // 2. Update allChannels in-memory array (populated from savedPlaylists at render time)
-    if (typeof allChannels !== 'undefined') {
-        allChannels.forEach(ch => {
-            if (ch.logo === originalUrl) ch.logo = cachedUrl;
+            // 3. Dynamically replace any currently visible image elements in the DOM
+            // CSS escapes are needed for URLs in querySelector attributes
+            try {
+                const safeUrl = originalUrl.replace(/"/g, '\\"');
+                const images = document.querySelectorAll(`img[src="${safeUrl}"]`);
+                images.forEach(img => {
+                    img.src = cachedUrl;
+                });
+            } catch (e) {
+                console.warn('Failed to dynamically replace cached logo in DOM', e);
+            }
         });
     }
-
-    // 3. Dynamically replace any currently visible image elements in the DOM
-    // CSS escapes are needed for URLs in querySelector attributes
-    try {
-        const safeUrl = originalUrl.replace(/"/g, '\\"');
-        const images = document.querySelectorAll(`img[src="${safeUrl}"]`);
-        images.forEach(img => {
-            img.src = cachedUrl;
-        });
-    } catch (e) {
-        console.warn('Failed to dynamically replace cached logo in DOM', e);
-    }
-});
 
 // Update stream info overlay periodically
     setInterval(() => {

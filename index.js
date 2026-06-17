@@ -1404,9 +1404,8 @@ ipcMain.on('set-confirm-toast-active', (event, active) => {
 });
 
 ipcMain.on('window-close', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.close();
-    }
+    isQuitting = true;
+    app.quit();
 });
 
 // Ensure the Cache directory exists within the OS-specific User Data folder
@@ -2237,8 +2236,10 @@ ipcMain.handle('remove-external-epg', async (event, url) => {
     if (!db) return false;
     try {
         await db.prepare('DELETE FROM external_epgs WHERE source_url = ?').run(url);
+        await db.prepare('DELETE FROM epg WHERE source_url = ?').run(url);
         return true;
     } catch (e) {
+        console.error('[DB ERR] Failed to remove EPG source and records:', e);
         return false;
     }
 });
@@ -3570,8 +3571,10 @@ async function executeLoadStalkerCategory({ url, mac, categoryId, isSeries, cate
                 type: 'live'
             }));
         } else {
+            const hasPortalSeriesFlags = itemList.some(m => m && (m.is_series == 1 || m.is_series == "1" || m.is_series == true));
             result = itemList.filter(m => {
                 if (params.type === 'series') return true;
+                if (!hasPortalSeriesFlags) return true; // If portal doesn't use is_series flag, don't filter out anything
                 const isItemSeries = m.is_series == 1 || m.is_series == "1" || m.is_series == true;
                 return isSeries ? isItemSeries : !isItemSeries;
             }).map(m => {
