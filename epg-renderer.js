@@ -1141,3 +1141,60 @@ async function renderFullEpg() {
         }
     }, 60000);
 }
+
+function getVisibleChannels() {
+    const visible = new Map();
+    const scrollContainer = document.getElementById('epg-scroll-container');
+    if (scrollContainer && typeof epgChannelsToRender !== 'undefined' && epgChannelsToRender.length > 0) {
+        const scrollTop = scrollContainer.scrollTop;
+        const viewportHeight = scrollContainer.clientHeight;
+        const rowHeight = 45;
+        const overscan = 5;
+        const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+        const endIndex = Math.min(epgChannelsToRender.length - 1, Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan);
+        for (let i = startIndex; i <= endIndex; i++) {
+            const ch = epgChannelsToRender[i];
+            if (ch) visible.set(`${ch.title}|${ch.url}`, ch);
+        }
+    }
+    const liveScrollContainer = document.getElementById('live-epg-scroll-container');
+    if (liveScrollContainer && typeof liveEpgChannelsToRender !== 'undefined' && liveEpgChannelsToRender.length > 0) {
+        const scrollTop = liveScrollContainer.scrollTop;
+        const viewportHeight = liveScrollContainer.clientHeight;
+        const rowHeight = 45;
+        const overscan = 5;
+        const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+        const endIndex = Math.min(liveEpgChannelsToRender.length - 1, Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan);
+        for (let i = startIndex; i <= endIndex; i++) {
+            const ch = liveEpgChannelsToRender[i];
+            if (ch) visible.set(`${ch.title}|${ch.url}`, ch);
+        }
+    }
+    return Array.from(visible.values());
+}
+
+if (window.iptvAPI && window.iptvAPI.onEpgProgressiveUpdate) {
+    window.iptvAPI.onEpgProgressiveUpdate(({ channelsUpdated }) => {
+        if (!channelsUpdated || channelsUpdated.length === 0) return;
+        
+        let needsFetch = false;
+        channelsUpdated.forEach(ch => {
+            const key = String(ch).toLowerCase();
+            if (epgCache[key]) {
+                delete epgCache[key];
+            }
+            if (epgLoadingSet.has(key)) {
+                epgLoadingSet.delete(key);
+            }
+            needsFetch = true;
+        });
+
+        if (needsFetch) {
+            const visible = getVisibleChannels();
+            if (visible.length > 0) {
+                // Fetch new data for visible channels from SQLite progressively
+                fetchEpgDataForChannels(visible);
+            }
+        }
+    });
+}

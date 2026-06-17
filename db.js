@@ -80,6 +80,7 @@ try {
     const initPromise = (async () => {
         try {
             await db.pragma('journal_mode = WAL');
+            await db.pragma('synchronous = NORMAL');
             
             await db.exec(`
                 CREATE TABLE IF NOT EXISTS playlists (
@@ -113,6 +114,14 @@ try {
                     title TEXT,
                     description TEXT,
                     source_url TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS epg_metadata (
+                    source_url TEXT PRIMARY KEY,
+                    etag TEXT,
+                    last_modified TEXT,
+                    last_update INTEGER,
+                    programme_count INTEGER
                 );
 
                 CREATE TABLE IF NOT EXISTS mappings (
@@ -162,6 +171,8 @@ try {
                 CREATE INDEX IF NOT EXISTS idx_channels_group ON channels(group_name);
                 CREATE INDEX IF NOT EXISTS idx_channels_title ON channels(title);
                 CREATE INDEX IF NOT EXISTS idx_epg_channel ON epg(channel_id);
+                CREATE INDEX IF NOT EXISTS idx_epg_start_time ON epg(start_time);
+                CREATE INDEX IF NOT EXISTS idx_epg_channel_start ON epg(channel_id, start_time);
             `);
             
             await db.exec("ALTER TABLE channels ADD COLUMN type TEXT DEFAULT 'live'").catch(() => {});

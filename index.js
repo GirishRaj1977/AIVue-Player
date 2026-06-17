@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, clipboard, Tray, Notification, screen, protocol, net: electronNet } = require('electron');
 const path = require('path');
 const { spawn, execFile, exec } = require('child_process');
+const { Worker } = require('worker_threads');
 const net = require('net');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -909,6 +910,12 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
     console.log('[APP] Shutdown completed');
+    if (typeof activeEpgWorkers !== 'undefined') {
+        for (const [source, worker] of activeEpgWorkers.entries()) {
+            worker.postMessage({ type: 'cancel' });
+            worker.terminate();
+        }
+    }
     if (playerShapeProcess && !playerShapeProcess.killed) {
         playerShapeProcess.kill();
     }
@@ -1437,6 +1444,7 @@ const cacheDir = path.join(app.getPath('userData'), 'cache');
 if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
 }
+const activeEpgWorkers = new Map();
 
 ipcMain.handle('get-ip-address', () => {
     const os = require('os');
@@ -1738,281 +1746,382 @@ ipcMain.handle('get-epg-channels', async (event, epgSources) => {
 });
 
 ipcMain.handle('update-epg', async (event, epgSources, filterIds, forceRefresh) => {
-    console.log('[IPC HANDLE] update-epg START', { epgSources, filterIds, forceRefresh });
-    console.time('update-epg');
-    if (!db) {
-        console.timeEnd('update-epg');
-        return false;
-    }
-    const sources = (epgSources || '').split(',').map(s => s.trim()).filter(s => s);
-    if (sources.length === 0) {
-        console.timeEnd('update-epg');
-        return true;
-    }
+    // Forward to background event listener immediately
+    ipcMain.emit('start-epg-update', event, epgSources, filterIds, forceRefresh);
+    return true;
+});
 
-    const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
-    const scriptPath = path.join(baseDir, 'backend', 'parser.py');
-    const env = Object.assign({}, process.env, { AIVUE_CACHE_DIR: cacheDir, AIVUE_FORCE_REFRESH: forceRefresh ? '1' : '0' });
+ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh) => {
+    console.log('[IPC ON] start-epg-update START', { epgSources, filterIds, forceRefresh });
+    if (!db) return;
+    const sources = (epgSources || '').split(',').map(s => s.trim()).filter(s => s);
+    if (sources.length === 0) return;
 
     for (const source of sources) {
         if (source.startsWith('xtream-epg:')) {
             console.log(`[XTREAM EPG] Fetching EPG for: ${source}`);
-            try {
-                const playlistRow = await db.prepare('SELECT source_url FROM playlists WHERE epg_url = ?').get(source);
-                if (playlistRow) {
-                    const credParts = playlistRow.source_url.substring(19).split('|');
-                    const server = credParts[0];
-                    const username = credParts[1];
-                    const password = credParts[2];
-                    
-                    const res = await xtreamFetch(server, username, password, 'get_simple_data_table');
-                    if (res && res.epg_data) {
-                        const deleteOld = db.prepare('DELETE FROM epg WHERE source_url = ?');
-                        const insert = db.prepare(`
-                            INSERT INTO epg (channel_id, start_time, stop_time, title, description, source_url)
-                            VALUES (@channel_id, @start, @stop, @title, @desc, @source)
-                        `);
+            // Runs asynchronously in background
+            (async () => {
+                try {
+                    const playlistRow = await db.prepare('SELECT source_url FROM playlists WHERE epg_url = ?').get(source);
+                    if (playlistRow) {
+                        const credParts = playlistRow.source_url.substring(19).split('|');
+                        const server = credParts[0];
+                        const username = credParts[1];
+                        const password = credParts[2];
                         
-                        const saveTx = db.transaction(async (epgDict) => {
-                            await deleteOld.run(source);
-                            let insertCount = 0;
-                            for (const [streamId, epList] of Object.entries(epgDict)) {
-                                if (Array.isArray(epList)) {
-                                    for (const ep of epList) {
-                                        if (!ep.start || !ep.end) continue;
-                                        // Convert "YYYY-MM-DD HH:MM:SS" to ISO format
-                                        let startIso = '';
-                                        let endIso = '';
-                                        try {
-                                            startIso = new Date(ep.start.trim().replace(' ', 'T')).toISOString();
-                                            endIso = new Date(ep.end.trim().replace(' ', 'T')).toISOString();
-                                        } catch (dateErr) {
-                                            continue;
+                        const res = await xtreamFetch(server, username, password, 'get_simple_data_table');
+                        if (res && res.epg_data) {
+                            const deleteOld = db.prepare('DELETE FROM epg WHERE source_url = ?');
+                            const insert = db.prepare(`
+                                INSERT INTO epg (channel_id, start_time, stop_time, title, description, source_url)
+                                VALUES (@channel_id, @start, @stop, @title, @desc, @source)
+                            `);
+                            
+                            const saveTx = db.transaction(async (epgDict) => {
+                                await deleteOld.run(source);
+                                let insertCount = 0;
+                                for (const [streamId, epList] of Object.entries(epgDict)) {
+                                    if (Array.isArray(epList)) {
+                                        for (const ep of epList) {
+                                            if (!ep.start || !ep.end) continue;
+                                            let startIso = '';
+                                            let endIso = '';
+                                            try {
+                                                startIso = new Date(ep.start.trim().replace(' ', 'T')).toISOString();
+                                                endIso = new Date(ep.end.trim().replace(' ', 'T')).toISOString();
+                                            } catch (dateErr) {
+                                                continue;
+                                            }
+                                            await insert.run({
+                                                channel_id: String(streamId).toLowerCase(),
+                                                start: startIso,
+                                                stop: endIso,
+                                                title: ep.title || 'No Title',
+                                                desc: ep.description || '',
+                                                source: source
+                                            });
+                                            insertCount++;
                                         }
-                                        await insert.run({
-                                            channel_id: String(streamId).toLowerCase(),
-                                            start: startIso,
-                                            stop: endIso,
-                                            title: ep.title || 'No Title',
-                                            desc: ep.description || '',
-                                            source: source
-                                        });
-                                        insertCount++;
                                     }
                                 }
-                            }
-                            console.log(`[XTREAM EPG] Saved ${insertCount} EPG entries to database.`);
-                        });
-                        await saveTx(res.epg_data);
+                                console.log(`[XTREAM EPG] Saved ${insertCount} EPG entries to database.`);
+                            });
+                            await saveTx(res.epg_data);
+                            mainWindow.webContents.send('epg-update-finished', { sourceUrl: source, status: 'success' });
+                        }
                     }
+                } catch (err) {
+                    console.error('[XTREAM EPG ERR] Failed to fetch EPG table:', err.message);
+                    mainWindow.webContents.send('epg-update-finished', { sourceUrl: source, status: 'error', error: err.message });
                 }
-            } catch (err) {
-                console.error('[XTREAM EPG ERR] Failed to fetch EPG table:', err.message);
-            }
+            })();
         } else if (source.startsWith('stalker:')) {
             const mac = source.substring(8);
             console.log(`[STALKER EPG] Fetching EPG for MAC: ${mac}`);
             
-            try {
-                // Find the playlist URL from the database
-                const playlistRow = await db.prepare('SELECT source_url FROM playlists WHERE epg_url = ?').get(source);
-                if (!playlistRow) {
-                    console.warn(`[STALKER EPG] No playlist found in DB for EPG source: ${source}`);
-                    continue;
-                }
-                
-                const baseUrl = playlistRow.source_url;
-                
-                // 1. Fetch ITV channels from the portal
-                let stalkerChannels = [];
+            (async () => {
                 try {
-                    const res = await stalkerRequest(baseUrl, mac, 'get_all_channels', { type: 'itv' });
-                    stalkerChannels = res.js?.data || (Array.isArray(res.js) ? res.js : []);
-                } catch (err) {
-                    console.error('[STALKER EPG] Failed to fetch all channels from portal:', err);
-                }
-                
-                if (!stalkerChannels || stalkerChannels.length === 0) {
-                    // Fallback: load from channels table in DB
-                    try {
-                        const rows = await db.prepare(`
-                            SELECT tvg_id AS id, title AS name
-                            FROM channels
-                            WHERE playlist_id = (SELECT id FROM playlists WHERE epg_url = ?) AND type = 'live'
-                        `).all(source);
-                        stalkerChannels = rows.map(r => ({ id: r.id, name: r.name }));
-                    } catch (dbErr) {
-                        console.error('[STALKER EPG] DB fallback failed:', dbErr);
+                    const playlistRow = await db.prepare('SELECT source_url FROM playlists WHERE epg_url = ?').get(source);
+                    if (!playlistRow) {
+                        console.warn(`[STALKER EPG] No playlist found in DB for EPG source: ${source}`);
+                        return;
                     }
-                }
-                
-                if (!stalkerChannels || stalkerChannels.length === 0) {
-                    console.log(`[STALKER EPG] No channels found to fetch EPG for: ${source}`);
-                    continue;
-                }
-                
-                // Smart Optimization: Filter EPG fetching list to only channels mapped in database plus a safety limit of unmapped ones.
-                // This prevents freezing/hanging the application and getting banned/rate-limited on massive Stalker playlists (e.g. 10,000+ channels).
-                let filteredStalkerChannels = [];
-                try {
-                    const mappedEpgIds = new Set();
-                    const rows = await db.prepare('SELECT DISTINCT epg_id FROM mappings WHERE epg_id IS NOT NULL').all();
-                    rows.forEach(r => mappedEpgIds.add(String(r.epg_id)));
-
-                    let unmappedCount = 0;
-                    const UNMAPPED_LIMIT = 100;
                     
-                    for (const ch of stalkerChannels) {
-                        const chId = String(chooseStalkerChannelId(ch));
-                        if (mappedEpgIds.has(chId)) {
-                            filteredStalkerChannels.push(ch);
-                        } else if (unmappedCount < UNMAPPED_LIMIT) {
-                            filteredStalkerChannels.push(ch);
-                            unmappedCount++;
-                        }
+                    const baseUrl = playlistRow.source_url;
+                    let stalkerChannels = [];
+                    try {
+                        const res = await stalkerRequest(baseUrl, mac, 'get_all_channels', { type: 'itv' });
+                        stalkerChannels = res.js?.data || (Array.isArray(res.js) ? res.js : []);
+                    } catch (err) {
+                        console.error('[STALKER EPG] Failed to fetch all channels from portal:', err);
                     }
-                    console.log(`[STALKER EPG] Filtered EPG fetch: total ${stalkerChannels.length} channels reduced to ${filteredStalkerChannels.length} (Mapped: ${filteredStalkerChannels.length - unmappedCount}, Unmapped safety limit: ${unmappedCount})`);
-                    stalkerChannels = filteredStalkerChannels;
-                } catch (filterErr) {
-                    console.error('[STALKER EPG] Failed to apply smart channels filter:', filterErr);
-                }
-
-                console.log(`[STALKER EPG] Fetching EPG for ${stalkerChannels.length} channels...`);
-                
-                // 2. Fetch EPG for all channels in parallel with limit
-                const stalkerEpgDict = {};
-                const chunkSize = 12; // concurrency limit
-                for (let i = 0; i < stalkerChannels.length; i += chunkSize) {
-                    const chunk = stalkerChannels.slice(i, i + chunkSize);
-                    await Promise.all(chunk.map(async (ch) => {
-                        const chId = chooseStalkerChannelId(ch);
-                        if (!chId) return;
-                        
+                    
+                    if (!stalkerChannels || stalkerChannels.length === 0) {
                         try {
-                            // Try get_short_epg first
-                            let epgRes = await stalkerRequest(baseUrl, mac, 'get_short_epg', { type: 'itv', ch_id: chId, size: '48', limit: 100, period: 72 });
-                            let events = extractStalkerEpgItems(epgRes);
-                            
-                            // If empty, try get_epg_info fallback
-                            if (!events || events.length === 0) {
-                                epgRes = await stalkerRequest(baseUrl, mac, 'get_epg_info', { type: 'itv', ch_id: chId, period: 72 });
-                                events = extractStalkerEpgItems(epgRes);
-                            }
-                            
-                            if (events && events.length > 0) {
-                                const normalized = normalizeStalkerEpgItems(events);
-                                if (normalized.length > 0) {
-                                    stalkerEpgDict[String(chId)] = normalized;
-                                }
-                            }
-                        } catch (e) {
-                            console.error(`[STALKER EPG ERR] Failed for channel ${chId}:`, e.message);
-                        }
-                    }));
-                }
-                
-                // 3. Save to database using a transaction
-                const deleteOld = db.prepare('DELETE FROM epg WHERE source_url = ?');
-                const insert = db.prepare(`
-                    INSERT INTO epg (channel_id, start_time, stop_time, title, description, source_url)
-                    VALUES (@channel_id, @start, @stop, @title, @desc, @source)
-                `);
-                
-                const saveTx = db.transaction(async (epgDict) => {
-                    await deleteOld.run(source);
-                    let insertCount = 0;
-                    for (const [chId, progs] of Object.entries(epgDict)) {
-                        for (const p of progs) {
-                            await insert.run({
-                                channel_id: String(chId).toLowerCase(),
-                                start: p.start || '',
-                                stop: p.stop || '',
-                                title: p.title || '',
-                                desc: p.desc || '',
-                                source: source
-                            });
-                            insertCount++;
+                            const rows = await db.prepare(`
+                                SELECT tvg_id AS id, title AS name
+                                FROM channels
+                                WHERE playlist_id = (SELECT id FROM playlists WHERE epg_url = ?) AND type = 'live'
+                            `).all(source);
+                            stalkerChannels = rows.map(r => ({ id: r.id, name: r.name }));
+                        } catch (dbErr) {
+                            console.error('[STALKER EPG] DB fallback failed:', dbErr);
                         }
                     }
-                    console.log(`[STALKER EPG] Inserted ${insertCount} EPG entries for ${source}`);
-                });
-                
-                await saveTx(stalkerEpgDict);
-            } catch (err) {
-                console.error(`[STALKER EPG] Failed to update for ${source}:`, err);
-            }
-            continue;
-        }
+                    
+                    if (!stalkerChannels || stalkerChannels.length === 0) {
+                        console.log(`[STALKER EPG] No channels found to fetch EPG for: ${source}`);
+                        return;
+                    }
+                    
+                    let filteredStalkerChannels = [];
+                    try {
+                        const mappedEpgIds = new Set();
+                        const rows = await db.prepare('SELECT DISTINCT epg_id FROM mappings WHERE epg_id IS NOT NULL').all();
+                        rows.forEach(r => mappedEpgIds.add(String(r.epg_id)));
 
-        try {
-            const args = [scriptPath, '--epg-dict', source, filterIds || ''];
-            const stdout = await new Promise((resolve, reject) => {
-                runParser(args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, timeout: 120000, env }, (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout);
-                });
-            });
+                        let unmappedCount = 0;
+                        const UNMAPPED_LIMIT = 100;
+                        
+                        for (const ch of stalkerChannels) {
+                            const chId = String(chooseStalkerChannelId(ch));
+                            if (mappedEpgIds.has(chId)) {
+                                filteredStalkerChannels.push(ch);
+                            } else if (unmappedCount < UNMAPPED_LIMIT) {
+                                filteredStalkerChannels.push(ch);
+                                unmappedCount++;
+                            }
+                        }
+                        console.log(`[STALKER EPG] Filtered EPG fetch: total ${stalkerChannels.length} channels reduced to ${filteredStalkerChannels.length}`);
+                        stalkerChannels = filteredStalkerChannels;
+                    } catch (filterErr) {
+                        console.error('[STALKER EPG] Failed to apply smart channels filter:', filterErr);
+                    }
 
-            const dict = JSON.parse(stdout);
-            
-            const deleteOld = db.prepare('DELETE FROM epg WHERE source_url = ?');
-            const insert = db.prepare(`
-                INSERT INTO epg (channel_id, start_time, stop_time, title, description, source_url)
-                VALUES (@channel_id, @start, @stop, @title, @desc, @source)
-            `);
+                    console.log(`[STALKER EPG] Fetching EPG for ${stalkerChannels.length} channels...`);
+                    
+                    const stalkerEpgDict = {};
+                    const chunkSize = 12;
+                    for (let i = 0; i < stalkerChannels.length; i += chunkSize) {
+                        const chunk = stalkerChannels.slice(i, i + chunkSize);
+                        await Promise.all(chunk.map(async (ch) => {
+                            const chId = chooseStalkerChannelId(ch);
+                            if (!chId) return;
+                            
+                            try {
+                                let epgRes = await stalkerRequest(baseUrl, mac, 'get_short_epg', { type: 'itv', ch_id: chId, size: '48', limit: 100, period: 72 });
+                                let events = extractStalkerEpgItems(epgRes);
+                                
+                                if (!events || events.length === 0) {
+                                    epgRes = await stalkerRequest(baseUrl, mac, 'get_epg_info', { type: 'itv', ch_id: chId, period: 72 });
+                                    events = extractStalkerEpgItems(epgRes);
+                                }
+                                
+                                if (events && events.length > 0) {
+                                    const normalized = normalizeStalkerEpgItems(events);
+                                    if (normalized.length > 0) {
+                                        stalkerEpgDict[String(chId)] = normalized;
+                                    }
+                                }
+                            } catch (e) {
+                                console.error(`[STALKER EPG ERR] Failed for channel ${chId}:`, e.message);
+                            }
+                        }));
+                    }
+                    
+                    const deleteOld = db.prepare('DELETE FROM epg WHERE source_url = ?');
+                    const insert = db.prepare(`
+                        INSERT INTO epg (channel_id, start_time, stop_time, title, description, source_url)
+                        VALUES (@channel_id, @start, @stop, @title, @desc, @source)
+                    `);
+                    
+                    const saveTx = db.transaction(async (epgDict) => {
+                        await deleteOld.run(source);
+                        let insertCount = 0;
+                        for (const [chId, progs] of Object.entries(epgDict)) {
+                            for (const p of progs) {
+                                await insert.run({
+                                    channel_id: String(chId).toLowerCase(),
+                                    start: p.start || '',
+                                    stop: p.stop || '',
+                                    title: p.title || '',
+                                    desc: p.desc || '',
+                                    source: source
+                                });
+                                insertCount++;
+                            }
+                        }
+                        console.log(`[STALKER EPG] Inserted ${insertCount} EPG entries for ${source}`);
+                    });
+                    
+                    await saveTx(stalkerEpgDict);
+                    mainWindow.webContents.send('epg-update-finished', { sourceUrl: source, status: 'success' });
+                } catch (err) {
+                    console.error(`[STALKER EPG] Failed to update for ${source}:`, err);
+                    mainWindow.webContents.send('epg-update-finished', { sourceUrl: source, status: 'error', error: err.message });
+                }
+            })();
+        } else {
+            // XMLTV/GZIP URL or local file stream parsing using EPG Worker Thread (Database-less)
+            (async () => {
+                try {
+                    if (activeEpgWorkers.has(source)) {
+                        console.log(`[EPG Main] Cancelling active worker for ${source}`);
+                        activeEpgWorkers.get(source).postMessage({ type: 'cancel' });
+                        activeEpgWorkers.get(source).terminate();
+                        activeEpgWorkers.delete(source);
+                    }
 
-            const saveTx = db.transaction(async (epgDict) => {
-                await deleteOld.run(source);
-                for (const [chId, progs] of Object.entries(epgDict)) {
-                    for (const p of progs) {
-                        await insert.run({
-                            channel_id: String(chId).toLowerCase(),
-                            start: p.start || '',
-                            stop: p.stop || '',
-                            title: p.title || '',
-                            desc: p.desc || '',
-                            source: source
+                    // 1. Clear existing EPG for this source in SQLite
+                    try {
+                        await db.prepare("DELETE FROM epg WHERE source_url = ?").run(source);
+                    } catch (e) {
+                        console.error('[EPG Main] Failed to clear old EPG entries:', e);
+                    }
+
+                    // 2. Query valid channel/mapping IDs
+                    let validChannelsList = [];
+                    try {
+                        const rows = await db.prepare("SELECT DISTINCT tvg_id, tvg_name FROM channels WHERE type = 'live'").all();
+                        const validSet = new Set();
+                        rows.forEach(r => {
+                            if (r.tvg_id) validSet.add(r.tvg_id.toLowerCase().trim());
+                            if (r.tvg_name) validSet.add(r.tvg_name.toLowerCase().trim());
+                        });
+                        const rows2 = await db.prepare("SELECT DISTINCT epg_id FROM mappings WHERE epg_id IS NOT NULL").all();
+                        rows2.forEach(r => {
+                            if (r.epg_id) validSet.add(r.epg_id.toLowerCase().trim());
+                        });
+                        validChannelsList = Array.from(validSet);
+                    } catch (e) {
+                        console.error('[EPG Main] Failed to query valid channels:', e);
+                    }
+
+                    // 3. Query metadata
+                    let cachedMeta = { etag: null, lastModified: null };
+                    try {
+                        const row = await db.prepare("SELECT etag, last_modified FROM epg_metadata WHERE source_url = ?").get(source);
+                        if (row) {
+                            cachedMeta = { etag: row.etag, lastModified: row.last_modified };
+                        }
+                    } catch (e) {}
+
+                    const dbPath = path.join(app.getPath('userData'), 'iptv.db');
+                    const workerPath = path.join(__dirname, 'epg-worker.js');
+
+                    const worker = new Worker(workerPath, {
+                        workerData: {
+                            cacheDir,
+                            epgSource: source,
+                            forceRefresh: !!forceRefresh,
+                            validChannelsList,
+                            cachedMeta
+                        }
+                    });
+                    activeEpgWorkers.set(source, worker);
+
+                    worker.on('message', async (msg) => {
+                        if (msg.type === 'insert_batch') {
+                            // Insert batch into SQLite from main thread (100% thread-safe!)
+                            const insert = db.prepare(`
+                                INSERT INTO epg (channel_id, start_time, stop_time, title, description, source_url)
+                                VALUES (@channel_id, @start, @stop, @title, @desc, @source)
+                            `);
+                            const saveTx = db.transaction(async (batch) => {
+                                for (const row of batch) {
+                                    await insert.run({
+                                        channel_id: row.channel_id,
+                                        start: row.start,
+                                        stop: row.stop,
+                                        title: row.title || 'No Title',
+                                        desc: row.desc || '',
+                                        source: source
+                                    });
+                                }
+                            });
+                            await saveTx(msg.batch).catch(err => console.error('[EPG Main] Batch insert failed:', err));
+                        } else if (msg.type === 'save_logo') {
+                            db.prepare("INSERT OR REPLACE INTO epg_logos (epg_id, logo_url) VALUES (?, ?)")
+                              .run(msg.channelId, msg.logoUrl)
+                              .catch(() => {});
+                        } else if (msg.type === 'progress') {
+                            if (mainWindow && !mainWindow.isDestroyed()) {
+                                mainWindow.webContents.send('epg-progressive-update', {
+                                    sourceUrl: source,
+                                    channelsUpdated: msg.channelsUpdated
+                                });
+                            }
+                        } else if (msg.type === 'done') {
+                            console.log(`[EPG Main] Worker finished parsing ${source}. Count: ${msg.count}`);
+                            activeEpgWorkers.delete(source);
+                            
+                            // Prune old EPG
+                            const retentionStart = Math.floor(Date.now() / 1000) - 24 * 3600;
+                            await db.prepare("DELETE FROM epg WHERE stop_time < ?").run(retentionStart).catch(() => {});
+                            
+                            // Update metadata in SQLite
+                            await db.prepare(`
+                                INSERT OR REPLACE INTO epg_metadata (source_url, etag, last_modified, last_update, programme_count)
+                                VALUES (?, ?, ?, ?, ?)
+                            `).run(source, msg.etag || null, msg.lastModified || null, Date.now(), msg.count).catch(() => {});
+
+                            if (mainWindow && !mainWindow.isDestroyed()) {
+                                mainWindow.webContents.send('epg-update-finished', {
+                                    sourceUrl: source,
+                                    status: msg.status || 'success',
+                                    count: msg.count
+                                });
+                            }
+                        } else if (msg.type === 'error') {
+                            console.error(`[EPG Main] Worker error for ${source}:`, msg.message);
+                            activeEpgWorkers.delete(source);
+                            if (mainWindow && !mainWindow.isDestroyed()) {
+                                mainWindow.webContents.send('epg-update-finished', {
+                                    sourceUrl: source,
+                                    status: 'error',
+                                    error: msg.message
+                                });
+                            }
+                        }
+                    });
+
+                    worker.on('error', (err) => {
+                        console.error(`[EPG Main] Worker execution error for ${source}:`, err);
+                        activeEpgWorkers.delete(source);
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            mainWindow.webContents.send('epg-update-finished', {
+                                sourceUrl: source,
+                                status: 'error',
+                                error: err.message
+                            });
+                        }
+                    });
+
+                    worker.on('exit', (code) => {
+                        activeEpgWorkers.delete(source);
+                    });
+                } catch (err) {
+                    console.error(`[EPG Main] Failed to spawn worker for ${source}:`, err);
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('epg-update-finished', {
+                            sourceUrl: source,
+                            status: 'error',
+                            error: err.message
                         });
                     }
                 }
-            });
-
-            await saveTx(dict);
-
-            // Save EPG logos for this XMLTV source
-            try {
-                const logoMap = await getEpgLogosInternal(source);
-                if (logoMap && Object.keys(logoMap).length > 0) {
-                    const insertLogo = db.prepare(`
-                        INSERT OR REPLACE INTO epg_logos (epg_id, logo_url)
-                        VALUES (@epgId, @logoUrl)
-                    `);
-                    const logoTx = db.transaction(async (logos) => {
-                        for (const [epgId, logoUrl] of Object.entries(logos)) {
-                            await insertLogo.run({ epgId: String(epgId).toLowerCase(), logoUrl });
-                        }
-                    });
-                    await logoTx(logoMap);
-                    console.log(`[EPG Update] Saved ${Object.keys(logoMap).length} logos for ${source}`);
-                }
-            } catch (logoErr) {
-                console.error(`[EPG Update] Failed to save logos for ${source}:`, logoErr);
-            }
-        } catch (err) {
-            console.error(`[EPG Update] Failed for ${source}:`, err);
+            })();
         }
     }
-    console.timeEnd('update-epg');
-    console.log('[IPC HANDLE] update-epg END');
-    return true;
 });
+
+function convertEpgStringToEpoch(str) {
+    if (!str) return 0;
+    const clean = str.replace(/[^0-9]/g, '');
+    if (clean.length < 14) return 0;
+    const year = parseInt(clean.substring(0, 4), 10);
+    const month = parseInt(clean.substring(4, 6), 10) - 1;
+    const day = parseInt(clean.substring(6, 8), 10);
+    const hour = parseInt(clean.substring(8, 10), 10);
+    const min = parseInt(clean.substring(10, 12), 10);
+    const sec = parseInt(clean.substring(12, 14), 10);
+    return Math.floor(Date.UTC(year, month, day, hour, min, sec) / 1000);
+}
+
+function convertEpochToEpgString(epochSec) {
+    if (!epochSec) return '';
+    if (isNaN(epochSec)) return epochSec; // Return raw string if already ISO string
+    const d = new Date(parseInt(epochSec, 10) * 1000);
+    const pad = n => n.toString().padStart(2, '0');
+    return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())} +0000`;
+}
 
 async function getEpgDataFromDb(channelIds, startLimit, endLimit) {
     if (!db || !channelIds || channelIds.length === 0) return {};
     try {
         const result = {};
         const safeChannelIds = channelIds.filter(id => id !== null && id !== undefined).map(id => String(id).toLowerCase());
-        // SQLite has a limit on bind variables, process array elements in safe chunks
         const chunkSize = 900;
         for (let i = 0; i < safeChannelIds.length; i += chunkSize) {
             const chunk = safeChannelIds.slice(i, i + chunkSize);
@@ -2020,8 +2129,11 @@ async function getEpgDataFromDb(channelIds, startLimit, endLimit) {
             
             let query, params;
             if (startLimit && endLimit) {
+                const startEpoch = isNaN(startLimit) ? convertEpgStringToEpoch(startLimit) : parseInt(startLimit, 10);
+                const endEpoch = isNaN(endLimit) ? convertEpgStringToEpoch(endLimit) : parseInt(endLimit, 10);
+                
                 query = `SELECT channel_id, start_time, stop_time, title, description FROM epg WHERE channel_id IN (${placeholders}) AND stop_time >= ? AND start_time <= ? ORDER BY start_time ASC`;
-                params = [...chunk, startLimit, endLimit];
+                params = [...chunk, startEpoch, endEpoch];
             } else {
                 query = `SELECT channel_id, start_time, stop_time, title, description FROM epg WHERE channel_id IN (${placeholders}) ORDER BY start_time ASC`;
                 params = [...chunk];
@@ -2032,8 +2144,8 @@ async function getEpgDataFromDb(channelIds, startLimit, endLimit) {
             for (const row of rows) {
                 if (!result[row.channel_id]) result[row.channel_id] = [];
                 result[row.channel_id].push({
-                    start: row.start_time,
-                    stop: row.stop_time,
+                    start: convertEpochToEpgString(row.start_time),
+                    stop: convertEpochToEpgString(row.stop_time),
                     title: row.title,
                     desc: row.description
                 });
