@@ -351,6 +351,7 @@ let splashWindow = null;
 let nativeToastWindow = null;
 let nativeToastTimer = null;
 let nativeConfirmWindow = null;
+let activePlaybackStalkerMeta = null;
 let remoteOverrideWindow = null;
 let playerWindowHwnd = null;
 let lastPlayerWindowShapeKey = null;
@@ -1400,6 +1401,12 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
                 break;
             }
         }
+    }
+
+    if (mac && portalUrl) {
+        activePlaybackStalkerMeta = { portalUrl, mac };
+    } else {
+        activePlaybackStalkerMeta = null;
     }
 
     const playStream = () => {
@@ -5006,7 +5013,9 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
         destPath,
         cancel: download.cancel,
         startTime: Date.now(),
-        bytesWritten: 0
+        bytesWritten: 0,
+        sourceType: sourceType === 'stalker' ? 'stalker' : null,
+        stalkerMeta: sourceType === 'stalker' ? stalkerMeta : null
     });
     buildTrayMenu();
     showTrayNotification('Recording Started', `Now recording "${programName}" on ${channelName}`);
@@ -5468,7 +5477,9 @@ async function checkScheduledRecordings() {
                         destPath,
                         cancel: download.cancel,
                         startTime: Date.now(),
-                        bytesWritten: 0
+                        bytesWritten: 0,
+                        sourceType: sourceType === 'stalker' ? 'stalker' : null,
+                        stalkerMeta: sourceType === 'stalker' ? stalkerMeta : null
                     });
                     
                     activeScheduleRecordings.set(row.id, recordingId);
@@ -5784,3 +5795,53 @@ function showTrayNotification(title, message) {
         console.error('[NOTIFICATION ERROR] Failed to display notification:', err);
     }
 }
+
+async function runStalkerKeepAlive() {
+    const activeSessions = new Map();
+
+    // 1. Check active playback Stalker metadata
+    if (activePlaybackStalkerMeta && activePlaybackStalkerMeta.portalUrl && activePlaybackStalkerMeta.mac) {
+        const key = `${activePlaybackStalkerMeta.portalUrl}|${activePlaybackStalkerMeta.mac}`;
+        activeSessions.set(key, {
+            portalUrl: activePlaybackStalkerMeta.portalUrl,
+            mac: activePlaybackStalkerMeta.mac
+        });
+    }
+
+    // 2. Check active recordings Stalker metadata
+    for (const rec of activeRecordings.values()) {
+        if (rec.sourceType === 'stalker' && rec.stalkerMeta && rec.stalkerMeta.portalUrl && rec.stalkerMeta.mac) {
+            const key = `${rec.stalkerMeta.portalUrl}|${rec.stalkerMeta.mac}`;
+            if (!activeSessions.has(key)) {
+                activeSessions.set(key, {
+                    portalUrl: rec.stalkerMeta.portalUrl,
+                    mac: rec.stalkerMeta.mac
+                });
+            }
+        }
+    }
+
+    if (activeSessions.size === 0) {
+        return;
+    }
+
+    console.log(`[STALKER HEARTBEAT] Dispatching watchdog keep-alives for ${activeSessions.size} active session(s)...`);
+
+    for (const [key, session] of activeSessions.entries()) {
+        try {
+            console.log(`[STALKER HEARTBEAT] Sending watchdog heartbeat to ${session.portalUrl} (MAC: ${session.mac})`);
+            await stalkerRequest(session.portalUrl, session.mac, 'get_events', {
+                type: 'watchdog',
+                event_active_id: '0',
+                init: '0',
+                cur_play_type: '1'
+            });
+            console.log(`[STALKER HEARTBEAT] Heartbeat response received for ${session.portalUrl}`);
+        } catch (err) {
+            console.error(`[STALKER HEARTBEAT ERROR] Heartbeat request failed for ${session.portalUrl}:`, err.message);
+        }
+    }
+}
+
+// Run Stalker watchdog keep-alive loop every 2 minutes (120,000 ms)
+setInterval(runStalkerKeepAlive, 120000);
