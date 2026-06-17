@@ -145,6 +145,7 @@ async function start() {
 
         // Setup SAX streaming parser (Non-strict mode to handle malformed XMLTV files)
         const saxStream = sax.createStream(false, { lowercase: true, trim: true });
+        let isFirstTag = true;
         let currentTag = null;
         let currentChannelId = null;
         let currentChannel = null;
@@ -164,6 +165,19 @@ async function start() {
 
         saxStream.on('opentag', (node) => {
             const tagName = node.name.toLowerCase();
+            if (isFirstTag) {
+                isFirstTag = false;
+                if (tagName !== 'tv') {
+                    cancelled = true;
+                    inputStream.destroy();
+                    parentPort.postMessage({
+                        type: 'error',
+                        message: `Invalid XMLTV source: Root element is <${tagName}> instead of <tv>. The URL may be returning an error page or HTML.`
+                    });
+                    cleanup();
+                    return;
+                }
+            }
             currentTag = tagName;
             if (tagName === 'channel') {
                 currentChannelId = node.attributes.id ? node.attributes.id.toLowerCase().trim() : null;
@@ -255,6 +269,15 @@ async function start() {
         saxStream.on('end', () => {
             if (cancelled) return;
             try {
+                if (isFirstTag) {
+                    parentPort.postMessage({
+                        type: 'error',
+                        message: 'Invalid XMLTV source: No valid XML elements found. The file may be empty, blocked, or not in XML format.'
+                    });
+                    cleanup();
+                    return;
+                }
+
                 flushBatch();
                 
                 // Final update push
