@@ -1441,9 +1441,10 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
             ipcClient.write(JSON.stringify({ command: ["set_property", "user-agent", ua] }) + '\n');
             ipcClient.write(JSON.stringify({ command: ["set_property", "http-header-fields", headersVal.join(',')] }) + '\n');
             
-            // Ensure player always starts unmuted
-            console.log('[MPV IPC SEND] Unmuting stream');
+            // Ensure player always starts unmuted and unpaused
+            console.log('[MPV IPC SEND] Unmuting and unpausing stream');
             ipcClient.write(JSON.stringify({ command: ["set_property", "mute", "no"] }) + '\n');
+            ipcClient.write(JSON.stringify({ command: ["set_property", "pause", "no"] }) + '\n');
             
             console.log('[MPV IPC SEND]', JSON.stringify({ command: ["loadfile", data.url, "replace"] }));
             ipcClient.write(JSON.stringify({ command: ["loadfile", data.url, "replace"] }) + '\n');
@@ -4748,7 +4749,7 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
                 timeout: 15000
             };
 
-            requestInstance = protocol.get(currentUrl, options, (res) => {
+            requestInstance = protocol.get(parsedUrl, options, (res) => {
                 if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                     const redirectUrl = new URL(res.headers.location, currentUrl).href;
                     console.log(`[DVR] Redirecting to: ${redirectUrl}`);
