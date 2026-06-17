@@ -4332,6 +4332,40 @@ ipcMain.handle('get-mappings', async () => {
     }
 });
 
+// Auto-update helper for newly mapped channels
+async function autoTriggerEpgUpdateForMappedIds(mappedEpgIds) {
+    if (!db || !mappedEpgIds || mappedEpgIds.length === 0) return;
+    try {
+        const idsToCheck = mappedEpgIds.map(id => String(id).toLowerCase().trim()).filter(id => id);
+        if (idsToCheck.length === 0) return;
+        
+        const placeholders = idsToCheck.map(() => '?').join(',');
+        const rowsWithProgs = await db.prepare(`
+            SELECT DISTINCT channel_id FROM epg WHERE channel_id IN (${placeholders})
+        `).all(...idsToCheck);
+        
+        const hasProgs = new Set(rowsWithProgs.map(r => r.channel_id.toLowerCase().trim()));
+        const missingIds = idsToCheck.filter(id => !hasProgs.has(id));
+        
+        if (missingIds.length === 0) {
+            return;
+        }
+        
+        const missingPlaceholders = missingIds.map(() => '?').join(',');
+        const sourceRows = await db.prepare(`
+            SELECT DISTINCT source_url FROM epg_logos WHERE epg_id IN (${missingPlaceholders})
+        `).all(...missingIds);
+        
+        const sourcesToUpdate = sourceRows.map(r => r.source_url).filter(s => s);
+        if (sourcesToUpdate.length > 0) {
+            console.log('[EPG AutoUpdate] Auto-triggering background EPG update for sources:', sourcesToUpdate);
+            ipcMain.emit('start-epg-update', null, sourcesToUpdate.join(','), null, true);
+        }
+    } catch (e) {
+        console.error('[EPG AutoUpdate] Failed to auto-trigger EPG update:', e);
+    }
+}
+
 ipcMain.handle('save-mapping', async (event, title, epgId) => {
     console.log('[IPC HANDLE] save-mapping START', { title, epgId });
     if (!db) return false;
@@ -4342,6 +4376,9 @@ ipcMain.handle('save-mapping', async (event, title, epgId) => {
                 VALUES (@title, @epg)
                 ON CONFLICT(channel_title) DO UPDATE SET epg_id = @epg
             `).run({ title, epg: String(epgId).toLowerCase() });
+            
+            // Auto-trigger background EPG update
+            autoTriggerEpgUpdateForMappedIds([epgId]);
         } else {
             await db.prepare('DELETE FROM mappings WHERE channel_title = ?').run(title);
         }
@@ -4375,6 +4412,13 @@ ipcMain.handle('save-mappings-bulk', async (event, mappingsArray) => {
         });
         
         await transaction(mappingsArray);
+        
+        // Auto-trigger background EPG update for all newly mapped bulk IDs
+        const mappedIds = mappingsArray.map(m => m.epgId).filter(id => id);
+        if (mappedIds.length > 0) {
+            autoTriggerEpgUpdateForMappedIds(mappedIds);
+        }
+        
         console.log('[IPC HANDLE] save-mappings-bulk END');
         return true;
     } catch (e) {
