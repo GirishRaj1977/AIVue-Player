@@ -143,8 +143,8 @@ async function start() {
             inputStream = stream.pipe(gunzip);
         }
 
-        // Setup SAX streaming parser
-        const saxStream = sax.createStream(true, { lowercase: true, trim: true });
+        // Setup SAX streaming parser (Non-strict mode to handle malformed XMLTV files)
+        const saxStream = sax.createStream(false, { lowercase: true, trim: true });
         let currentTag = null;
         let currentChannelId = null;
         let currentChannel = null;
@@ -275,9 +275,11 @@ async function start() {
         });
 
         saxStream.on('error', (err) => {
-            console.error('[Worker Sax Error]', err);
-            parentPort.postMessage({ type: 'error', message: err.message });
-            cleanup();
+            console.error('[Worker Sax Error]', err.message);
+            if (saxStream._parser) {
+                saxStream._parser.error = null;
+                saxStream._parser.resume();
+            }
         });
 
         inputStream.pipe(saxStream);
