@@ -1700,22 +1700,27 @@ ipcMain.handle('get-epg-channels', async (event, epgSources) => {
     
     let allEpgChannels = [];
     
-    // 1. Get other EPG channels using Python parser
-    if (otherSources.length > 0) {
-        const otherChannels = await new Promise((resolve) => {
-            const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
-            const scriptPath = path.join(baseDir, 'backend', 'parser.py');
-            
-            const args = [scriptPath, '--epg-only', otherSources.join(',')];
-            const env = Object.assign({}, process.env, { AIVUE_CACHE_DIR: cacheDir, AIVUE_FORCE_REFRESH: '0' });
-            
-            runParser(args, { maxBuffer: 1024 * 1024 * 100, windowsHide: true, timeout: 60000, env }, (error, stdout) => {
-                if (error) return resolve([]);
-                try { resolve(JSON.parse(stdout)); } 
-                catch (e) { resolve([]); }
-            });
-        });
-        allEpgChannels.push(...otherChannels);
+    // 1. Get other EPG channels using SQLite database
+    if (otherSources.length > 0 && db) {
+        for (const otherSrc of otherSources) {
+            try {
+                const rows = await db.prepare(`
+                    SELECT epg_id AS id, COALESCE(name, epg_id) AS name, logo_url AS icon
+                    FROM epg_logos
+                    WHERE source_url = ?
+                `).all(otherSrc);
+                
+                const otherChannels = rows.map(r => ({
+                    id: r.id,
+                    name: r.name,
+                    source: otherSrc,
+                    icon: r.icon || ''
+                }));
+                allEpgChannels.push(...otherChannels);
+            } catch (err) {
+                console.error('[DB ERR] Failed to fetch EPG channels:', err);
+            }
+        }
     }
     
     // 2. Get Stalker EPG channels from SQLite database
@@ -2021,10 +2026,13 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                                 }
                             });
                             await saveTx(msg.batch).catch(err => console.error('[EPG Main] Batch insert failed:', err));
-                        } else if (msg.type === 'save_logo') {
-                            db.prepare("INSERT OR REPLACE INTO epg_logos (epg_id, logo_url) VALUES (?, ?)")
-                              .run(msg.channelId, msg.logoUrl)
-                              .catch(() => {});
+                        } else if (msg.type === 'save_epg_channel') {
+                            db.prepare(`
+                                INSERT OR REPLACE INTO epg_logos (epg_id, name, logo_url, source_url)
+                                VALUES (?, ?, ?, ?)
+                            `)
+                            .run(msg.channel.id, msg.channel.name, msg.channel.logo, source)
+                            .catch(() => {});
                         } else if (msg.type === 'progress') {
                             if (mainWindow && !mainWindow.isDestroyed()) {
                                 mainWindow.webContents.send('epg-progressive-update', {

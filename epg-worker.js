@@ -147,6 +147,7 @@ async function start() {
         const saxStream = sax.createStream(true, { lowercase: true, trim: true });
         let currentTag = null;
         let currentChannelId = null;
+        let currentChannel = null;
         let currentProgramme = null;
         let textBuffer = '';
         let programmeCount = 0;
@@ -165,6 +166,11 @@ async function start() {
             currentTag = node.name;
             if (node.name === 'channel') {
                 currentChannelId = node.attributes.id ? node.attributes.id.toLowerCase().trim() : null;
+                if (currentChannelId) {
+                    currentChannel = { id: currentChannelId, name: '', logo: '' };
+                }
+            } else if (node.name === 'icon' && currentChannelId && currentChannel) {
+                currentChannel.logo = node.attributes.src || '';
             } else if (node.name === 'programme') {
                 const ch = node.attributes.channel ? node.attributes.channel.toLowerCase().trim() : null;
                 if (ch && validChannels.has(ch)) {
@@ -207,7 +213,18 @@ async function start() {
             }
 
             if (name === 'channel') {
+                if (currentChannel && currentChannel.id) {
+                    parentPort.postMessage({
+                        type: 'save_epg_channel',
+                        channel: {
+                            id: currentChannel.id,
+                            name: currentChannel.name || currentChannel.id,
+                            logo: currentChannel.logo || ''
+                        }
+                    });
+                }
                 currentChannelId = null;
+                currentChannel = null;
             } else if (name === 'programme') {
                 if (currentProgramme) {
                     batch.push(currentProgramme);
@@ -225,10 +242,9 @@ async function start() {
                 } else if (name === 'desc') {
                     currentProgramme.desc = textBuffer.trim();
                 }
-            } else if (currentChannelId) {
-                if (name === 'icon' && saxStream.attributes && saxStream.attributes.src) {
-                    const logoUrl = saxStream.attributes.src;
-                    parentPort.postMessage({ type: 'save_logo', channelId: currentChannelId, logoUrl });
+            } else if (currentChannelId && currentChannel) {
+                if (name === 'display-name') {
+                    currentChannel.name = textBuffer.trim();
                 }
             }
             currentTag = null;

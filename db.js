@@ -132,7 +132,9 @@ try {
                 CREATE TABLE IF NOT EXISTS epg_logos (
                     epg_id TEXT PRIMARY KEY,
                     logo_url TEXT,
-                    cached_logo TEXT
+                    cached_logo TEXT,
+                    name TEXT,
+                    source_url TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS dvr_settings (
@@ -192,6 +194,8 @@ try {
             
             await db.exec("ALTER TABLE playlists ADD COLUMN exp_date TEXT").catch(() => {});
             await db.exec("ALTER TABLE epg_logos ADD COLUMN cached_logo TEXT").catch(() => {});
+            await db.exec("ALTER TABLE epg_logos ADD COLUMN name TEXT").catch(() => {});
+            await db.exec("ALTER TABLE epg_logos ADD COLUMN source_url TEXT").catch(() => {});
             await db.exec("ALTER TABLE playlists ADD COLUMN stalker_username TEXT").catch(() => {});
             await db.exec("ALTER TABLE playlists ADD COLUMN stalker_password TEXT").catch(() => {});
             
