@@ -4581,6 +4581,13 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
         if (headersString) {
             args.push('-headers', headersString);
         }
+        // Add robust reconnect flags for HTTP/HTTPS/IPTV streams
+        args.push(
+            '-reconnect', '1',
+            '-reconnect_at_eof', '1',
+            '-reconnect_streamed', '1',
+            '-reconnect_delay_max', '5'
+        );
         args.push('-i', currentUrl, '-c', 'copy', '-y', destPath);
 
         try {
@@ -4600,6 +4607,9 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
             ffmpegProcess.stderr.on('data', (data) => {
                 if (isCancelled) return;
                 const log = data.toString();
+                if (log.includes('Error') || log.includes('Failed') || log.includes('HTTP error') || log.includes('Server returned') || log.includes('corrupt')) {
+                    console.error('[DVR FFmpeg STDERR]', log.trim());
+                }
                 const sizeMatch = log.match(/size=\s*(\d+)\s*(kB|mB)/i);
                 if (sizeMatch) {
                     ffmpegStarted = true;
@@ -4611,11 +4621,14 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
 
             ffmpegProcess.on('close', (code) => {
                 if (isCancelled) return;
-                if (code === 0 || ffmpegStarted) {
-                    console.log('[DVR] FFmpeg capture completed successfully.');
+                if (code === 0) {
+                    console.log('[DVR] FFmpeg capture completed successfully with code 0.');
                     onDone();
+                } else if (ffmpegStarted) {
+                    console.log(`[DVR] FFmpeg process exited with non-zero code ${code} after starting. Treating as error.`);
+                    onError(new Error(`FFmpeg exited with code ${code}`));
                 } else {
-                    console.log(`[DVR] FFmpeg process exited with code ${code}. Trying HTTP fallback...`);
+                    console.log(`[DVR] FFmpeg process exited with code ${code} before starting. Trying HTTP fallback...`);
                     startHttpDownload(currentUrl);
                 }
             });
