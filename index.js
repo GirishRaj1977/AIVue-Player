@@ -4669,7 +4669,9 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
         if (customHeaders && Array.isArray(customHeaders)) {
             headersString = customHeaders.map(h => `${h}\r\n`).join('');
         }
-        headersString += 'User-Agent: VLC/3.0.9 LibVLC/3.0.9\r\n';
+        if (!/user-agent/i.test(headersString)) {
+            headersString += 'User-Agent: VLC/3.0.9 LibVLC/3.0.9\r\n';
+        }
 
         const args = [];
         if (headersString) {
@@ -4686,6 +4688,7 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
 
         try {
             ffmpegProcess = spawn('ffmpeg', args);
+            console.log('[DVR] Downloader: ffmpeg');
             
             let ffmpegStarted = false;
             
@@ -4735,6 +4738,7 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
 
     const startHttpDownload = (currentUrl) => {
         if (isCancelled) return;
+        console.log('[DVR] Downloader: native-http');
         try {
             const parsedUrl = new URL(currentUrl);
             const protocol = parsedUrl.protocol === 'https:' ? https : http;
@@ -4765,6 +4769,7 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
                 }
 
                 if (res.statusCode !== 200) {
+                    console.error(`[DVR] Segment request failed\nStatus: ${res.statusCode}\nURL: ${currentUrl}`);
                     onError(new Error(`Server returned HTTP ${res.statusCode}`));
                     return;
                 }
@@ -4940,6 +4945,42 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
                     activeUrl = fallbackUrl;
                 }
             }
+
+            // Authenticate and construct Stalker headers for recording
+            try {
+                const session = await authenticateStalker(stalkerMeta.portalUrl, stalkerMeta.mac);
+                if (session) {
+                    const ua = 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
+                    let referer = '';
+                    if (stalkerMeta.portalUrl) {
+                        referer = stalkerMeta.portalUrl.replace('/server/load.php', '/c/index.html').replace('/portal.php', '/c/index.html');
+                    } else {
+                        referer = activeUrl.split('/play/')[0] + '/c/index.html';
+                    }
+                    const sessionPHPSessId = session.phpSessionId || '';
+                    const cookies = `mac=${stalkerMeta.mac}; stb_lang=en; timezone=GMT` + (sessionPHPSessId ? `; PHPSESSID=${sessionPHPSessId}` : '');
+                    
+                    cleanHeaders.push(`User-Agent: ${ua}`);
+                    cleanHeaders.push(`X-User-Agent: Model: MAG250; Link: Ethernet`);
+                    cleanHeaders.push(`Cookie: ${cookies}`);
+                    cleanHeaders.push(`Referer: ${referer}`);
+                    if (session.token) {
+                        cleanHeaders.push(`Authorization: Bearer ${session.token}`);
+                    }
+                    console.log('[DVR IPC] Injected Stalker headers for manual recording:', JSON.stringify(cleanHeaders));
+
+                    // Detailed logging for Stalker recording verification
+                    console.log(`[DVR] Portal: stalker`);
+                    console.log(`[DVR] Channel: ${channelName}`);
+                    console.log(`[DVR] Auth headers injected: yes`);
+                    console.log(`[DVR] Cookie present: ${cookies ? 'yes' : 'no'}`);
+                    console.log(`[DVR] Bearer token present: ${session.token ? 'yes' : 'no'}`);
+                    console.log(`[DVR] Token creation time: ${new Date(session.timestamp).toISOString()}`);
+                    console.log(`[DVR] Recording start time: ${new Date().toISOString()}`);
+                }
+            } catch (authErr) {
+                console.error('[DVR IPC] Failed to authenticate stalker session for header injection:', authErr);
+            }
         } catch (err) {
             console.error('[DVR IPC] Error resolving stalker link:', err);
         }
@@ -4972,6 +5013,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
     };
     
     const handleDone = () => {
+        console.log(`[DVR] Recording end time (Success): ${new Date().toISOString()}`);
         activeRecordings.delete(recordingId);
         buildTrayMenu();
         showTrayNotification('Recording Completed', `Saved "${programName}" from ${channelName}`);
@@ -4987,6 +5029,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
     };
     
     const handleError = (err) => {
+        console.log(`[DVR] Recording end time (Failed): ${new Date().toISOString()}. Error: ${err.message}`);
         activeRecordings.delete(recordingId);
         buildTrayMenu();
         showTrayNotification('Recording Failed', `Error on "${programName}" from ${channelName}: ${err.message}`);
@@ -5003,6 +5046,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
         }
     };
     
+    console.log(`[DVR] Starting capture at ${new Date().toISOString()}`);
     const download = downloadStream(activeUrl, destPath, cleanHeaders, handleProgress, handleDone, handleError);
     
     activeRecordings.set(recordingId, {
@@ -5461,12 +5505,49 @@ async function checkScheduledRecordings() {
                                 activeUrl = fallbackUrl;
                             }
                         }
+
+                        // Authenticate and construct Stalker headers for scheduled recording
+                        try {
+                            const session = await authenticateStalker(stalkerMeta.portalUrl, stalkerMeta.mac);
+                            if (session) {
+                                const ua = 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
+                                let referer = '';
+                                if (stalkerMeta.portalUrl) {
+                                    referer = stalkerMeta.portalUrl.replace('/server/load.php', '/c/index.html').replace('/portal.php', '/c/index.html');
+                                } else {
+                                    referer = activeUrl.split('/play/')[0] + '/c/index.html';
+                                }
+                                const sessionPHPSessId = session.phpSessionId || '';
+                                const cookies = `mac=${stalkerMeta.mac}; stb_lang=en; timezone=GMT` + (sessionPHPSessId ? `; PHPSESSID=${sessionPHPSessId}` : '');
+                                
+                                cleanHeaders.push(`User-Agent: ${ua}`);
+                                cleanHeaders.push(`X-User-Agent: Model: MAG250; Link: Ethernet`);
+                                cleanHeaders.push(`Cookie: ${cookies}`);
+                                cleanHeaders.push(`Referer: ${referer}`);
+                                if (session.token) {
+                                    cleanHeaders.push(`Authorization: Bearer ${session.token}`);
+                                }
+                                console.log('[DVR SCHEDULER] Injected Stalker headers for scheduled recording:', JSON.stringify(cleanHeaders));
+
+                                // Detailed logging for Stalker scheduled recording verification
+                                console.log(`[DVR] Portal: stalker`);
+                                console.log(`[DVR] Channel: ${meta.channelName}`);
+                                console.log(`[DVR] Auth headers injected: yes`);
+                                console.log(`[DVR] Cookie present: ${cookies ? 'yes' : 'no'}`);
+                                console.log(`[DVR] Bearer token present: ${session.token ? 'yes' : 'no'}`);
+                                console.log(`[DVR] Token creation time: ${new Date(session.timestamp).toISOString()}`);
+                                console.log(`[DVR] Recording start time: ${new Date().toISOString()}`);
+                            }
+                        } catch (authErr) {
+                            console.error('[DVR SCHEDULER] Failed to authenticate stalker session for header injection:', authErr);
+                        }
                     } catch (err) {
                         console.error('[DVR SCHEDULER] Error resolving stalker link on schedule start:', err);
                     }
                 }
                 
                 try {
+                    console.log(`[DVR] Starting scheduled capture at ${new Date().toISOString()}`);
                     const download = downloadStream(activeUrl, destPath, cleanHeaders, handleProgress, handleDone, handleError);
                     
                     activeRecordings.set(recordingId, {
@@ -5509,6 +5590,7 @@ async function checkScheduledRecordings() {
             };
             
             const handleDone = async () => {
+                console.log(`[DVR] Scheduled Recording end time (Success): ${new Date().toISOString()}`);
                 activeRecordings.delete(recordingId);
                 activeScheduleRecordings.delete(row.id);
                 buildTrayMenu();
@@ -5528,6 +5610,7 @@ async function checkScheduledRecordings() {
             };
             
             const handleError = async (err) => {
+                console.log(`[DVR] Scheduled Recording end time (Failed): ${new Date().toISOString()}. Error: ${err.message}`);
                 activeRecordings.delete(recordingId);
                 activeScheduleRecordings.delete(row.id);
                 buildTrayMenu();
@@ -5843,5 +5926,5 @@ async function runStalkerKeepAlive() {
     }
 }
 
-// Run Stalker watchdog keep-alive loop every 2 minutes (120,000 ms)
-setInterval(runStalkerKeepAlive, 120000);
+// Run Stalker watchdog keep-alive loop every 30 seconds (30,000 ms) for more aggressive portals
+setInterval(runStalkerKeepAlive, 30000);
