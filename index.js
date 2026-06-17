@@ -3350,29 +3350,14 @@ async function fetchAllStalkerPages(baseUrl, mac, action, extraParams) {
     return uniqueItems;
 }
 
-ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, series }) => {
+async function resolveStalkerLinkInternal({ url, mac, type, cmd, series }) {
     try {
-        console.log('[STALKER IPC] Resolving link for:', { url, mac, type, cmd, series });
+        console.log('[STALKER INTERNAL] Resolving link for:', { url, mac, type, cmd, series });
         
         let originalCmd = cmd || '';
         if (originalCmd.startsWith('ffmpeg ')) {
             originalCmd = originalCmd.substring(7).trim();
         }
-
-        // HEURISTIC: Direct Playback Bypass (Disabled to ensure play_tokens are always freshly resolved/renewed and do not result in HTTP 458 errors)
-        /*
-        if (originalCmd.startsWith('http') && 
-            !originalCmd.includes('localhost') && 
-            !originalCmd.includes('127.0.0.1') && 
-            (originalCmd.includes('/play/live.php') || 
-             originalCmd.includes('/play/movie.php') || 
-             originalCmd.includes('/play/series.php')) && 
-            !originalCmd.includes('stream=&')) {
-            
-            console.log('[STALKER IPC] Heuristic Match: Bypassing create_link for direct play URL:', originalCmd);
-            return originalCmd;
-        }
-        */
 
         const probes = [];
 
@@ -3387,25 +3372,25 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
         }
 
         if (streamId) {
-            console.log('[STALKER IPC] Extracted Stream ID:', streamId, 'Injecting clean standard MAG commands.');
+            console.log('[STALKER INTERNAL] Extracted Stream ID:', streamId, 'Injecting clean standard MAG commands.');
             probes.push({ type: type || 'itv', cmd: `ffmpeg http://localhost/ch/${streamId}` });
             probes.push({ type: type || 'itv', cmd: `ffmpeg http://localhost/ch/${streamId}_` });
         }
 
         if (series !== undefined && series !== null) {
-            probes.push({ type: 'vod', cmd, series });
+            probes.push({ type: 'vod', cmd: originalCmd, series });
         }
         
-        probes.push({ type, cmd });
+        probes.push({ type, cmd: originalCmd });
 
         // Create variations of the cmd to bypass common Stalker portal quirks
         let parsedObj = null;
-        if (typeof cmd === 'string') {
-            if (cmd.startsWith('{')) {
-                try { parsedObj = JSON.parse(cmd); } catch (e) {}
+        if (typeof originalCmd === 'string') {
+            if (originalCmd.startsWith('{')) {
+                try { parsedObj = JSON.parse(originalCmd); } catch (e) {}
             } else {
                 try {
-                    const decoded = Buffer.from(cmd, 'base64').toString('utf8');
+                    const decoded = Buffer.from(originalCmd, 'base64').toString('utf8');
                     if (decoded.startsWith('{')) parsedObj = JSON.parse(decoded);
                 } catch (e) {}
             }
@@ -3419,8 +3404,8 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
             const asJson = JSON.stringify(altObj);
             const asBase64 = Buffer.from(asJson).toString('base64');
             
-            if (cmd !== asJson) probes.push({ type, cmd: asJson, ...(series !== undefined ? { series } : {}) });
-            if (cmd !== asBase64) probes.push({ type, cmd: asBase64, ...(series !== undefined ? { series } : {}) });
+            if (originalCmd !== asJson) probes.push({ type, cmd: asJson, ...(series !== undefined ? { series } : {}) });
+            if (originalCmd !== asBase64) probes.push({ type, cmd: asBase64, ...(series !== undefined ? { series } : {}) });
             
             if (type === 'series') {
                 probes.push({ type: 'vod', cmd: asBase64, ...(series !== undefined ? { series } : {}) });
@@ -3465,7 +3450,7 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
         }
         
         if (!finalUrl) {
-            console.error('[STALKER IPC] Could not find stream URL in response across all probes.');
+            console.error('[STALKER INTERNAL] Could not find stream URL in response across all probes.');
             return null;
         }
 
@@ -3493,9 +3478,13 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
         
         return finalUrl;
     } catch (e) {
-        console.error('[STALKER IPC] Resolving link failed:', e);
+        console.error('[STALKER INTERNAL] Resolving link failed:', e);
         return null;
     }
+}
+
+ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, series }) => {
+    return resolveStalkerLinkInternal({ url, mac, type, cmd, series });
 });
 
 const COUNTRY_CODES = new Set([
@@ -4766,6 +4755,98 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
     if (headers && Array.isArray(headers)) {
         headersVal = headers;
     }
+
+    let activeUrl = channelUrl;
+    let cleanHeaders = [];
+    let sourceType = 'm3u';
+    let stalkerMeta = null;
+    let xtreamMeta = null;
+    
+    headersVal.forEach(h => {
+        if (h.startsWith('STALKER-METADATA:')) {
+            try {
+                stalkerMeta = JSON.parse(h.substring(17));
+                if (stalkerMeta && stalkerMeta.sourceType) {
+                    sourceType = stalkerMeta.sourceType;
+                }
+            } catch (e) {}
+        } else if (h.startsWith('XTREAM-METADATA:')) {
+            try {
+                xtreamMeta = JSON.parse(h.substring(16));
+                if (xtreamMeta && xtreamMeta.sourceType) {
+                    sourceType = xtreamMeta.sourceType;
+                }
+            } catch (e) {}
+        } else {
+            cleanHeaders.push(h);
+        }
+    });
+
+    if (sourceType === 'xtream' && xtreamMeta) {
+        try {
+            console.log(`[DVR IPC] Resolving fresh Xtream Codes link for manual recording:`, xtreamMeta);
+            const resolvedSource = await resolveXtreamLink(
+                xtreamMeta.server,
+                xtreamMeta.username,
+                xtreamMeta.password,
+                xtreamMeta.streamId,
+                xtreamMeta.type || 'live',
+                xtreamMeta.extension || null,
+                xtreamMeta.directSourceUrl || null
+            );
+            if (resolvedSource && resolvedSource.url) {
+                activeUrl = resolvedSource.url;
+                if (resolvedSource.headers) {
+                    Object.entries(resolvedSource.headers).forEach(([k, v]) => {
+                        cleanHeaders.push(`${k}: ${v}`);
+                    });
+                }
+                console.log('[DVR IPC] Xtream Codes link resolved successfully:', activeUrl);
+            }
+        } catch (err) {
+            console.error('[DVR IPC] Error resolving Xtream Codes link:', err);
+        }
+    }
+
+    if (sourceType === 'stalker' && stalkerMeta) {
+        try {
+            const parts = activeUrl.substring(12).split('|');
+            const type = parts[0];
+            const cmd = parts.slice(1).join('|');
+            
+            console.log(`[DVR IPC] Resolving fresh Stalker link for manual recording:`, stalkerMeta);
+            const resolvedUrl = await resolveStalkerLinkInternal({
+                url: stalkerMeta.portalUrl,
+                mac: stalkerMeta.mac,
+                type,
+                cmd
+            });
+
+            if (resolvedUrl) {
+                activeUrl = resolvedUrl;
+                console.log('[DVR IPC] Stalker link resolved successfully:', activeUrl);
+            } else {
+                console.warn('[DVR IPC] Failed to resolve Stalker link, falling back to cleaned url.');
+                if (activeUrl.startsWith('stalker-cmd:')) {
+                    let fallbackUrl = activeUrl.substring(12).split('|').slice(1).join('|');
+                    if (fallbackUrl.startsWith('ffmpeg ')) {
+                        fallbackUrl = fallbackUrl.substring(7).trim();
+                    }
+                    activeUrl = fallbackUrl;
+                }
+            }
+        } catch (err) {
+            console.error('[DVR IPC] Error resolving stalker link:', err);
+        }
+    }
+
+    if (activeUrl.startsWith('stalker-cmd:')) {
+        let fallbackUrl = activeUrl.substring(12).split('|').slice(1).join('|');
+        if (fallbackUrl.startsWith('ffmpeg ')) {
+            fallbackUrl = fallbackUrl.substring(7).trim();
+        }
+        activeUrl = fallbackUrl;
+    }
     
     const handleProgress = (bytes) => {
         const rec = activeRecordings.get(recordingId);
@@ -4817,7 +4898,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
         }
     };
     
-    const download = downloadStream(channelUrl, destPath, headersVal, handleProgress, handleDone, handleError);
+    const download = downloadStream(activeUrl, destPath, cleanHeaders, handleProgress, handleDone, handleError);
     
     activeRecordings.set(recordingId, {
         id: recordingId,
@@ -5253,75 +5334,25 @@ async function checkScheduledRecordings() {
                         const cmd = parts.slice(1).join('|');
                         
                         console.log(`[DVR SCHEDULER] Resolving fresh Stalker link for scheduled recording:`, stalkerMeta);
-                        const probes = [{ type, cmd }];
-                        
-                        let parsedObj = null;
-                        if (typeof cmd === 'string') {
-                            if (cmd.startsWith('{')) {
-                                try { parsedObj = JSON.parse(cmd); } catch (e) {}
-                            } else {
-                                try {
-                                    const decoded = Buffer.from(cmd, 'base64').toString('utf8');
-                                    if (decoded.startsWith('{')) parsedObj = JSON.parse(decoded);
-                                } catch (e) {}
-                            }
-                        }
-
-                        if (parsedObj) {
-                            const altObj = { ...parsedObj };
-                            if (altObj.episode_num && !altObj.episode_number) altObj.episode_number = altObj.episode_num;
-                            if (altObj.episode_number && !altObj.episode_num) altObj.episode_num = altObj.episode_number;
-
-                            const asJson = JSON.stringify(altObj);
-                            const asBase64 = Buffer.from(asJson).toString('base64');
-                            if (cmd !== asJson) probes.push({ type, cmd: asJson });
-                            if (cmd !== asBase64) probes.push({ type, cmd: asBase64 });
-                        }
-
-                        let resolvedUrl = '';
-                        for (const probe of probes) {
-                            console.log('[DVR SCHEDULER] create_link Probe:', probe);
-                            const res = await stalkerRequest(stalkerMeta.portalUrl, stalkerMeta.mac, 'create_link', probe);
-                            
-                            const candidates = [
-                                res?.js?.cmd,
-                                res?.js?.url,
-                                res?.cmd,
-                                res?.url,
-                                res?.stream_url,
-                                Array.isArray(res?.js) ? res.js[0]?.cmd : null,
-                                Array.isArray(res?.js) ? res.js[0]?.url : null
-                            ];
-
-                            for (const c of candidates) {
-                                if (c && typeof c === 'string') {
-                                    const cleaned = c.trim().replace(/^ffmpeg\s+/i, '');
-                                    if (!cleaned.includes('stream=&')) {
-                                        resolvedUrl = cleaned;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (resolvedUrl) break;
-                        }
+                        const resolvedUrl = await resolveStalkerLinkInternal({
+                            url: stalkerMeta.portalUrl,
+                            mac: stalkerMeta.mac,
+                            type,
+                            cmd
+                        });
 
                         if (resolvedUrl) {
-                            if (!resolvedUrl.startsWith('http')) {
-                                const parsed = new URL(stalkerMeta.portalUrl);
-                                resolvedUrl = `${parsed.protocol}//${parsed.host}${resolvedUrl.startsWith('/') ? '' : '/'}${resolvedUrl}`;
-                            } else {
-                                const parsedFinal = new URL(resolvedUrl);
-                                if (parsedFinal.hostname === 'localhost' || parsedFinal.hostname === '127.0.0.1') {
-                                    const parsedPortal = new URL(stalkerMeta.portalUrl);
-                                    parsedFinal.protocol = parsedPortal.protocol;
-                                    parsedFinal.host = parsedPortal.host;
-                                    resolvedUrl = parsedFinal.href;
-                                }
-                            }
                             activeUrl = resolvedUrl;
                             console.log('[DVR SCHEDULER] Stalker link resolved successfully to fresh URL:', activeUrl);
                         } else {
                             console.warn('[DVR SCHEDULER] Failed to resolve Stalker link, falling back to original url.');
+                            if (activeUrl.startsWith('stalker-cmd:')) {
+                                let fallbackUrl = activeUrl.substring(12).split('|').slice(1).join('|');
+                                if (fallbackUrl.startsWith('ffmpeg ')) {
+                                    fallbackUrl = fallbackUrl.substring(7).trim();
+                                }
+                                activeUrl = fallbackUrl;
+                            }
                         }
                     } catch (err) {
                         console.error('[DVR SCHEDULER] Error resolving stalker link on schedule start:', err);
