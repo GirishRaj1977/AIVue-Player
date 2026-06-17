@@ -367,7 +367,8 @@ function renderTmdbMovieCard(channel, tmdbData) {
     }
     const detailDescription = document.getElementById('detail-description');
     if (detailDescription) {
-        detailDescription.textContent = '';
+        detailDescription.textContent = overview || 'No synopsis available.';
+        detailDescription.style.display = 'block';
     }
     
     // Update pending EPG payload
@@ -437,7 +438,8 @@ function renderTmdbEpisodeCard(channel, tmdbData, episodeData, seriesTitle, seas
     }
     const detailDescription = document.getElementById('detail-description');
     if (detailDescription) {
-        detailDescription.textContent = '';
+        detailDescription.textContent = overview || 'No synopsis available.';
+        detailDescription.style.display = 'block';
     }
     
     // Update pending EPG payload
@@ -487,6 +489,7 @@ function renderTmdbFallbackCard(channel) {
     }
     const detailDescription = document.getElementById('detail-description');
     if (detailDescription) {
-        detailDescription.textContent = '';
+        detailDescription.textContent = isEpisode ? 'No episode synopsis available on TMDB.' : 'No movie synopsis available on TMDB.';
+        detailDescription.style.display = 'block';
     }
 }

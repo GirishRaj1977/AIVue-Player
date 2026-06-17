@@ -245,8 +245,21 @@ window.Player.showResumePromptModal = showResumePromptModal;
 
 async function embedStream(channel, scrollMode = 'start') {
     console.log('[STREAM] Embedding stream for channel:', channel.title);
+    window.currentPlaybackRequestId = (window.currentPlaybackRequestId || 0) + 1;
+    const thisRequestId = window.currentPlaybackRequestId;
+
     streamActive = true;
     window.currentPlaybackHeaders = null;
+
+    try {
+        window.iptvAPI.sendMpvCommand('stop');
+    } catch (e) {
+        console.error('Error stopping MPV:', e);
+    }
+
+    const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const playerOverlay = document.getElementById('player-overlay');
+    if (playerOverlay) playerOverlay.innerHTML = getWinSpinnerHtml(safeTitle, { size: 'large' });
 
     if (window.activeEpgTrackingInterval) {
         clearInterval(window.activeEpgTrackingInterval);
@@ -291,6 +304,7 @@ async function embedStream(channel, scrollMode = 'start') {
         if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
             const mac = playlist.epg.substring(8);
             const resolved = await window.iptvAPI.resolveStalkerLink({ url: playlist.source, mac, type: 'vod', cmd, series: seriesNum });
+            if (thisRequestId !== window.currentPlaybackRequestId) return;
             if (resolved) finalStreamUrl = resolved;
             else {
                 showToast("Failed to authenticate stream link.");
@@ -319,6 +333,7 @@ async function embedStream(channel, scrollMode = 'start') {
         if (playlist && playlist.epg && playlist.epg.startsWith('stalker:')) {
             const mac = playlist.epg.substring(8);
             const resolved = await window.iptvAPI.resolveStalkerLink({ url: playlist.source, mac, type, cmd });
+            if (thisRequestId !== window.currentPlaybackRequestId) return;
             if (resolved) finalStreamUrl = resolved;
             else {
                 showToast("Failed to authenticate stream link.");
@@ -373,7 +388,8 @@ async function embedStream(channel, scrollMode = 'start') {
                 extension,
                 directSourceUrl
             });
-
+            if (thisRequestId !== window.currentPlaybackRequestId) return;
+            
             if (resolvedSource && resolvedSource.url) {
                 finalStreamUrl = resolvedSource.url;
                 window.currentPlaybackHeaders = resolvedSource.headers || null;
@@ -469,6 +485,7 @@ async function embedStream(channel, scrollMode = 'start') {
         const epgIds = [mappedId, channel.tvg_id, channel.tvg_name].filter(Boolean);
         console.log('[API] Calling getEpg for current stream.');
         const epgData = await window.iptvAPI.getEpg(epgIds, null, null);
+        if (thisRequestId !== window.currentPlaybackRequestId) return;
 
         let programmes = [];
         for (const id of epgIds) {
@@ -530,9 +547,7 @@ async function embedStream(channel, scrollMode = 'start') {
         }, 30000);
     }
 
-    const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const playerOverlay = document.getElementById('player-overlay');
-    if (playerOverlay) playerOverlay.innerHTML = getWinSpinnerHtml(safeTitle, { size: 'large' });
+
 
     // Track active fallback iterations
     window.currentPlaybackChannel = channel;
@@ -543,6 +558,7 @@ async function embedStream(channel, scrollMode = 'start') {
     window.isAutoplayBlockedForCurrentEpisode = false;
     if (channel && channel.type === 'episode') {
         getEpisodesForSeries(channel).then(eps => {
+            if (thisRequestId !== window.currentPlaybackRequestId) return;
             window.currentPlayingSeriesEpisodes = eps;
             console.log(`[AUTOPLAY] Cached ${eps.length} episodes for series:`, channel.seriesTitle);
         }).catch(err => {

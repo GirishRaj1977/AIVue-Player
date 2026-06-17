@@ -874,8 +874,32 @@ app.whenReady().then(async () => {
     });
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+    if (isQuitting) return;
     isQuitting = true;
+
+    // Stop MPV immediately and remove its exit listener to prevent callbacks during shutdown
+    if (mpvProcess) {
+        try {
+            mpvProcess.removeAllListeners('exit');
+            mpvProcess.kill();
+        } catch (e) {
+            console.error('[APP ERR] Error killing mpvProcess during shutdown:', e);
+        }
+        mpvProcess = null;
+    }
+
+    if (db && typeof db.close === 'function') {
+        event.preventDefault();
+        console.log('[APP] Gracefully closing SQLite database before exit...');
+        db.close().then(() => {
+            console.log('[APP] Database closed successfully. Exiting now.');
+            app.exit(0);
+        }).catch(err => {
+            console.error('[APP ERR] Error closing database during exit:', err);
+            app.exit(1);
+        });
+    }
 });
 
 app.on('window-all-closed', () => {

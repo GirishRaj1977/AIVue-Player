@@ -691,6 +691,20 @@
         box-shadow: 0 2px 6px rgba(0,0,0,0.1) !important;
     }
 
+    #detail-description {
+        color: #a1a1aa !important;
+        font-size: 0.82rem !important;
+        line-height: 1.5 !important;
+        margin-top: 6px !important;
+        display: block !important;
+        max-height: 120px !important;
+        overflow-y: auto !important;
+        padding-right: 6px !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(255, 255, 255, 0.1) transparent !important;
+        font-family: 'Inter', sans-serif !important;
+    }
+
     /* Pulsing active Live Broadcast Indicator */
     #detail-program::before {
         content: "";

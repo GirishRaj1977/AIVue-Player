@@ -279,7 +279,7 @@ window.iptvAPI.onRemoteAction((cmd) => {
             document.body.appendChild(exitToast);
             
             document.getElementById('btn-remote-exit-yes').addEventListener('click', () => {
-                window.close(); // Gracefully closes the window and terminates MPV
+                window.iptvAPI.closeWindow();
             });
             document.getElementById('btn-remote-exit-no').addEventListener('click', () => {
                 exitToast.style.pointerEvents = 'none';
