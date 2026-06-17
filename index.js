@@ -2144,8 +2144,12 @@ async function getEpgDataFromDb(channelIds, startLimit, endLimit) {
             
             let query, params;
             if (startLimit && endLimit) {
-                const startEpoch = isNaN(startLimit) ? convertEpgStringToEpoch(startLimit) : parseInt(startLimit, 10);
-                const endEpoch = isNaN(endLimit) ? convertEpgStringToEpoch(endLimit) : parseInt(endLimit, 10);
+                const startEpoch = (typeof startLimit === 'string' && startLimit.trim().length >= 14)
+                    ? convertEpgStringToEpoch(startLimit)
+                    : parseInt(startLimit, 10);
+                const endEpoch = (typeof endLimit === 'string' && endLimit.trim().length >= 14)
+                    ? convertEpgStringToEpoch(endLimit)
+                    : parseInt(endLimit, 10);
                 
                 query = `SELECT channel_id, start_time, stop_time, title, description FROM epg WHERE channel_id IN (${placeholders}) AND stop_time >= ? AND start_time <= ? ORDER BY start_time ASC`;
                 params = [...chunk, startEpoch, endEpoch];
