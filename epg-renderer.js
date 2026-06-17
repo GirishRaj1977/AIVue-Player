@@ -165,8 +165,8 @@ function renderVisibleLiveEpgRows(force = false) {
 
                     programsHtml += `
                     <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.08); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.08); box-sizing: border-box; padding: 2px 4px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
-                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${recordHtml}${pTitle}</div>
-                        <div style="font-size: 0.75em; color: #888; margin-top: 4px;">${timeStr}</div>
+                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${reminderHtml}${recordHtml}${pTitle}</div>
+                        <div style="font-size: 0.75em; color: #888; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${timeStr}</div>
                     </div>`;
                 }
             } else {
@@ -768,8 +768,8 @@ function renderVisibleEpgRows(force = false) {
 
                     programsHtml += `
                     <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.08); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.08); box-sizing: border-box; padding: 2px 4px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
-                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${recordHtml}${pTitle}</div>
-                        <div style="font-size: 0.75em; color: #888; margin-top: 4px;">${timeStr}</div>
+                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${reminderHtml}${recordHtml}${pTitle}</div>
+                        <div style="font-size: 0.75em; color: #888; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${timeStr}</div>
                     </div>`;
                 }
             } else {
