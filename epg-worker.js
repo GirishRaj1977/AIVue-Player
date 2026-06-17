@@ -163,15 +163,16 @@ async function start() {
         }
 
         saxStream.on('opentag', (node) => {
-            currentTag = node.name;
-            if (node.name === 'channel') {
+            const tagName = node.name.toLowerCase();
+            currentTag = tagName;
+            if (tagName === 'channel') {
                 currentChannelId = node.attributes.id ? node.attributes.id.toLowerCase().trim() : null;
                 if (currentChannelId) {
                     currentChannel = { id: currentChannelId, name: '', logo: '' };
                 }
-            } else if (node.name === 'icon' && currentChannelId && currentChannel) {
+            } else if (tagName === 'icon' && currentChannelId && currentChannel) {
                 currentChannel.logo = node.attributes.src || '';
-            } else if (node.name === 'programme') {
+            } else if (tagName === 'programme') {
                 const ch = node.attributes.channel ? node.attributes.channel.toLowerCase().trim() : null;
                 if (ch && validChannels.has(ch)) {
                     const start = parseEpgTime(node.attributes.start);
@@ -212,7 +213,8 @@ async function start() {
                 return;
             }
 
-            if (name === 'channel') {
+            const tagName = name.toLowerCase();
+            if (tagName === 'channel') {
                 if (currentChannel && currentChannel.id) {
                     parentPort.postMessage({
                         type: 'save_epg_channel',
@@ -225,7 +227,7 @@ async function start() {
                 }
                 currentChannelId = null;
                 currentChannel = null;
-            } else if (name === 'programme') {
+            } else if (tagName === 'programme') {
                 if (currentProgramme) {
                     batch.push(currentProgramme);
                     channelsUpdatedSet.add(currentProgramme.channel_id);
@@ -237,13 +239,13 @@ async function start() {
                 }
                 currentProgramme = null;
             } else if (currentProgramme) {
-                if (name === 'title') {
+                if (tagName === 'title') {
                     currentProgramme.title = textBuffer.trim();
-                } else if (name === 'desc') {
+                } else if (tagName === 'desc') {
                     currentProgramme.desc = textBuffer.trim();
                 }
             } else if (currentChannelId && currentChannel) {
-                if (name === 'display-name') {
+                if (tagName === 'display-name') {
                     currentChannel.name = textBuffer.trim();
                 }
             }
