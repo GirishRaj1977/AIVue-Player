@@ -840,12 +840,15 @@ app.whenReady().then(async () => {
             const resolvedPath = path.resolve(filePath);
             const resolvedLogosDir = path.resolve(logosDir);
             if (resolvedPath.startsWith(resolvedLogosDir) && fs.existsSync(resolvedPath)) {
-                const data = fs.readFileSync(resolvedPath);
-                let mimeType = 'image/png';
-                if (filename.toLowerCase().endsWith('.jpg') || filename.toLowerCase().endsWith('.jpeg')) mimeType = 'image/jpeg';
-                else if (filename.toLowerCase().endsWith('.gif')) mimeType = 'image/gif';
-                else if (filename.toLowerCase().endsWith('.webp')) mimeType = 'image/webp';
-                return new Response(data, { headers: { 'Content-Type': mimeType } });
+                const stat = fs.statSync(resolvedPath);
+                if (stat.isFile()) {
+                    const data = fs.readFileSync(resolvedPath);
+                    let mimeType = 'image/png';
+                    if (filename.toLowerCase().endsWith('.jpg') || filename.toLowerCase().endsWith('.jpeg')) mimeType = 'image/jpeg';
+                    else if (filename.toLowerCase().endsWith('.gif')) mimeType = 'image/gif';
+                    else if (filename.toLowerCase().endsWith('.webp')) mimeType = 'image/webp';
+                    return new Response(data, { headers: { 'Content-Type': mimeType } });
+                }
             }
         } catch (err) {
             console.error('[Protocol Handler] Error serving cached logo:', err);
@@ -2171,11 +2174,11 @@ async function getEpgDataFromDb(channelIds, startLimit, endLimit) {
 }
 
 ipcMain.handle('get-epg', async (event, channelIds, startLimit, endLimit) => {
-    console.log('[IPC HANDLE] get-epg START', { channelIds_count: channelIds ? channelIds.length : 0 });
+    console.log('[IPC HANDLE] get-epg START', { channelIds, startLimit, endLimit });
     console.time('get-epg');
     const result = await getEpgDataFromDb(channelIds, startLimit, endLimit);
     console.timeEnd('get-epg');
-    console.log('[IPC HANDLE] get-epg END');
+    console.log('[IPC HANDLE] get-epg END. Results keys count:', Object.keys(result).length);
     return result;
 });
 
