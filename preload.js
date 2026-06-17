@@ -91,5 +91,8 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     closeMpvTrackSelector: () => ipcRenderer.send('close-mpv-track-selector'),
     log: (category, level, message) => ipcRenderer.send('write-log', { category, level, message }),
     onTriggerRendererBoundsSync: (callback) => ipcRenderer.on('trigger-renderer-bounds-sync', () => callback()),
-    onLogoCached: (callback) => ipcRenderer.on('logo-cached', (_event, data) => callback(data.originalUrl, data.cachedUrl))
+    onLogoCached: (callback) => ipcRenderer.on('logo-cached', (_event, data) => callback(data.originalUrl, data.cachedUrl)),
+    showNativeConfirm: (message) => ipcRenderer.send('show-native-confirm', message),
+    onNativeConfirmResponse: (callback) => ipcRenderer.on('native-confirm-response', (_event, response) => callback(response)),
+    offNativeConfirmResponse: () => ipcRenderer.removeAllListeners('native-confirm-response')
 });

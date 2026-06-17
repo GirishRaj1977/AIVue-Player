@@ -46,7 +46,7 @@ function hideGlobalSpinner() {
 function showToast(message) {
     console.log(`[UI] showToast: "${message}"`);
 
-    if (window.isAppFullscreen && streamActive) {
+    if (window.isAppFullscreen) {
         if (window.iptvAPI && typeof window.iptvAPI.showNativeToast === 'function') {
             window.iptvAPI.showNativeToast(message, 3000);
             return;
@@ -82,8 +82,16 @@ function showConfirmToast(message, onConfirm) {
     console.log(`[UI] showConfirmToast: "${message}"`);
 
     if (window.isAppFullscreen) {
-        if (window.iptvAPI && typeof window.iptvAPI.setConfirmToastActive === 'function') {
-            window.iptvAPI.setConfirmToastActive(true);
+        if (window.iptvAPI && typeof window.iptvAPI.showNativeConfirm === 'function') {
+            window.iptvAPI.offNativeConfirmResponse();
+            window.iptvAPI.onNativeConfirmResponse((response) => {
+                window.iptvAPI.offNativeConfirmResponse();
+                if (response) {
+                    onConfirm();
+                }
+            });
+            window.iptvAPI.showNativeConfirm(message);
+            return;
         }
     }
     let toast = document.getElementById('toast-notification');

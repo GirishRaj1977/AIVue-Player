@@ -350,6 +350,7 @@ let reconnectTimer = null;
 let splashWindow = null;
 let nativeToastWindow = null;
 let nativeToastTimer = null;
+let nativeConfirmWindow = null;
 let remoteOverrideWindow = null;
 let playerWindowHwnd = null;
 let lastPlayerWindowShapeKey = null;
@@ -423,6 +424,19 @@ ipcMain.on('focus-remote-search', (event) => {
 
 ipcMain.on('show-native-toast', (_event, message, duration) => {
     showNativeToast(message, duration);
+});
+
+ipcMain.on('show-native-confirm', (event, message) => {
+    showNativeConfirm(message);
+});
+
+ipcMain.on('native-confirm-response', (event, response) => {
+    if (nativeConfirmWindow && !nativeConfirmWindow.isDestroyed()) {
+        nativeConfirmWindow.destroy();
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('native-confirm-response', response);
+    }
 });
 
 function createWindow() {
@@ -665,6 +679,10 @@ function syncNativeOverlayWindows() {
         nativeToastWindow.setBounds(getOverlayBounds(520, 96));
         keepOverlayAbovePlayer(nativeToastWindow);
     }
+    if (nativeConfirmWindow && !nativeConfirmWindow.isDestroyed()) {
+        nativeConfirmWindow.setBounds(getOverlayBounds(520, 160));
+        keepOverlayAbovePlayer(nativeConfirmWindow);
+    }
     if (remoteOverrideWindow && !remoteOverrideWindow.isDestroyed()) {
         remoteOverrideWindow.setBounds(getOverlayBounds(460, 190));
         keepOverlayAbovePlayer(remoteOverrideWindow);
@@ -725,6 +743,85 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent
     nativeToastTimer = setTimeout(() => {
         if (nativeToastWindow === toastWindow && !toastWindow.isDestroyed()) toastWindow.destroy();
     }, duration);
+}
+
+function showNativeConfirm(message) {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+
+    if (nativeConfirmWindow && !nativeConfirmWindow.isDestroyed()) {
+        nativeConfirmWindow.destroy();
+    }
+
+    const confirmWindow = new BrowserWindow({
+        parent: mainWindow,
+        ...getOverlayBounds(520, 160),
+        frame: false,
+        transparent: true,
+        resizable: false,
+        movable: false,
+        show: false,
+        focusable: true,
+        skipTaskbar: true,
+        hasShadow: false,
+        backgroundColor: '#00000000',
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+    nativeConfirmWindow = confirmWindow;
+
+    if (playerWindow && !playerWindow.isDestroyed()) {
+        playerWindow.setIgnoreMouseEvents(false);
+    }
+
+    const safeMessage = escapeHtml(message);
+    confirmWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+<!doctype html>
+<html>
+<head>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#fff}
+.toast{position:absolute;left:50%;bottom:0;transform:translateX(-50%);box-sizing:border-box;max-width:500px;min-width:320px;padding:18px 26px;border-radius:16px;border:1px solid rgba(187,134,252,.48);background:rgba(18,18,24,.9);box-shadow:0 10px 30px rgba(187,134,252,.16),0 5px 15px rgba(0,0,0,.5);backdrop-filter:blur(20px);text-align:center;font-size:14px;display:flex;flex-direction:column;gap:12px;align-items:center}
+.title{font-weight:600;line-height:1.4}
+.buttons{display:flex;gap:10px}
+button{border:none;padding:8px 18px;border-radius:8px;font-family:inherit;font-size:12px;font-weight:bold;cursor:pointer;transition:all .2s}
+.btn-yes{background:#bb86fc;color:#121214;box-shadow:0 4px 12px rgba(187,134,252,.3)}
+.btn-no{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.15)}
+</style>
+</head>
+<body>
+<div class="toast">
+    <div class="title">${safeMessage}</div>
+    <div class="buttons">
+        <button class="btn-yes" onclick="send(true)">Yes</button>
+        <button class="btn-no" onclick="send(false)">No</button>
+    </div>
+</div>
+<script>
+const { ipcRenderer } = require('electron');
+function send(val) {
+    ipcRenderer.send('native-confirm-response', val);
+}
+</script>
+</body>
+</html>
+`)}`);
+
+    confirmWindow.once('ready-to-show', () => {
+        if (confirmWindow.isDestroyed() || nativeConfirmWindow !== confirmWindow) return;
+        confirmWindow.show();
+        confirmWindow.focus();
+        keepOverlayAbovePlayer(confirmWindow);
+    });
+
+    confirmWindow.on('closed', () => {
+        if (nativeConfirmWindow !== confirmWindow) return;
+        nativeConfirmWindow = null;
+        if (playerWindow && !playerWindow.isDestroyed()) {
+            playerWindow.setIgnoreMouseEvents(true);
+        }
+    });
 }
 
 function showRemoteOverridePrompt() {

@@ -4205,10 +4205,31 @@ function updateHeaderTime() {
     el.textContent = `${weekday} • ${month} ${day} • ${hours}:${minutes} ${ampm}`;
 }
 
+let mouseHideTimer = null;
+function handleFullscreenMouseCursor() {
+    if (window.isAppFullscreen) {
+        document.body.style.cursor = 'default';
+        if (mouseHideTimer) clearTimeout(mouseHideTimer);
+        mouseHideTimer = setTimeout(() => {
+            if (window.isAppFullscreen) {
+                document.body.style.cursor = 'none';
+            }
+        }, 3000);
+    } else {
+        if (mouseHideTimer) {
+            clearTimeout(mouseHideTimer);
+            mouseHideTimer = null;
+        }
+        document.body.style.cursor = 'default';
+    }
+}
+window.addEventListener('mousemove', handleFullscreenMouseCursor);
+
 // Hide the sidebar & title when the app goes fullscreen so the video takes up 100% of the monitor
 window.iptvAPI.onFullscreenChange((isFullscreen) => {
     console.log('[API RECV] onFullscreenChange, isFullscreen:', isFullscreen);
     window.isAppFullscreen = isFullscreen;
+    handleFullscreenMouseCursor();
     document.body.classList.toggle('fullscreen-active', isFullscreen);
     const navBar = document.getElementById('nav-bar');
     const sidebar = document.getElementById('sidebar');
