@@ -447,15 +447,22 @@ async function renderLiveEpgGrid() {
                                 ];
                             }
                             
-                            window.iptvAPI.scheduleRecording(originalUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders).then(res => {
-                                if (res) {
-                                    showToast(`Recording scheduled: ${progTitle}`);
-                                    renderFullEpg();
-                                    renderLiveEpg();
-                                } else {
-                                    showToast('Failed to schedule recording.', true);
-                                }
-                            });
+                            const handleSchedule = (force = false) => {
+                                window.iptvAPI.scheduleRecording(originalUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders, force).then(res => {
+                                    if (res && res.conflict) {
+                                        showConfirmToast(`Conflict: Overlaps with ${res.msg.replace('Conflict detected with: ', '')}. Schedule anyway?`, () => {
+                                            handleSchedule(true);
+                                        });
+                                    } else if (res && (res.success || typeof res === 'number' || res.id)) {
+                                        showToast(`Recording scheduled: ${progTitle}`);
+                                        renderFullEpg();
+                                        renderLiveEpg();
+                                    } else {
+                                        showToast('Failed to schedule recording.', true);
+                                    }
+                                });
+                            };
+                            handleSchedule(false);
                         } catch (err) {
                             console.error('Error scheduling recording:', err);
                             showToast('Failed to schedule: ' + err.message, true);
@@ -1023,15 +1030,22 @@ async function renderFullEpg() {
                                 ];
                             }
                             
-                            window.iptvAPI.scheduleRecording(originalUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders).then(res => {
-                                if (res) {
-                                    showToast(`Recording scheduled: ${progTitle}`);
-                                    renderFullEpg();
-                                    renderLiveEpg();
-                                } else {
-                                    showToast('Failed to schedule recording.', true);
-                                }
-                            });
+                            const handleSchedule = (force = false) => {
+                                window.iptvAPI.scheduleRecording(originalUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders, force).then(res => {
+                                    if (res && res.conflict) {
+                                        showConfirmToast(`Conflict: Overlaps with ${res.msg.replace('Conflict detected with: ', '')}. Schedule anyway?`, () => {
+                                            handleSchedule(true);
+                                        });
+                                    } else if (res && (res.success || typeof res === 'number' || res.id)) {
+                                        showToast(`Recording scheduled: ${progTitle}`);
+                                        renderFullEpg();
+                                        renderLiveEpg();
+                                    } else {
+                                        showToast('Failed to schedule recording.', true);
+                                    }
+                                });
+                            };
+                            handleSchedule(false);
                         } catch (err) {
                             console.error('Error scheduling recording:', err);
                             showToast('Failed to schedule: ' + err.message, true);

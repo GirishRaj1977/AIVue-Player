@@ -1816,6 +1816,7 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                                 console.log(`[XTREAM EPG] Saved ${insertCount} EPG entries to database.`);
                             });
                             await saveTx(res.epg_data);
+                            scanAndScheduleSeriesRecordings().catch(() => {});
                             mainWindow.webContents.send('epg-update-finished', { sourceUrl: source, status: 'success' });
                         }
                     }
@@ -1944,6 +1945,7 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                     });
                     
                     await saveTx(stalkerEpgDict);
+                    scanAndScheduleSeriesRecordings().catch(() => {});
                     mainWindow.webContents.send('epg-update-finished', { sourceUrl: source, status: 'success' });
                 } catch (err) {
                     console.error(`[STALKER EPG] Failed to update for ${source}:`, err);
@@ -2060,6 +2062,9 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                                 INSERT OR REPLACE INTO epg_metadata (source_url, etag, last_modified, last_update, programme_count)
                                 VALUES (?, ?, ?, ?, ?)
                             `).run(source, msg.etag || null, msg.lastModified || null, Date.now(), msg.count).catch(() => {});
+
+                            // Scan series recording rules in background
+                            scanAndScheduleSeriesRecordings().catch(() => {});
 
                             if (mainWindow && !mainWindow.isDestroyed()) {
                                 mainWindow.webContents.send('epg-update-finished', {
@@ -4918,10 +4923,110 @@ ipcMain.handle('delete-recording', async (event, filename) => {
 // --- DVR RECORDINGS SCHEDULER ENGINE ---
 // ==========================================
 
-ipcMain.handle('schedule-recording', async (event, channelUrl, channelName, programName, startTime, endTime, headers = []) => {
-    console.log('[DVR SCHEDULER IPC] schedule-recording:', channelName, '--', programName, '-- Start:', startTime);
+// Helper to check for overlapping scheduled recordings
+async function checkRecordingConflict(startTime, endTime) {
+    if (!db) return null;
+    try {
+        const rows = await db.prepare(`
+            SELECT * FROM dvr_schedule 
+            WHERE (status = 'pending' OR status = 'recording')
+            AND start_time < ? 
+            AND end_time > ?
+        `).all(endTime, startTime);
+        
+        if (rows.length > 0) {
+            return rows.map(r => {
+                let meta = { channelName: 'Unknown', programName: 'Scheduled Program' };
+                try { if (r.file_path) meta = JSON.parse(r.file_path); } catch (e) {}
+                return `${meta.programName} on ${meta.channelName}`;
+            });
+        }
+    } catch (e) {
+        console.error('[DVR] Conflict check failed:', e);
+    }
+    return null;
+}
+
+// Automatically scan and schedule upcoming programmes matching active series rules
+async function scanAndScheduleSeriesRecordings() {
+    if (!db) return;
+    try {
+        console.log('[DVR Series Scanner] Running scan...');
+        const rules = await db.prepare("SELECT * FROM dvr_series_rules").all();
+        if (rules.length === 0) return;
+
+        const nowSec = Math.floor(Date.now() / 1000);
+        
+        for (const rule of rules) {
+            const pattern = `%${rule.title_pattern}%`;
+            
+            // Resolve the channel_title to EPG channel_id
+            const mappingRow = await db.prepare("SELECT epg_id FROM mappings WHERE channel_title = ?").get(rule.channel_title);
+            const channelId = mappingRow ? mappingRow.epg_id : null;
+            if (!channelId) continue;
+            
+            const matches = await db.prepare(`
+                SELECT * FROM epg 
+                WHERE channel_id = ? 
+                AND title LIKE ? 
+                AND start_time > ?
+            `).all(channelId, pattern, nowSec);
+            
+            for (const match of matches) {
+                const startTimeIso = new Date(parseInt(match.start_time, 10) * 1000).toISOString();
+                const endTimeIso = new Date(parseInt(match.stop_time, 10) * 1000).toISOString();
+                
+                // Check if already scheduled
+                const existing = await db.prepare(`
+                    SELECT id FROM dvr_schedule 
+                    WHERE channel_url IN (SELECT url FROM channels WHERE title = ?) 
+                    AND start_time = ?
+                `).get(rule.channel_title, startTimeIso);
+                
+                if (!existing) {
+                    console.log(`[DVR Series Scanner] Auto-scheduling matched series: "${match.title}" on "${rule.channel_title}"`);
+                    
+                    const chRow = await db.prepare("SELECT url FROM channels WHERE title = ?").get(rule.channel_title);
+                    if (chRow) {
+                        let headers = [];
+                        if (chRow.url.startsWith('stalker-link:')) {
+                            const plist = await db.prepare("SELECT source_url FROM playlists WHERE id = (SELECT playlist_id FROM channels WHERE title = ?)").get(rule.channel_title);
+                            if (plist && plist.source_url.startsWith('stalker-portal:')) {
+                                const creds = plist.source_url.substring(15).split('|');
+                                headers.push(`STALKER-METADATA:${JSON.stringify({ portalUrl: creds[0], mac: creds[1], sourceType: 'stalker' })}`);
+                            }
+                        }
+                        
+                        const metadata = JSON.stringify({ 
+                            channelName: rule.channel_title, 
+                            programName: match.title, 
+                            headers 
+                        });
+                        
+                        await db.prepare(`
+                            INSERT INTO dvr_schedule (channel_url, start_time, end_time, status, file_path)
+                            VALUES (?, ?, ?, 'pending', ?)
+                        `).run(chRow.url, startTimeIso, endTimeIso, metadata);
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error('[DVR Series Scanner] Error:', e);
+    }
+}
+
+ipcMain.handle('schedule-recording', async (event, channelUrl, channelName, programName, startTime, endTime, headers = [], force = false) => {
+    console.log('[DVR SCHEDULER IPC] schedule-recording:', channelName, '--', programName, '-- Start:', startTime, '-- Force:', force);
     try {
         if (!db) return false;
+        
+        if (!force) {
+            const conflicts = await checkRecordingConflict(startTime, endTime);
+            if (conflicts && conflicts.length > 0) {
+                return { conflict: true, msg: `Conflict detected with: ${conflicts.join(', ')}` };
+            }
+        }
         
         const metadata = JSON.stringify({ channelName, programName, headers });
         const res = await db.prepare(`
@@ -4929,11 +5034,58 @@ ipcMain.handle('schedule-recording', async (event, channelUrl, channelName, prog
             VALUES (?, ?, ?, 'pending', ?)
         `).run(channelUrl, startTime, endTime, metadata);
         
-        return res.lastInsertRowid;
+        return { success: true, id: res.lastInsertRowid };
     } catch (e) {
         console.error('[DB ERR] Failed to schedule recording:', e);
         return false;
     }
+});
+
+// Series Recording rules persistence IPC Handlers
+ipcMain.handle('add-series-rule', async (event, channelTitle, titlePattern) => {
+    console.log('[DVR IPC] add-series-rule:', channelTitle, '-- Pattern:', titlePattern);
+    if (!db) return false;
+    try {
+        const res = await db.prepare(`
+            INSERT INTO dvr_series_rules (channel_title, title_pattern)
+            VALUES (?, ?)
+        `).run(channelTitle, titlePattern);
+        
+        // Scan EPG and auto-schedule matched episodes immediately in background
+        scanAndScheduleSeriesRecordings().catch(() => {});
+        
+        return res.lastInsertRowid;
+    } catch (e) {
+        console.error('[DB ERR] Failed to add series rule:', e);
+        return false;
+    }
+});
+
+ipcMain.handle('get-series-rules', async () => {
+    if (!db) return [];
+    try {
+        return await db.prepare("SELECT * FROM dvr_series_rules ORDER BY id DESC").all();
+    } catch (e) {
+        console.error('[DB ERR] Failed to get series rules:', e);
+        return [];
+    }
+});
+
+ipcMain.handle('delete-series-rule', async (event, ruleId) => {
+    console.log('[DVR IPC] delete-series-rule:', ruleId);
+    if (!db) return false;
+    try {
+        await db.prepare("DELETE FROM dvr_series_rules WHERE id = ?").run(ruleId);
+        return true;
+    } catch (e) {
+        console.error('[DB ERR] Failed to delete series rule:', e);
+        return false;
+    }
+});
+
+ipcMain.handle('trigger-series-scan', async () => {
+    await scanAndScheduleSeriesRecordings().catch(() => {});
+    return true;
 });
 
 ipcMain.handle('get-scheduled-recordings', async () => {

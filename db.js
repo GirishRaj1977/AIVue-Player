@@ -155,6 +155,13 @@ try {
                     file_path TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS dvr_series_rules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel_title TEXT,
+                    title_pattern TEXT,
+                    last_scheduled_time TEXT
+                );
+
                 CREATE TABLE IF NOT EXISTS playback_progress (
                     id TEXT PRIMARY KEY,
                     tmdb_id TEXT,
