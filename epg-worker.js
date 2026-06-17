@@ -97,8 +97,12 @@ async function start() {
 
         if (epgSource.startsWith('http://') || epgSource.startsWith('https://')) {
             const headers = {};
-            if (cachedMeta.etag) headers['If-None-Match'] = cachedMeta.etag;
-            if (cachedMeta.lastModified) headers['If-Modified-Since'] = cachedMeta.lastModified;
+            const hasNoProgrammes = !cachedMeta || !cachedMeta.programme_count || cachedMeta.programme_count === 0;
+            
+            if (!forceRefresh && !hasNoProgrammes) {
+                if (cachedMeta.etag) headers['If-None-Match'] = cachedMeta.etag;
+                if (cachedMeta.lastModified) headers['If-Modified-Since'] = cachedMeta.lastModified;
+            }
 
             const res = await getStream(epgSource, headers);
             if (res.statusCode === 304) {

@@ -1984,11 +1984,15 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                     }
 
                     // 3. Query metadata
-                    let cachedMeta = { etag: null, lastModified: null };
+                    let cachedMeta = { etag: null, lastModified: null, programme_count: 0 };
                     try {
-                        const row = await db.prepare("SELECT etag, last_modified FROM epg_metadata WHERE source_url = ?").get(source);
+                        const row = await db.prepare("SELECT etag, last_modified, programme_count FROM epg_metadata WHERE source_url = ?").get(source);
                         if (row) {
-                            cachedMeta = { etag: row.etag, lastModified: row.last_modified };
+                            cachedMeta = { 
+                                etag: row.etag, 
+                                lastModified: row.last_modified, 
+                                programme_count: row.programme_count || 0 
+                            };
                         }
                     } catch (e) {}
 
