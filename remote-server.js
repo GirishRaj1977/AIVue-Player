@@ -270,8 +270,9 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                     if (p.channels && !p.disabled) {
                         list.push(...p.channels.filter(c => !c.disabled && c.type === 'live').map(c => {
                             let logoUrl = c.logo || '';
-                            if (logoUrl && logoUrl.startsWith('aivue-logo:///')) {
-                                const filename = logoUrl.substring(14);
+                            if (logoUrl && logoUrl.startsWith('aivue-logo://')) {
+                                // Strip 'aivue-logo://' (2 slashes) or 'aivue-logo:///' (3 slashes)
+                                const filename = logoUrl.replace(/^aivue-logo:\/\/\/?/, '');
                                 logoUrl = `/api/logo/${filename}`;
                             }
                             return { ...c, logo: logoUrl, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg };
@@ -334,11 +335,19 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                 res.json({});
             }
         });
+        app.get('/api/reminders', (req, res) => {
+            res.json([]);
+        });
 
+        app.post('/api/toggle-reminder', (req, res) => {
+            res.json({ success: true });
+        });
         app.post('/api/play', (req, res) => {
             const { url, title, position, type, tmdbId, season, episodeNum } = req.body;
             const mw = options.getMainWindow();
             if (mw && !mw.isDestroyed() && url && title) {
+                if (mw.isMinimized()) mw.restore();
+                mw.focus();
                 mw.webContents.send('remote-play-channel', { url, title, position, type, tmdbId, season, episodeNum });
             }
             res.send('OK');
@@ -352,7 +361,14 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             let movies = [];
             playlists.forEach(p => {
                 if (p.channels && !p.disabled) {
-                    movies.push(...p.channels.filter(c => !c.disabled && (c.type === 'movie' || c.type === 'movie_category')).map(c => ({ ...c, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg })));
+                    movies.push(...p.channels.filter(c => !c.disabled && (c.type === 'movie' || c.type === 'movie_category')).map(c => {
+                        let logoUrl = c.logo || '';
+                        if (logoUrl && logoUrl.startsWith('aivue-logo://')) {
+                            const filename = logoUrl.replace(/^aivue-logo:\/\/\/?/, '');
+                            logoUrl = `/api/logo/${filename}`;
+                        }
+                        return { ...c, logo: logoUrl, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg };
+                    }));
                 }
             });
             res.json(movies);
@@ -366,7 +382,14 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             let series = [];
             playlists.forEach(p => {
                 if (p.channels && !p.disabled) {
-                    series.push(...p.channels.filter(c => !c.disabled && (c.type === 'series' || c.type === 'series_category' || c.type === 'vod' || c.type === 'vod_category' || c.group === 'Series Categories')).map(c => ({ ...c, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg })));
+                    series.push(...p.channels.filter(c => !c.disabled && (c.type === 'series' || c.type === 'series_category' || c.type === 'vod' || c.type === 'vod_category' || c.group === 'Series Categories')).map(c => {
+                        let logoUrl = c.logo || '';
+                        if (logoUrl && logoUrl.startsWith('aivue-logo://')) {
+                            const filename = logoUrl.replace(/^aivue-logo:\/\/\/?/, '');
+                            logoUrl = `/api/logo/${filename}`;
+                        }
+                        return { ...c, logo: logoUrl, playlistId: p.id, playlistName: p.name, source: p.source, epg: p.epg };
+                    }));
                 }
             });
             res.json(series);
@@ -435,6 +458,12 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                 <!DOCTYPE html>
                 <html lang="en">
                 <head>
+                    <script>
+                    if (window.location.username || window.location.password) {
+                        const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname + window.location.search + window.location.hash;
+                        window.location.replace(cleanUrl);
+                    }
+                    </script>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
                     <title>${pageTitle} - AIVue Remote</title>
@@ -474,7 +503,18 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                     </div>
                     
                     <div id="toast"></div>
-    
+                    
+                    <script>
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistrations().then(registrations => {
+                            if (registrations.length > 0) {
+                                Promise.all(registrations.map(r => r.unregister())).then(() => {
+                                    window.location.reload();
+                                });
+                            }
+                        });
+                    }
+                    </script>
                     <script src="/movies.js"></script>
                 </body>
                 </html>
@@ -492,6 +532,12 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                 <!DOCTYPE html>
                 <html lang="en">
                 <head>
+                    <script>
+                    if (window.location.username || window.location.password) {
+                        const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname + window.location.search + window.location.hash;
+                        window.location.replace(cleanUrl);
+                    }
+                    </script>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
                     <title>Guide - AIVue Remote</title>
@@ -573,7 +619,18 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                     </div>
                     
                     <div id="toast"></div>
-    
+                    
+                    <script>
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistrations().then(registrations => {
+                            if (registrations.length > 0) {
+                                Promise.all(registrations.map(r => r.unregister())).then(() => {
+                                    window.location.reload();
+                                });
+                            }
+                        });
+                    }
+                    </script>
                     <script src="/epg.js"></script>
                 </body>
                 </html>
@@ -624,7 +681,7 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                 case 'chdown':
                     if (mw && !mw.isDestroyed()) mw.webContents.send('mpv-previous-channel');
                     break;
-                case 'power': case 'home': case 'back': case 'guide': case 'favorites':
+                case 'power': case 'home': case 'back': case 'favorites':
                 case 'up': case 'down': case 'left': case 'right': case 'ok': case 'search':
                 case 'livetv': case 'playlist': case 'settings': case 'fullscreen': case 'vod':
                     if (mw && !mw.isDestroyed()) mw.webContents.send('remote-action', cmd);
@@ -659,7 +716,7 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
 
         app.get('/sw.js', (req, res) => {
             res.setHeader('Content-Type', 'application/javascript');
-            res.send("self.addEventListener('install', e => self.skipWaiting());\nself.addEventListener('activate', e => e.waitUntil(clients.claim()));\nself.addEventListener('fetch', e => { e.respondWith(fetch(e.request).catch(() => new Response('AIVue Remote is offline.'))); });");
+            res.send("self.addEventListener('install', e => self.skipWaiting());\nself.addEventListener('activate', e => e.waitUntil(clients.claim()));\nself.addEventListener('fetch', e => {\n    const url = new URL(e.request.url);\n    if (url.pathname.startsWith('/cmd/') || url.pathname.startsWith('/api/') || url.pathname === '/search' || url.pathname === '/events') {\n        e.respondWith(fetch(e.request));\n        return;\n    }\n    e.respondWith(fetch(e.request).catch(() => new Response('AIVue Remote is offline.')));\n});");
         });
 
         app.get('/icon.svg', (req, res) => {
@@ -673,6 +730,12 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+if (window.location.username || window.location.password) {
+    const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname + window.location.search + window.location.hash;
+    window.location.replace(cleanUrl);
+}
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0f172a">
@@ -757,28 +820,42 @@ button:active, a.top-btn:active { transform:scale(.95); }
 </div>
 <script>
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(e => console.error('SW reg failed', e));
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+        if (registrations.length > 0) {
+            Promise.all(registrations.map(r => r.unregister())).then(() => {
+                window.location.reload();
+            });
+        }
+    });
 }
+const _base = window.location.protocol + '//' + window.location.host;
+
 document.querySelectorAll('button').forEach(btn => {
     if (btn.dataset.cmd) {
-        btn.addEventListener('click', () => {
+        const sendCmd = () => {
             const cmd = btn.dataset.cmd;
-            fetch('/cmd/' + cmd).catch(e => console.error(e));
-            if(navigator.vibrate) navigator.vibrate(50);
+            fetch(_base + '/cmd/' + cmd).catch(e => console.error(e));
+            try {
+                if (navigator.vibrate) navigator.vibrate(50);
+            } catch (e) {}
+        };
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            sendCmd();
         });
     }
 });
 
 const searchBox = document.getElementById('remoteSearchBox');
 searchBox.addEventListener('input', () => {
-    fetch('/search', {
+    fetch(_base + '/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: searchBox.value })
     }).catch(e => console.error(e));
 });
 
-const evtSource = new EventSource('/events');
+const evtSource = new EventSource(_base + '/events');
 evtSource.onmessage = (e) => {
     const data = JSON.parse(e.data);
     if (data.type === 'searchSync') { searchBox.value = data.text; }

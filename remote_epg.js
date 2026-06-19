@@ -1,4 +1,27 @@
-document.addEventListener('DOMContentLoaded', () => {
+(function() {
+    const init = () => {
+        try {
+    const _base = window.location.protocol + '//' + window.location.host;
+
+    // Sticky programme titles: offset inner text into the visible cell area on horizontal scroll.
+    // Runs as a lightweight style mutation — no DOM rebuild.
+    function updateStickyTitles(scrollLeft, rowsLayerId) {
+        const layer = document.getElementById(rowsLayerId);
+        if (!layer) return;
+        const cells = layer.querySelectorAll('.epg-program-cell');
+        cells.forEach(cell => {
+            const cellLeft  = parseFloat(cell.dataset.cellLeft)  || 0;
+            const cellWidth = parseFloat(cell.dataset.cellWidth) || 0;
+            if (cellWidth < 2) return;
+            const basePad   = 4;
+            const rawOffset = scrollLeft - cellLeft + basePad;
+            const textOffset = Math.min(Math.max(basePad, rawOffset), Math.max(basePad, cellWidth - 80));
+            const kids = cell.children;
+            if (kids[0]) kids[0].style.paddingLeft = textOffset + 'px';
+            if (kids[1]) kids[1].style.paddingLeft = textOffset + 'px';
+        });
+    }
+
     let allChannels = [];
     let channelMappings = {};
     let savedPlaylists = [];
@@ -85,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const endLimit = formatDateToEpgString(gridEnd);
         
         try {
-            const response = await fetch('/api/epg', {
+            const response = await fetch(_base + '/api/epg', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ids: epgIdsArr, start: startLimit, end: endLimit })
@@ -149,7 +172,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const topPos = i * rowHeight;
             const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-            const imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : '/player.png';
+            let imgSrc = (channel.logo && channel.logo.trim() !== '') ? channel.logo : '/player.png';
+            // Guard: convert any aivue-logo:// URLs that slipped through the server transform
+            if (imgSrc.startsWith('aivue-logo://')) {
+                const filename = imgSrc.replace(/^aivue-logo:\/\/\/?/, '');
+                imgSrc = _base + '/api/logo/' + filename;
+            }
             
             let programsHtml = '';
             const mappedId = channelMappings[channel.title];
@@ -179,23 +207,23 @@ document.addEventListener('DOMContentLoaded', () => {
                         let width = right - left;
 
                         if (right < viewStartPx || left > viewEndPx) continue;
-                        
+
                         const isCurrent = (now >= pStart && now <= pEnd);
                         const pTitle = (prog.title || 'Unknown').replace(/</g, "&lt;").replace(/>/g, "&gt;");
                         const timeStr = `${pStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${pEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-                        
+
                         const progData = { title: pTitle, timeStr: timeStr, desc: (prog.desc||'') };
 
                         const isFuture = pStart > now;
                         const isReminderSet = savedReminders.some(r => r.progTitle === prog.title && r.startTime === prog.start && r.channelTitle === channel.title);
                         const reminderStyle = isReminderSet ? 'opacity: 1; filter: drop-shadow(0 0 4px #bb86fc);' : 'opacity: 0.3; filter: grayscale(100%);';
-                        const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' data-prog='${JSON.stringify(prog).replace(/'/g, "&apos;")}' style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">🔔</span>` : '';
+                        const reminderHtml = isFuture ? `<span class="reminder-btn-full" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' data-prog='${JSON.stringify(prog).replace(/'/g, "&apos;")}' style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${reminderStyle}" title="Set/Remove Reminder">&#x1F514;</span>` : '';
                         const borderCol = isCurrent ? '#bb86fc' : 'transparent';
 
                         programsHtml += `
-                        <div class="epg-play-channel epg-program-cell" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' data-program='${JSON.stringify(progData).replace(/'/g, "&apos;")}' style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${isCurrent ? '#2c2c2c' : '#1e1e1e'}; border-right: 1px solid rgba(255, 255, 255, 0.15); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; padding: 2px 4px; overflow: hidden;">
-                            <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${reminderHtml}${pTitle}</div>
-                            <div style="font-size: 0.75em; color: #888; margin-top: 4px;">${timeStr}</div>
+                        <div class="epg-play-channel epg-program-cell" data-channel='${JSON.stringify(channel).replace(/'/g, "&apos;")}' data-program='${JSON.stringify(progData).replace(/'/g, "&apos;")}' data-cell-left="${left}" data-cell-width="${width}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${isCurrent ? '#2c2c2c' : '#1e1e1e'}; border-right: 1px solid rgba(255, 255, 255, 0.15); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.15); box-sizing: border-box; padding: 2px 0; overflow: hidden;">
+                            <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; box-sizing: border-box;">${reminderHtml}${pTitle}</div>
+                            <div style="font-size: 0.75em; color: #888; margin-top: 2px; padding-left: 4px; box-sizing: border-box;">${timeStr}</div>
                         </div>`;
                     }
                 } else {
@@ -225,6 +253,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function onEpgScroll() {
         if (!epgScrollTicking) {
             window.requestAnimationFrame(() => {
+                // Lightweight sticky-title update runs every frame — no DOM rebuild
+                const sc = document.getElementById('epg-scroll-container');
+                if (sc) updateStickyTitles(sc.scrollLeft, 'epg-rows-layer');
                 renderVisibleEpgRows();
                 epgScrollTicking = false;
             });
@@ -306,9 +337,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function initializeApp() {
         const [channelsRes, mappingsRes, remindersRes] = await Promise.all([
-            fetch('/api/channels'),
-            fetch('/api/mappings'),
-            fetch('/api/reminders')
+            fetch(_base + '/api/channels'),
+            fetch(_base + '/api/mappings'),
+            fetch(_base + '/api/reminders')
         ]);
         allChannels = await channelsRes.json();
         channelMappings = await mappingsRes.json();
@@ -404,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
             savedReminders.push({ ...reminder, notified: false });
         }
 
-        await fetch('/api/toggle-reminder', {
+        await fetch(_base + '/api/toggle-reminder', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(reminder)
@@ -454,16 +485,25 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('modal-watch-btn').onclick = async () => {
                 document.getElementById('program-modal').style.display = 'none';
                 showToast(`Playing ${channelData.title} on TV...`);
-                await fetch('/api/play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: channelData.url, title: channelData.title }) });
+                await fetch(_base + '/api/play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: channelData.url, title: channelData.title }) });
             };
         } else if (playChannelEl && !programCell) {
             const channelData = JSON.parse(playChannelEl.dataset.channel);
             if (channelData) {
                 showToast(`Playing ${channelData.title} on TV...`);
-                await fetch('/api/play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: channelData.url, title: channelData.title }) });
+                await fetch(_base + '/api/play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: channelData.url, title: channelData.title }) });
             }
         }
     });
 
     initializeApp();
-});
+        } catch (err) {
+            console.error('[REMOTE] init error:', err);
+        }
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();

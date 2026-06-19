@@ -1,4 +1,22 @@
-document.addEventListener('DOMContentLoaded', () => {
+(function() {
+    const init = () => {
+        try {
+    const _base = window.location.protocol + '//' + window.location.host;
+    if (typeof window.IntersectionObserver === 'undefined') {
+        window.IntersectionObserver = class IntersectionObserver {
+            constructor(callback) {
+                this.callback = callback;
+            }
+            observe(element) {
+                setTimeout(() => {
+                    this.callback([{ isIntersecting: true, target: element }], this);
+                }, 0);
+            }
+            unobserve() {}
+            disconnect() {}
+        };
+    }
+
     const isSeriesPage = window.location.pathname === '/series';
     let allItems = [];
     let currentCategory = null;
@@ -115,10 +133,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             
                             const tmdbId = card.dataset.tmdbId;
                             const type = isSeriesPage ? 'series' : 'movie';
-                            let url = `/api/tmdb/search?title=${encodeURIComponent(title)}&type=${type}`;
+                            let url = `${_base}/api/tmdb/search?title=${encodeURIComponent(title)}&type=${type}`;
                             
                             if (tmdbId) {
-                                url = `/api/tmdb/details?id=${tmdbId}&type=${type}`;
+                                url = `${_base}/api/tmdb/details?id=${tmdbId}&type=${type}`;
                             }
                             
                             try {
@@ -174,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initTmdbObserver();
         try {
             const apiEndpoint = isSeriesPage ? '/api/series' : '/api/movies';
-            const res = await fetch(apiEndpoint);
+            const res = await fetch(_base + apiEndpoint);
             allItems = await res.json();
             
             allItems.forEach(c => {
@@ -189,6 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             renderCategories();
         } catch (e) {
+            console.error('[REMOTE] initializeApp error:', e);
             grid.innerHTML = `<div style="color:#ef4444; grid-column:1/-1; text-align:center;">Failed to load ${isSeriesPage ? 'series' : 'movies'}</div>`;
         }
     }
@@ -208,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="folder-icon">
                     <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
                 </div>
-                <div class="folder-title" title="${title.replace(/"/g, '&quot;')}">${title}</div>
+                <div class="folder-title" title="${(title || '').replace(/"/g, '&quot;')}">${title || ''}</div>
                 ${count !== null ? `<div style="font-size:0.8em;color:#888;">${count} Items</div>` : ''}
             `;
             card.addEventListener('click', onClick);
@@ -277,8 +296,8 @@ document.addEventListener('DOMContentLoaded', () => {
             grid.appendChild(loadingDiv);
 
             try {
-                const mac = currentCategory.epg.substring(8);
-                const res = await fetch('/api/load-stalker-category', {
+                const mac = (currentCategory.epg && currentCategory.epg.startsWith('stalker:')) ? currentCategory.epg.substring(8) : '';
+                const res = await fetch(_base + '/api/load-stalker-category', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -298,6 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     renderItems(items);
                 }
             } catch (e) {
+                console.error('[REMOTE] loadCategory error:', e);
                 loadingDiv.innerHTML = `<span style="color:#ef4444;">Failed to load ${isSeriesPage ? 'series' : 'movies'}.</span>`;
             }
         }
@@ -388,9 +408,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!tmdbData) {
             try {
                 const tmdbId = item.tmdb_id || item.tmdbId;
-                let url = `/api/tmdb/search?title=${encodeURIComponent(item.name || item.title)}&type=${isSeriesPage ? 'series' : 'movie'}`;
+                let url = `${_base}/api/tmdb/search?title=${encodeURIComponent(item.name || item.title)}&type=${isSeriesPage ? 'series' : 'movie'}`;
                 if (tmdbId) {
-                    url = `/api/tmdb/details?id=${tmdbId}&type=${isSeriesPage ? 'series' : 'movie'}`;
+                    url = `${_base}/api/tmdb/details?id=${tmdbId}&type=${isSeriesPage ? 'series' : 'movie'}`;
                 }
                 const res = await fetch(url);
                 tmdbData = await res.json();
@@ -445,7 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const progressId = tmdbId ? `tmdb:${tmdbId}` : `url:${item.url}`;
             
             try {
-                const progRes = await fetch(`/api/progress?id=${encodeURIComponent(progressId)}`);
+                const progRes = await fetch(`${_base}/api/progress?id=${encodeURIComponent(progressId)}`);
                 const progress = await progRes.json();
                 
                 if (progress && progress.position > 5 && progress.completed === 0) {
@@ -486,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadSeasonEpisodes(tmdbId, seasonNum, seriesItem) {
         modalEpisodesList.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">Loading episodes...</div>';
         try {
-            const res = await fetch(`/api/tmdb/season?id=${tmdbId}&season=${seasonNum}`);
+            const res = await fetch(`${_base}/api/tmdb/season?id=${tmdbId}&season=${seasonNum}`);
             const seasonData = await res.json();
             modalEpisodesList.innerHTML = '';
             
@@ -500,7 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     let progressHtml = '';
                     let savedProgress = null;
                     try {
-                        const progRes = await fetch(`/api/progress?id=${encodeURIComponent(progressId)}`);
+                        const progRes = await fetch(`${_base}/api/progress?id=${encodeURIComponent(progressId)}`);
                         savedProgress = await progRes.json();
                         if (savedProgress && savedProgress.position > 5) {
                             const percent = Math.min(100, Math.floor((savedProgress.position / savedProgress.duration) * 100));
@@ -549,7 +569,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function playStream(item, position = 0, tmdbId = null) {
         showToast(`Resuming ${item.name || item.title} on PC...`);
         try {
-            await fetch('/api/play', {
+            await fetch(_base + '/api/play', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -578,7 +598,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            await fetch('/api/play', {
+            await fetch(_base + '/api/play', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -621,4 +641,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     initializeApp();
-});
+        } catch (err) {
+            console.error('[REMOTE] init error:', err);
+        }
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();

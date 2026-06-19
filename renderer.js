@@ -502,7 +502,6 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
     });
 
     const tempDisabled = new Set();
-    const tempSelected = new Set();
 
     originalChannels.forEach((c, idx) => {
         if (c.disabled !== false) tempDisabled.add(idx);
@@ -538,8 +537,13 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                 const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
 
                 groupsHtml += `
-                <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; color: #d1d5db; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'Inter', sans-serif; font-size: 0.85em; border-radius: 0 6px 6px 0; margin: 1px 6px 1px 0;">
-                    ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: rgba(255,255,255,0.3); font-size: 0.82em; float: right;">${enabled} (${total})</span>
+                <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; color: #d1d5db; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'Inter', sans-serif; font-size: 0.85em; border-radius: 0 6px 6px 0; margin: 1px 6px 1px 0; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex-grow: 1;">
+                        <input type="checkbox" class="group-select-cb" data-group="${g.replace(/"/g, '&quot;')}" style="width: 14px; height: 14px; accent-color: #bb86fc; cursor: pointer; flex-shrink: 0;">
+                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${g.replace(/</g, '&lt;')}</span>
+                        ${newLabel}
+                    </div>
+                    <span class="group-count-span" style="color: rgba(255,255,255,0.3); font-size: 0.82em; flex-shrink: 0; margin-left: 6px;">${enabled}/${total}</span>
                 </div>`;
             });
         });
@@ -554,8 +558,13 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                 const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
 
                 groupsHtml += `
-                <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; color: #d1d5db; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'Inter', sans-serif; font-size: 0.85em; border-radius: 0 6px 6px 0; margin: 1px 6px 1px 0;">
-                    ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: rgba(255,255,255,0.3); font-size: 0.82em; float: right;">${enabled} (${total})</span>
+                <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; color: #d1d5db; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'Inter', sans-serif; font-size: 0.85em; border-radius: 0 6px 6px 0; margin: 1px 6px 1px 0; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex-grow: 1;">
+                        <input type="checkbox" class="group-select-cb" data-group="${g.replace(/"/g, '&quot;')}" style="width: 14px; height: 14px; accent-color: #bb86fc; cursor: pointer; flex-shrink: 0;">
+                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${g.replace(/</g, '&lt;')}</span>
+                        ${newLabel}
+                    </div>
+                    <span class="group-count-span" style="color: rgba(255,255,255,0.3); font-size: 0.82em; flex-shrink: 0; margin-left: 6px;">${enabled}/${total}</span>
                 </div>`;
             });
         }
@@ -567,8 +576,13 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             const newLabel = hasNew ? ' <span style="color: #FFD700; font-size: 0.85em;">(New)</span>' : '';
 
             groupsHtml += `
-            <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; color: #d1d5db; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'Inter', sans-serif; font-size: 0.85em; border-radius: 0 6px 6px 0; margin: 1px 6px 1px 0;">
-                ${g.replace(/</g, '&lt;')}${newLabel} <span class="group-count-span" style="color: rgba(255,255,255,0.3); font-size: 0.82em; float: right;">${enabled} (${total})</span>
+            <div class="modal-group-item" data-group="${g.replace(/"/g, '&quot;')}" style="padding: 10px 18px; cursor: pointer; border-left: 3px solid transparent; color: #d1d5db; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); font-family: 'Inter', sans-serif; font-size: 0.85em; border-radius: 0 6px 6px 0; margin: 1px 6px 1px 0; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex-grow: 1;">
+                    <input type="checkbox" class="group-select-cb" data-group="${g.replace(/"/g, '&quot;')}" style="width: 14px; height: 14px; accent-color: #bb86fc; cursor: pointer; flex-shrink: 0;">
+                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${g.replace(/</g, '&lt;')}</span>
+                    ${newLabel}
+                </div>
+                <span class="group-count-span" style="color: rgba(255,255,255,0.3); font-size: 0.82em; flex-shrink: 0; margin-left: 6px;">${enabled}/${total}</span>
             </div>`;
         });
     }
@@ -584,7 +598,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             
             <div style="display: flex; flex-grow: 1; overflow: hidden;">
                 <!-- Left Column: Groups -->
-                <div style="width: 260px; background: rgba(0, 0, 0, 0.15); border-right: 1px solid rgba(187, 134, 252, 0.08); display: flex; flex-direction: column;">
+                <div style="width: 280px; background: rgba(0, 0, 0, 0.15); border-right: 1px solid rgba(187, 134, 252, 0.08); display: flex; flex-direction: column;">
                     <div style="padding: 12px 18px; background: rgba(187, 134, 252, 0.06); border-bottom: 1px solid rgba(187, 134, 252, 0.08); font-weight: 700; color: rgba(187, 134, 252, 0.7); font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.12em; font-family: 'Inter', sans-serif;">
                         Groups
                     </div>
@@ -598,10 +612,8 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
                     <div style="padding: 10px 20px; background: rgba(187, 134, 252, 0.04); border-bottom: 1px solid rgba(187, 134, 252, 0.08); display: flex; align-items: center; gap: 15px;">
                         <label style="display: flex; align-items: center; cursor: pointer; color: #bb86fc; font-weight: 600; margin-right: 10px; font-family: 'Inter', sans-serif; font-size: 0.88em; gap: 8px; user-select: none;">
                             <input type="checkbox" id="modal-select-all" style="margin: 0; width: 16px; height: 16px; accent-color: #bb86fc; cursor: pointer;">
-                            Select All
+                            Enable All Visible
                         </label>
-                        <button id="modal-enable-btn" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 700; padding: 5px 14px; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 0.82em; transition: all 0.2s ease;">Enable</button>
-                        <button id="modal-disable-btn" style="background: rgba(207, 102, 121, 0.12); color: #f0859a; border: 1px solid rgba(207, 102, 121, 0.25); font-weight: 700; padding: 5px 14px; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 0.82em; transition: all 0.2s ease;">Disable</button>
                         <span id="modal-channels-count" style="color: rgba(255,255,255,0.4); font-size: 0.82em; flex-grow: 1; text-align: right; font-family: 'Inter', sans-serif;">Showing 0 channels</span>
                     </div>
                     <div id="modal-channels-list" style="flex-grow: 1; overflow-y: auto; padding: 8px 16px;">
@@ -650,7 +662,6 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         let channelsHtml = currentFilteredChannels.map(item => {
             const { channel, originalIndex } = item;
             const isDisabled = tempDisabled.has(originalIndex);
-            const isSelected = tempSelected.has(originalIndex);
             const isNew = channel.isNew;
             const safeTitle = (channel.title || 'Unknown Channel').replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -658,18 +669,18 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             const titleColor = isDisabled ? (isNew ? '#FFD700' : '#f0859a') : '#34d399';
 
             return `
-                <label style="display: flex; align-items: center; padding: 9px 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); cursor: pointer; background: ${isSelected ? 'rgba(187, 134, 252, 0.06)' : 'transparent'}; transition: all 0.15s ease; border-radius: 6px; margin-bottom: 2px; gap: 12px;">
-                    <input type="checkbox" class="channel-select-cb" data-idx="${originalIndex}" ${isSelected ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: #bb86fc; cursor: pointer; flex-shrink: 0;">
+                <label style="display: flex; align-items: center; padding: 9px 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); cursor: pointer; background: ${!isDisabled ? 'rgba(52, 211, 153, 0.04)' : 'transparent'}; transition: all 0.15s ease; border-radius: 6px; margin-bottom: 2px; gap: 12px;">
+                    <input type="checkbox" class="channel-select-cb" data-idx="${originalIndex}" ${!isDisabled ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: #bb86fc; cursor: pointer; flex-shrink: 0;">
                     <span style="flex-grow: 1; color: ${titleColor}; font-weight: 600; font-size: 0.84em; font-family: 'Inter', sans-serif;">${safeTitle}${newLabel}</span>
                 </label>
             `;
         }).join('');
 
-        let allVisibleSelectedCalc = visibleCount > 0;
-        if (allVisibleSelectedCalc) {
+        let allVisibleEnabled = visibleCount > 0;
+        if (allVisibleEnabled) {
             currentFilteredChannels.forEach(item => {
-                if (!tempSelected.has(item.originalIndex)) {
-                    allVisibleSelectedCalc = false;
+                if (tempDisabled.has(item.originalIndex)) {
+                    allVisibleEnabled = false;
                 }
             });
         }
@@ -678,7 +689,7 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         if (countSpan) countSpan.textContent = `Showing ${visibleCount} channels`;
 
         const selectAllCb = document.getElementById('modal-select-all');
-        if (selectAllCb) selectAllCb.checked = allVisibleSelectedCalc;
+        if (selectAllCb) selectAllCb.checked = allVisibleEnabled;
 
         const listDiv = document.getElementById('modal-channels-list');
         if (listDiv) listDiv.innerHTML = channelsHtml;
@@ -686,20 +697,12 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         document.querySelectorAll('.channel-select-cb').forEach(cb => {
             cb.addEventListener('change', (e) => {
                 const idx = parseInt(e.target.getAttribute('data-idx'));
-                if (e.target.checked) tempSelected.add(idx);
-                else tempSelected.delete(idx);
-
-                const label = e.target.closest('label');
                 if (e.target.checked) {
-                    label.style.background = 'rgba(187, 134, 252, 0.06)';
+                    tempDisabled.delete(idx);
                 } else {
-                    label.style.background = 'transparent';
+                    tempDisabled.add(idx);
                 }
-                let allVisibleSelectedCheck = true;
-                document.querySelectorAll('.channel-select-cb').forEach(c => {
-                    if (!c.checked) allVisibleSelectedCheck = false;
-                });
-                document.getElementById('modal-select-all').checked = allVisibleSelectedCheck;
+                renderChannelsList();
             });
         });
 
@@ -709,7 +712,21 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             const total = groupsMap[g].channels.length;
             const enabled = groupsMap[g].channels.filter(item => !tempDisabled.has(item.originalIndex)).length;
             const countSpan = el.querySelector('.group-count-span');
-            if (countSpan) countSpan.textContent = `${enabled} (${total})`;
+            if (countSpan) countSpan.textContent = `${enabled}/${total}`;
+
+            const cb = el.querySelector('.group-select-cb');
+            if (cb) {
+                if (enabled === 0) {
+                    cb.checked = false;
+                    cb.indeterminate = false;
+                } else if (enabled === total) {
+                    cb.checked = true;
+                    cb.indeterminate = false;
+                } else {
+                    cb.checked = false;
+                    cb.indeterminate = true;
+                }
+            }
 
             if (g === currentGroupFilter) {
                 el.style.borderLeftColor = '#bb86fc';
@@ -771,28 +788,33 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
         });
     });
 
+    document.querySelectorAll('.group-select-cb').forEach(cb => {
+        cb.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+        cb.addEventListener('change', (e) => {
+            const g = e.target.getAttribute('data-group');
+            const checked = e.target.checked;
+            if (groupsMap[g]) {
+                groupsMap[g].channels.forEach(item => {
+                    if (checked) {
+                        tempDisabled.delete(item.originalIndex);
+                    } else {
+                        tempDisabled.add(item.originalIndex);
+                    }
+                });
+                renderChannelsList();
+            }
+        });
+    });
     document.getElementById('modal-channel-search').addEventListener('input', renderChannelsList);
 
     document.getElementById('modal-select-all').addEventListener('change', (e) => {
         const checkAll = e.target.checked;
         currentFilteredChannels.forEach(item => {
-            if (checkAll) tempSelected.add(item.originalIndex);
-            else tempSelected.delete(item.originalIndex);
+            if (checkAll) tempDisabled.delete(item.originalIndex);
+            else tempDisabled.add(item.originalIndex);
         });
-        renderChannelsList();
-    });
-
-    document.getElementById('modal-enable-btn').addEventListener('click', () => {
-        if (tempSelected.size === 0) return;
-        tempSelected.forEach(idx => tempDisabled.delete(idx));
-        tempSelected.clear();
-        renderChannelsList();
-    });
-
-    document.getElementById('modal-disable-btn').addEventListener('click', () => {
-        if (tempSelected.size === 0) return;
-        tempSelected.forEach(idx => tempDisabled.add(idx));
-        tempSelected.clear();
         renderChannelsList();
     });
 
@@ -824,7 +846,6 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             delete c.isNew;
         });
         playlist.channels = originalChannels;
-
         const enabledChannels = originalChannels.filter(c => !c.disabled && c.type !== 'movie' && c.type !== 'series' && c.type !== 'movie_category' && c.type !== 'vod_category' && c.type !== 'series_category');
         const uniqueGroups = new Set(enabledChannels.map(c => c.group || 'Ungrouped'));
         const groupsCount = uniqueGroups.size;
@@ -899,7 +920,9 @@ function openManageChannelsModal(playlistIndex, pendingData = null) {
             showToast(`Groups (${groupsCount}) and Channels (${channelsCount}) imported for playlist`);
             switchTab('playlist', document.getElementById('btn-playlist'));
         } else {
+            markPlaylistsDirty();
             updateState();
+            await autoMapChannels(false, true);
             hideGlobalSpinner();
             showToast("Playlist channels updated successfully.");
             switchTab('playlist', document.getElementById('btn-playlist'));
@@ -1872,9 +1895,6 @@ window.iptvAPI.onRemotePlayChannel(({ url, title, position, type, tmdbId, season
         window.pendingSeekPosition = parseFloat(position);
     }
 
-    if (mainWindow && !mainWindow.isMinimized()) {
-        mainWindow.focus();
-    }
 });
 
 

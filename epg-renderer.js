@@ -44,6 +44,30 @@ let liveEpgLastEndIndex = -1;
 let liveEpgLastScrollLeft = -1;
 let liveEpgScrollTicking = false;
 
+/**
+ * Sticky programme titles: when scrolled into the middle of a long cell,
+ * offset the inner text so it stays visible rather than being stranded
+ * off-screen at the cell's left edge. Runs on every scroll frame without
+ * a full DOM rebuild — just direct style mutations on existing elements.
+ */
+function updateStickyTitles(scrollLeft, rowsLayerId) {
+    const layer = document.getElementById(rowsLayerId);
+    if (!layer) return;
+    const cells = layer.querySelectorAll('.epg-program-cell');
+    cells.forEach(cell => {
+        const cellLeft  = parseFloat(cell.dataset.cellLeft)  || 0;
+        const cellWidth = parseFloat(cell.dataset.cellWidth) || 0;
+        if (cellWidth < 2) return;
+        const basePad   = 4;
+        const rawOffset = scrollLeft - cellLeft + basePad;
+        // clamp: at least basePad, at most cellWidth-80 so text doesn't bleed past right border
+        const textOffset = Math.min(Math.max(basePad, rawOffset), Math.max(basePad, cellWidth - 80));
+        const kids = cell.children;
+        if (kids[0]) kids[0].style.paddingLeft = textOffset + 'px';
+        if (kids[1]) kids[1].style.paddingLeft = textOffset + 'px';
+    });
+}
+
 
 function onLiveEpgScroll() {
     if (!liveEpgScrollTicking) {
@@ -55,6 +79,8 @@ function onLiveEpgScroll() {
             if (scrollContainer && headerScroll && channelsCol) {
                 headerScroll.scrollLeft = scrollContainer.scrollLeft;
                 channelsCol.scrollTop = scrollContainer.scrollTop;
+                // Lightweight sticky-title update on every frame — no DOM rebuild
+                updateStickyTitles(scrollContainer.scrollLeft, 'live-epg-rows-layer');
             }
             
             renderVisibleLiveEpgRows();
@@ -164,9 +190,9 @@ function renderVisibleLiveEpgRows(force = false) {
                     const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-desc="${(prog.desc || '').replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isScheduled ? 'Cancel Scheduled Recording' : 'Schedule Recording'}">🔴</span>` : '';
 
                     programsHtml += `
-                    <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.08); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.08); box-sizing: border-box; padding: 2px 4px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
-                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${reminderHtml}${recordHtml}${pTitle}</div>
-                        <div style="font-size: 0.75em; color: #888; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${timeStr}</div>
+                    <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" data-cell-left="${left}" data-cell-width="${width}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.08); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.08); box-sizing: border-box; padding: 2px 0; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
+                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; box-sizing: border-box;">${reminderHtml}${recordHtml}${pTitle}</div>
+                        <div style="font-size: 0.75em; color: #888; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; box-sizing: border-box;">${timeStr}</div>
                     </div>`;
                 }
             } else {
@@ -666,6 +692,8 @@ function onEpgScroll() {
             if (scrollContainer && headerScroll && channelsCol) {
                 headerScroll.scrollLeft = scrollContainer.scrollLeft;
                 channelsCol.scrollTop = scrollContainer.scrollTop;
+                // Lightweight sticky-title update on every frame — no DOM rebuild
+                updateStickyTitles(scrollContainer.scrollLeft, 'epg-rows-layer');
             }
             
             renderVisibleEpgRows();
@@ -775,9 +803,9 @@ function renderVisibleEpgRows(force = false) {
                     const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-desc="${(prog.desc || '').replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isScheduled ? 'Cancel Scheduled Recording' : 'Schedule Recording'}">🔴</span>` : '';
 
                     programsHtml += `
-                    <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.08); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.08); box-sizing: border-box; padding: 2px 4px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
-                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${reminderHtml}${recordHtml}${pTitle}</div>
-                        <div style="font-size: 0.75em; color: #888; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">${timeStr}</div>
+                    <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" data-cell-left="${left}" data-cell-width="${width}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.08); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.08); box-sizing: border-box; padding: 2px 0; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
+                        <div style="font-size: 0.85em; font-weight: bold; color: ${isCurrent ? '#fff' : '#ccc'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; box-sizing: border-box;">${reminderHtml}${recordHtml}${pTitle}</div>
+                        <div style="font-size: 0.75em; color: #888; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; box-sizing: border-box;">${timeStr}</div>
                     </div>`;
                 }
             } else {
