@@ -172,6 +172,10 @@ try {
                 // Show notification when a new recording starts
                 const startInfo = data.programName ? `"${data.programName}" on ` : '';
                 showToast(`Recording Started: ${startInfo}${data.channelName || 'Stream'}`);
+
+                if (window.currentPlaybackChannel && window.currentPlaybackChannel.title === data.channelName) {
+                    window.iptvAPI.sendMpvCommand(['script-message', 'update-recording-state', 'true']);
+                }
             }
             
             const progressEl = document.getElementById(`active-progress-${data.id}`);
@@ -187,6 +191,10 @@ try {
                 showToast(`Recording Completed: ${finishedInfo}`);
             } else if (data.status === 'error') {
                 showToast(`Recording Failed: ${data.error || 'Connection Lost'}`, true);
+            }
+
+            if (window.currentPlaybackChannel && window.currentPlaybackChannel.title === data.channelName) {
+                window.iptvAPI.sendMpvCommand(['script-message', 'update-recording-state', 'false']);
             }
             
             const recView = document.getElementById('recording-view');

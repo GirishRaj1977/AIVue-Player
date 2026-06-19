@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('iptvAPI', {
     onNextChannel: (callback) => ipcRenderer.on('mpv-next-channel', callback),
     onMpvSelectAid: (callback) => ipcRenderer.on('mpv-select-aid', callback),
     onMpvSelectSid: (callback) => ipcRenderer.on('mpv-select-sid', callback),
+    onMpvToggleRecording: (callback) => ipcRenderer.on('mpv-toggle-recording', callback),
     onStreamFailedRetry: (callback) => ipcRenderer.on('mpv-stream-failed-retry', callback),
     saveChannels: (channels) => ipcRenderer.invoke('save-channels', channels),
     deletePlaylist: (playlistId) => ipcRenderer.invoke('delete-playlist', playlistId),

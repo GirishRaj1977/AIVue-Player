@@ -822,3 +822,44 @@ function findNextEpisode() {
 
 window.Player.findNextEpisode = findNextEpisode;
 
+window.iptvAPI.onMpvToggleRecording(async () => {
+    const channel = window.currentPlaybackChannel;
+    if (!channel) return;
+
+    if (channel.type === 'recording') {
+        showToast('Cannot record a local recording playback.', true);
+        return;
+    }
+
+    const activeRec = clientActiveRecordings.find(r => r.channelName === channel.title && r.status === 'recording');
+    if (activeRec) {
+        const id = activeRec.id;
+        const stopped = await window.iptvAPI.stopRecording(id);
+        if (stopped) {
+            showToast('Recording stopped');
+            clientActiveRecordings = clientActiveRecordings.filter(r => r.id !== id);
+            window.appState.clientActiveRecordings = clientActiveRecordings;
+            window.iptvAPI.sendMpvCommand(['script-message', 'update-recording-state', 'false']);
+            if (typeof renderRecordings === 'function') {
+                renderRecordings();
+            }
+        } else {
+            showToast('Failed to stop recording.', true);
+        }
+    } else {
+        const detailProgram = document.getElementById('detail-program');
+        const programName = (detailProgram && detailProgram.textContent && detailProgram.textContent !== 'No Information Available' && detailProgram.textContent !== '--')
+            ? detailProgram.textContent
+            : 'Live Stream';
+
+        const channelUrl = channel.url;
+        const channelName = channel.title;
+        const headers = window.currentPlaybackHeaders || [];
+
+        const success = await window.iptvAPI.startRecording(channelUrl, channelName, programName, headers);
+        if (!success) {
+            showToast('Failed to start recording.', true);
+        }
+    }
+});
+

@@ -1471,6 +1471,15 @@ window.iptvAPI.onMpvFileLoaded(() => {
     window.isSwitchingStream = false;
     settlePlayerBoundsAfterLayout();
 
+    if (window.currentPlaybackChannel) {
+        const isRecording = clientActiveRecordings.some(r => r.channelName === window.currentPlaybackChannel.title && r.status === 'recording');
+        if (isRecording) {
+            window.iptvAPI.sendMpvCommand(['script-message', 'update-recording-state', 'true']);
+        } else {
+            window.iptvAPI.sendMpvCommand(['script-message', 'update-recording-state', 'false']);
+        }
+    }
+
     if (window.pendingResumeSeekTime !== null && window.pendingResumeSeekTime !== undefined) {
         const seekTime = window.pendingResumeSeekTime;
         window.pendingResumeSeekTime = null; // Clear immediately

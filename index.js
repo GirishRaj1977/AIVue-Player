@@ -1294,6 +1294,9 @@ function connectIPC() {
                     if (msg.args[0] === 'electron-select-sid') {
                         showPremiumTrackSelectorWindow('sub');
                     }
+                    if (msg.args[0] === 'electron-toggle-recording') {
+                        mainWindow.webContents.send('mpv-toggle-recording');
+                    }
                 }
 
                 if (['file-loaded', 'start-file', 'tracks-changed'].includes(msg.event)) {

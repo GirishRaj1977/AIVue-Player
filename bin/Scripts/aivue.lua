@@ -636,6 +636,7 @@ local state = {
     url_path = "",                           -- used for yt-dlp downloading
     electron_mouseX = nil,
     electron_mouseY = nil,
+    recording = false,
 }
 
 local logo_lines = {
@@ -2143,6 +2144,21 @@ layouts["modern"] = function ()
         end_x = end_x - 45
     end
 
+    -- record button
+    lo = add_layout("record")
+    lo.geometry = {x = end_x, y = refY - 35, an = 5, w = 32, h = 28}
+    lo.style = osc_styles.control_3
+    lo.visible = true
+    end_x = end_x - 45
+
+    -- recording indicator (overlay)
+    if state.recording then
+        lo = add_layout("recording_indicator")
+        lo.geometry = {x = osc_geo.w - 220, y = 20, an = 7, w = 200, h = 24}
+        lo.style = osc_styles.control_3
+        lo.visible = true
+    end
+
     -- cache info
     if user_opts.cache_info then
         lo = add_layout("cache_info")
@@ -2414,6 +2430,21 @@ layouts["modern-compact"] = function ()
         end_x = end_x - 55
     end
 
+    -- record button
+    lo = add_layout("record")
+    lo.geometry = {x = end_x, y = refY - 35, an = 5, w = 32, h = 28}
+    lo.style = osc_styles.control_2
+    lo.visible = true
+    end_x = end_x - 55
+
+    -- recording indicator (overlay)
+    if state.recording then
+        lo = add_layout("recording_indicator")
+        lo.geometry = {x = osc_geo.w - 220, y = 20, an = 7, w = 200, h = 24}
+        lo.style = osc_styles.control_2
+        lo.visible = true
+    end
+
     elements.cache_info.visible = user_opts.cache_info and osc_geo.w >= 500
     if elements.cache_info.visible then
         lo = add_layout("cache_info")
@@ -2550,6 +2581,20 @@ layouts["modern-image"] = function ()
         lo.geometry = {x = osc_geo.w - 172 + (ontop_button and 0 or 45) + (info_button and 0 or 45) + (fullscreen_button and 0 or 45), y = refY - 30, an = 5, w = 24, h = 24}
         lo.style = osc_styles.control_3
         lo.visible = (osc_param.playresx >= 400)
+    end
+
+    -- record button
+    lo = add_layout("record")
+    lo.geometry = {x = osc_geo.w - 217 + (user_opts.download_button and 0 or 45) + (ontop_button and 0 or 45) + (info_button and 0 or 45) + (fullscreen_button and 0 or 45), y = refY - 30, an = 5, w = 32, h = 28}
+    lo.style = osc_styles.control_3
+    lo.visible = true
+
+    -- recording indicator (overlay)
+    if state.recording then
+        lo = add_layout("recording_indicator")
+        lo.geometry = {x = osc_geo.w - 220, y = 20, an = 7, w = 200, h = 24}
+        lo.style = osc_styles.control_3
+        lo.visible = true
     end
 end
 
@@ -3216,6 +3261,36 @@ local function osc_init()
     end
     visible_min_width = visible_min_width + (user_opts.download_button and 100 or 0)
 
+    -- record
+    ne = new_element("record", "button")
+    ne.content = function ()
+        if state.recording then
+            return "{\\fs26\\c&H0000FF&}●{\\c&HFFFFFF&}"
+        else
+            return "{\\fs26\\c&HCCCCCC&}●{\\c&HFFFFFF&}"
+        end
+    end
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = function () return state.recording and "Stop Recording" or "Record Live Stream" end
+    ne.visible = true
+    ne.eventresponder["mbtn_left_up"] = function ()
+        mp.commandv("script-message", "electron-toggle-recording")
+    end
+    visible_min_width = visible_min_width + 100
+
+    -- recording indicator (overlay)
+    ne = new_element("recording_indicator", "button")
+    ne.content = function ()
+        if not state.recording then return "" end
+        return "{\\an9\\pos(" .. (osc_param.playresy * osc_param.display_aspect - 20) .. ",20)\\fs16\\c&H0000FF&}●{\\c&HFFFFFF&} Recording (Click to stop)"
+    end
+    ne.visible = state.recording
+    ne.tooltip_style = osc_styles.tooltip
+    ne.tooltipF = function () return "Click to stop recording" end
+    ne.eventresponder["mbtn_left_up"] = function ()
+        mp.commandv("script-message", "electron-toggle-recording")
+    end
+
 
     -- cache info
     ne = new_element("cache_info", "button")
@@ -3851,6 +3926,12 @@ local function render()
     -- actual OSC
     if state.osc_visible then
         render_elements(ass)
+    else
+        if state.recording then
+            local w = osc_param.playresy * osc_param.display_aspect
+            ass:new_event()
+            ass:append(string.format("{\\an9\\pos(%f,20)\\fs16\\c&H0000FF&}●{\\c&HFFFFFF&} Recording (Click to stop)", w - 20))
+        end
     end
 
     if user_opts.persistentprogress or state.persistent_progress_toggle then
@@ -3973,6 +4054,7 @@ local function set_tick_delay(_, display_fps)
 end
 
 mp.register_event("file-loaded", function()
+    state.recording = false
     is_image() -- check if file is an image
     state.new_file_flag = true
     state.file_size_normalized = "Approximating size..."
@@ -4266,6 +4348,11 @@ mp.register_script_message("update-epg", function(encoded_json)
         state.epg_data = data
         request_init()
     end
+end)
+
+mp.register_script_message("update-recording-state", function(state_str)
+    state.recording = (state_str == "true")
+    request_init()
 end)
 
 -- validate string type user options
