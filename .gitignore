@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# OS Generated
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Databases
+iptv.db
+iptv.db-wal
+iptv.db-shm
+
+# Local User App Data & Cache
+cache/
+AIVueRecordings/
+saved_channels.json
+tmdb_config.json
+remote_settings.json
+
+# Python Caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Electron build output
+dist/
+dist/*
+
+# PyInstaller build artifacts
+build/
+*.spec
+backend/parser.exe
+
+# AI tools
+.lean_ai/

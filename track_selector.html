@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Track Selector</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Outfit', 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        #overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(12, 5, 20, 0.5);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.25s ease forwards;
+        }
+        #container {
+            width: 380px;
+            background: rgba(25, 15, 38, 0.78);
+            border: 1px solid rgba(187, 134, 252, 0.25);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(187, 134, 252, 0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        #title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #title {
+            color: #ffffff;
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        #close-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.6);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            outline: none;
+        }
+        #close-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+        #close-btn svg {
+            width: 14px;
+            height: 14px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        #list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 280px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        /* Custom scrollbar */
+        #list::-webkit-scrollbar {
+            width: 6px;
+        }
+        #list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+        #list::-webkit-scrollbar-thumb:hover {
+            background: rgba(187, 134, 252, 0.5);
+        }
+        .item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1.5px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+        .item.selected {
+            background: rgba(187, 134, 252, 0.12);
+            border-color: rgba(187, 134, 252, 0.35);
+        }
+        .label {
+            color: rgba(255, 255, 255, 0.85);
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: color 0.2s ease;
+        }
+        .item.selected .label {
+            color: #bb86fc;
+            font-weight: 700;
+        }
+        .check {
+            color: #bb86fc;
+            font-size: 0.9rem;
+            text-shadow: 0 0 10px rgba(187, 134, 252, 0.5);
+        }
+        .empty-msg {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.95rem;
+            text-align: center;
+            padding: 20px;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes scaleUp {
+            from { transform: scale(0.92); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay">
+        <div id="container">
+            <div id="title-row">
+                <span id="title">Audio Track</span>
+                <button id="close-btn">
+                    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div id="list"></div>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        // Parse query params
+        const params = new URLSearchParams(window.location.search);
+        const type = params.get('type') || 'audio';
+        const currentId = params.get('currentId');
+        let tracks = [];
+        try {
+            tracks = JSON.parse(params.get('tracks') || '[]');
+        } catch(e) {}
+
+        const title = document.getElementById('title');
+        title.textContent = type === 'audio' ? 'Audio Track' : 'Subtitles';
+
+        const list = document.getElementById('list');
+
+        // Filter and display tracks
+        const filteredTracks = tracks.filter(t => t.type === (type === 'audio' ? 'audio' : 'sub'));
+        
+        if (type === 'sub') {
+            const offOption = {
+                id: 'no',
+                lang: '',
+                title: 'Subtitles Off',
+                selected: currentId === 'no' || !currentId
+            };
+            filteredTracks.unshift(offOption);
+        }
+
+        if (filteredTracks.length === 0) {
+            const emptyMsg = document.createElement('div');
+            emptyMsg.className = 'empty-msg';
+            emptyMsg.textContent = 'No tracks available';
+            list.appendChild(emptyMsg);
+        } else {
+            filteredTracks.forEach(t => {
+                const isSelected = t.selected || (type === 'sub' && t.id === 'no' && (currentId === 'no' || !currentId));
+                
+                const item = document.createElement('div');
+                item.className = 'item' + (isSelected ? ' selected' : '');
+
+                const label = document.createElement('span');
+                label.className = 'label';
+                let trackName = t.title || t.lang || (t.id === 'no' ? 'Subtitles Off' : `Track ${t.id}`);
+                if (t.lang) trackName += ` [${t.lang.toUpperCase()}]`;
+                label.textContent = trackName;
+
+                item.appendChild(label);
+
+                if (isSelected) {
+                    const check = document.createElement('span');
+                    check.className = 'check';
+                    check.textContent = '✔️';
+                    item.appendChild(check);
+                }
+
+                item.addEventListener('click', () => {
+                    ipcRenderer.send('select-mpv-track', { type, id: t.id });
+                });
+
+                list.appendChild(item);
+            });
+        }
+
+        // Close when clicking overlay
+        document.getElementById('overlay').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('overlay')) {
+                ipcRenderer.send('close-mpv-track-selector');
+            }
+        });
+
+        // Close on escape
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                ipcRenderer.send('close-mpv-track-selector');
+            }
+        });
+
+        document.getElementById('close-btn').addEventListener('click', () => {
+            ipcRenderer.send('close-mpv-track-selector');
+        });
+    </script>
+</body>
+</html>

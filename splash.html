@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AIVue Player</title>
+<style>
+    @font-face {
+        font-family: 'Inter';
+        src: url('assets/Font/Inter_18pt-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-style: normal;
+    }
+    @font-face {
+        font-family: 'Inter';
+        src: url('assets/Font/Inter_18pt-SemiBold.ttf') format('truetype');
+        font-weight: 600;
+        font-style: normal;
+    }
+    html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        font-family: 'Inter', sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    #splash-card {
+        width: 580px;
+        height: 580px;
+        background: rgba(18, 18, 24, 0.92);
+        border: 1px solid rgba(187, 134, 252, 0.3);
+        border-radius: 24px;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8), 0 0 40px rgba(187, 134, 252, 0.15);
+        backdrop-filter: blur(25px);
+        -webkit-backdrop-filter: blur(25px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        padding: 50px 40px 40px 40px;
+        box-sizing: border-box;
+        position: relative;
+    }
+    .logo-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-grow: 1;
+        margin-bottom: 20px;
+    }
+    .logo-img {
+        height: 360px;
+        width: auto;
+        object-fit: contain;
+        filter: drop-shadow(0 0 20px rgba(187, 134, 252, 0.4));
+        animation: breathing 3s ease-in-out infinite;
+    }
+    @keyframes breathing {
+        0%, 100% {
+            transform: scale(1);
+            filter: drop-shadow(0 0 15px rgba(187, 134, 252, 0.3));
+        }
+        50% {
+            transform: scale(1.04);
+            filter: drop-shadow(0 0 30px rgba(187, 134, 252, 0.65));
+        }
+    }
+    .bottom-section {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 15px;
+    }
+    .version-tag {
+        font-size: 0.8rem;
+        color: rgba(187, 134, 252, 0.8);
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        font-weight: 600;
+        text-shadow: 0 0 10px rgba(187, 134, 252, 0.3);
+    }
+    .progress-bar-container {
+        width: 100%;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 2px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.02);
+    }
+    .progress-bar-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #bb86fc, #d6b4fc);
+        box-shadow: 0 0 10px rgba(187, 134, 252, 0.6);
+        border-radius: 2px;
+        transition: width 0.1s ease-out;
+    }
+    .log-terminal {
+        width: 100%;
+        height: 48px;
+        background: rgba(8, 8, 12, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.04);
+        border-radius: 8px;
+        padding: 10px 14px;
+        box-sizing: border-box;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: 4px;
+    }
+    .log-line {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.72rem;
+        color: rgba(255, 255, 255, 0.6);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        animation: slideIn 0.2s ease-out;
+    }
+    .log-line.active {
+        color: #bb86fc;
+        text-shadow: 0 0 8px rgba(187, 134, 252, 0.3);
+    }
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(4px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    .log-bullet {
+        color: #bb86fc;
+    }
+</style>
+</head>
+<body>
+
+<div id="splash-card">
+    <div class="logo-container">
+        <img class="logo-img" src="assets/Player.png" alt="AIVue Player Logo">
+    </div>
+    
+    <div class="bottom-section">
+        <div id="version-display" class="version-tag">Version --</div>
+        
+        <div class="progress-bar-container">
+            <div id="progress-fill" class="progress-bar-fill"></div>
+        </div>
+        
+        <div class="log-terminal" id="log-display">
+            <!-- Simulated logs will write here -->
+        </div>
+    </div>
+</div>
+
+<script>
+const { ipcRenderer } = require('electron');
+const fs = require('fs');
+const path = require('path');
+
+// 1. Resolve Dynamic App Version
+let appVersion = '1.0.0';
+try {
+    const pkgPath = path.join(__dirname, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        appVersion = pkg.version || '1.0.0';
+    }
+} catch (err) {
+    console.error('Splash: failed to read app version', err);
+}
+document.getElementById('version-display').textContent = `Version ${appVersion}`;
+
+// 2. Scrolling Logs Simulation
+const startupLogs = [
+    "Initializing hardware acceleration drivers...",
+    "Verifying system codec architecture...",
+    "Connecting to AIVue local SQLite database...",
+    "Loading cached channel list and merging sources...",
+    "Synchronizing Programme Guide (EPG) listings...",
+    "Pre-caching active EPG channel mappings...",
+    "Checking TMDB connection and validating credentials...",
+    "Activating WebSockets Remote Controller host...",
+    "Warming up MPV hardware video engine...",
+    "Finalizing client interface layers...",
+    "AIVue Player is fully loaded and ready!"
+];
+
+const logDisplay = document.getElementById('log-display');
+const progressFill = document.getElementById('progress-fill');
+let currentLogIndex = 0;
+let endedSent = false;
+
+function sendEnded() {
+    if (endedSent) return;
+    endedSent = true;
+    ipcRenderer.send('splash-ended');
+}
+
+function renderNextLog() {
+    if (currentLogIndex >= startupLogs.length) {
+        progressFill.style.width = '100%';
+        setTimeout(sendEnded, 2500); // 2.5s pause to allow main UI (EPG + player) to fully load in background
+        return;
+    }
+    
+    const message = startupLogs[currentLogIndex];
+    
+    // De-activate previous active logs
+    const existingActive = logDisplay.querySelector('.log-line.active');
+    if (existingActive) {
+        existingActive.classList.remove('active');
+    }
+    
+    // Add new log line
+    const logLine = document.createElement('div');
+    logLine.className = 'log-line active';
+    logLine.innerHTML = `<span class="log-bullet">></span> ${message}`;
+    logDisplay.appendChild(logLine);
+    
+    // Maintain maximum of 2 scrolling lines visible in viewport
+    while (logDisplay.childNodes.length > 2) {
+        logDisplay.removeChild(logDisplay.firstChild);
+    }
+    
+    // Update progress bar
+    const progressPercent = ((currentLogIndex + 1) / startupLogs.length) * 100;
+    progressFill.style.width = `${progressPercent}%`;
+    
+    currentLogIndex++;
+    
+    // Calculate a slightly randomized timing for organic simulation
+    const nextTimeout = currentLogIndex === startupLogs.length - 1 ? 200 : Math.random() * 50 + 40;
+    setTimeout(renderNextLog, nextTimeout);
+}
+
+// Start simulation
+setTimeout(renderNextLog, 300);
+
+// Failsafe exit timer
+setTimeout(sendEnded, 7000);
+</script>
+
+</body>
+</html>
