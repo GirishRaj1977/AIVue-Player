@@ -91,7 +91,15 @@ async function renderRecordings() {
                     <span style="color: #888; font-size: 0.8em; margin-top: 5px;">Recorded on: ${dateStr} &bull; Size: ${formatBytes(rec.sizeBytes)}</span>
                 </div>
                 <div style="display: flex; gap: 8px;">
-                    <button class="playlist-btn play-rec-btn" data-path="${rec.absolutePath.replace(/"/g, '&quot;')}" data-name="${rec.filename.replace(/"/g, '&quot;')}" style="background: #bb86fc; color: black; font-weight: bold; padding: 8px 16px; border-radius: 6px;">Play</button>
+                    <button class="playlist-btn play-rec-btn" 
+                        data-path="${rec.absolutePath.replace(/"/g, '&quot;')}" 
+                        data-name="${rec.filename.replace(/"/g, '&quot;')}"
+                        data-channel-name="${(rec.channelName || '').replace(/"/g, '&quot;')}"
+                        data-program-name="${(rec.programName || '').replace(/"/g, '&quot;')}"
+                        data-description="${(rec.description || '').replace(/"/g, '&quot;')}"
+                        data-start-time="${rec.startTime || ''}"
+                        data-end-time="${rec.endTime || ''}"
+                        style="background: #bb86fc; color: black; font-weight: bold; padding: 8px 16px; border-radius: 6px;">Play</button>
                     <button class="playlist-btn delete-rec-btn" data-filename="${rec.filename.replace(/"/g, '&quot;')}" style="background: transparent; color: #cf6679; border: 1px solid rgba(207,102,121,0.4); padding: 8px 16px; border-radius: 6px;">Delete</button>
                 </div>
             </div>`;
@@ -101,11 +109,22 @@ async function renderRecordings() {
             btn.addEventListener('click', (e) => {
                 const filePath = btn.getAttribute('data-path');
                 const fileName = btn.getAttribute('data-name');
+                const channelName = btn.getAttribute('data-channel-name');
+                const programName = btn.getAttribute('data-program-name');
+                const description = btn.getAttribute('data-description');
+                const startTime = btn.getAttribute('data-start-time');
+                const endTime = btn.getAttribute('data-end-time');
+                
                 console.log('[DVR PLAY] Playing recorded stream:', filePath);
                 const recordingChannelObject = {
                     title: fileName.replace('.ts', ''),
                     url: filePath,
-                    type: 'live'
+                    type: 'recording',
+                    channelName: channelName,
+                    programName: programName,
+                    description: description,
+                    startTime: startTime,
+                    endTime: endTime
                 };
                 switchTab('live-tv', document.getElementById('btn-live-tv'));
                 embedStream(recordingChannelObject);

@@ -1948,7 +1948,7 @@ playerContainer.addEventListener('wheel', (e) => {
 // Wire up the Exit button to gracefully tear down the app
 document.getElementById('btn-exit').addEventListener('click', () => {
     console.log('[EVENT] Exit button clicked.');
-    window.iptvAPI.closeWindow();
+    window.iptvAPI.exitApp();
 });
 
 // Setup Tab Navigation Logic

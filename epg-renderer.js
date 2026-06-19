@@ -161,7 +161,7 @@ function renderVisibleLiveEpgRows(force = false) {
                     const isScheduled = clientScheduledRecordings.some(s => s.channelName === channel.title && s.programName === prog.title && s.startTime === startTimeIso && s.status === 'pending');
                     const isRecording = clientActiveRecordings.some(r => r.channelName === channel.title && r.status === 'recording' && isCurrent);
                     const recordStyle = (isRecording || isScheduled) ? 'color: #ef4444; opacity: 1; filter: drop-shadow(0 0 4px #ef4444);' + (isRecording ? ' animation: pulse 1.5s infinite;' : '') : 'opacity: 0.4;';
-                    const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isScheduled ? 'Cancel Scheduled Recording' : 'Schedule Recording'}">🔴</span>` : '';
+                    const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-desc="${(prog.desc || '').replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isScheduled ? 'Cancel Scheduled Recording' : 'Schedule Recording'}">🔴</span>` : '';
 
                     programsHtml += `
                     <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.08); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.08); box-sizing: border-box; padding: 2px 4px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
@@ -371,6 +371,7 @@ async function renderLiveEpgGrid() {
                 const channelTitle = recordBtn.getAttribute('data-channel');
                 const channelUrl = recordBtn.getAttribute('data-url');
                 const progTitle = recordBtn.getAttribute('data-prog');
+                const progDesc = recordBtn.getAttribute('data-desc') || '';
                 const startRaw = recordBtn.getAttribute('data-start');
                 const stopRaw = recordBtn.getAttribute('data-stop');
                 
@@ -448,7 +449,7 @@ async function renderLiveEpgGrid() {
                             }
                             
                             const handleSchedule = (force = false) => {
-                                window.iptvAPI.scheduleRecording(originalUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders, force).then(res => {
+                                window.iptvAPI.scheduleRecording(originalUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders, force, progDesc).then(res => {
                                     if (res && res.conflict) {
                                         showConfirmToast(`Conflict: Overlaps with ${res.msg.replace('Conflict detected with: ', '')}. Schedule anyway?`, () => {
                                             handleSchedule(true);
@@ -771,7 +772,7 @@ function renderVisibleEpgRows(force = false) {
                     const isScheduled = clientScheduledRecordings.some(s => s.channelName === channel.title && s.programName === prog.title && s.startTime === startTimeIso && s.status === 'pending');
                     const isRecording = clientActiveRecordings.some(r => r.channelName === channel.title && r.status === 'recording' && isCurrent);
                     const recordStyle = (isRecording || isScheduled) ? 'color: #ef4444; opacity: 1; filter: drop-shadow(0 0 4px #ef4444);' + (isRecording ? ' animation: pulse 1.5s infinite;' : '') : 'opacity: 0.4;';
-                    const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isScheduled ? 'Cancel Scheduled Recording' : 'Schedule Recording'}">🔴</span>` : '';
+                    const recordHtml = isFuture ? `<span class="epg-record-btn" data-channel="${safeTitle.replace(/"/g, '&quot;')}" data-url="${channel.url.replace(/"/g, '&quot;')}" data-prog="${pTitle.replace(/"/g, '&quot;')}" data-desc="${(prog.desc || '').replace(/"/g, '&quot;')}" data-start="${prog.start}" data-stop="${prog.stop}" style="cursor: pointer; margin-right: 4px; display: inline-block; transition: 0.2s; ${recordStyle}" title="${isScheduled ? 'Cancel Scheduled Recording' : 'Schedule Recording'}">🔴</span>` : '';
 
                     programsHtml += `
                     <div class="epg-play-channel epg-program-cell" tabindex="0" data-index="${globalIdx}" style="position: absolute; left: ${left}px; top: 0; width: ${width}px; height: 45px; background: ${bg}; border-right: 1px solid rgba(255, 255, 255, 0.08); border-top: 2px solid ${borderCol}; border-bottom: 1px solid rgba(255, 255, 255, 0.08); box-sizing: border-box; padding: 2px 4px; overflow: hidden; cursor: pointer; transition: background 0.2s; outline: none;" title="${pTitle}\n${timeStr}\n${(prog.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
@@ -988,6 +989,7 @@ async function renderFullEpg() {
                 const channelTitle = recordBtn.getAttribute('data-channel');
                 const channelUrl = recordBtn.getAttribute('data-url');
                 const progTitle = recordBtn.getAttribute('data-prog');
+                const progDesc = recordBtn.getAttribute('data-desc') || '';
                 const startRaw = recordBtn.getAttribute('data-start');
                 const stopRaw = recordBtn.getAttribute('data-stop');
                 
@@ -1031,7 +1033,7 @@ async function renderFullEpg() {
                             }
                             
                             const handleSchedule = (force = false) => {
-                                window.iptvAPI.scheduleRecording(originalUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders, force).then(res => {
+                                window.iptvAPI.scheduleRecording(originalUrl, channelTitle, progTitle, startTimeIso, endTimeIso, customHeaders, force, progDesc).then(res => {
                                     if (res && res.conflict) {
                                         showConfirmToast(`Conflict: Overlaps with ${res.msg.replace('Conflict detected with: ', '')}. Schedule anyway?`, () => {
                                             handleSchedule(true);

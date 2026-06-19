@@ -52,6 +52,7 @@ function showToast(message) {
             return;
         }
         window.iptvAPI.sendMpvCommand(['show-text', message, '3000']);
+        return;
     }
     let toast = document.getElementById('toast-notification');
     if (!toast) {
@@ -63,7 +64,7 @@ function showToast(message) {
     if (toast.hideTimeout) clearTimeout(toast.hideTimeout);
 
     // Style passive toast in the modern, premium obsidian-purple-glass theme
-    toast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(18, 18, 24, 0.85); color: #ffffff; border: 1px solid rgba(187, 134, 252, 0.45); padding: 14px 28px; border-radius: 16px; z-index: 10000; font-weight: 600; font-family: "Inter", sans-serif; box-shadow: 0 10px 30px rgba(187, 134, 252, 0.15), 0 5px 15px rgba(0,0,0,0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); opacity: 0; pointer-events: none; white-space: pre-wrap; text-align: center; font-size: 0.92em; letter-spacing: -0.01em;';
+    toast.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(18, 18, 24, 0.85); color: #ffffff; border: 1px solid rgba(187, 134, 252, 0.45); padding: 14px 28px; border-radius: 16px; z-index: 10000; font-weight: 600; font-family: "Inter", sans-serif; box-shadow: 0 10px 30px rgba(187, 134, 252, 0.15), 0 5px 15px rgba(0,0,0,0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); transition: opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); opacity: 0; pointer-events: none; white-space: pre-wrap; text-align: center; font-size: 0.92em; letter-spacing: -0.01em; display: block;';
 
     toast.textContent = message;
 
@@ -75,6 +76,11 @@ function showToast(message) {
     toast.hideTimeout = setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(-50%) translateY(20px)';
+        setTimeout(() => {
+            if (toast.style.opacity === '0') {
+                toast.style.display = 'none';
+            }
+        }, 300);
     }, 3000);
 }
 

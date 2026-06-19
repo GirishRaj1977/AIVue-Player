@@ -9,7 +9,7 @@ const https = require('https');
 const http = require('http');
 
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'aivue-logo', privileges: { bypassCSP: true, secure: true, corsEnabled: true, supportFetchAPI: true } }
+    { scheme: 'aivue-logo', privileges: { bypassCSP: true, secure: true, corsEnabled: true, supportFetchAPI: true } }
 ]);
 
 function downloadImage(url, destPath, redirectCount = 0) {
@@ -25,11 +25,11 @@ function downloadImage(url, destPath, redirectCount = 0) {
 
         const file = fs.createWriteStream(destPath);
         const protocolLib = url.startsWith('https') ? https : http;
-        
+
         const req = protocolLib.get(url, { headers: { 'User-Agent': 'VLC/3.0.9 LibVLC/3.0.9' }, timeout: 15000 }, (response) => {
             if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
                 file.close();
-                fs.unlink(destPath, () => {});
+                fs.unlink(destPath, () => { });
                 try {
                     const redirectUrl = new URL(response.headers.location, url).toString();
                     downloadImage(redirectUrl, destPath, redirectCount + 1).then(resolve).catch(reject);
@@ -40,7 +40,7 @@ function downloadImage(url, destPath, redirectCount = 0) {
             }
             if (response.statusCode !== 200) {
                 file.close();
-                fs.unlink(destPath, () => {});
+                fs.unlink(destPath, () => { });
                 reject(new Error(`Failed to download: ${response.statusCode}`));
                 return;
             }
@@ -50,17 +50,17 @@ function downloadImage(url, destPath, redirectCount = 0) {
                 resolve();
             });
         });
-        
+
         req.on('error', (err) => {
             file.close();
-            fs.unlink(destPath, () => {});
+            fs.unlink(destPath, () => { });
             reject(err);
         });
-        
+
         req.on('timeout', () => {
             req.destroy();
             file.close();
-            fs.unlink(destPath, () => {});
+            fs.unlink(destPath, () => { });
             reject(new Error('Download timeout'));
         });
     });
@@ -120,10 +120,10 @@ async function processLogoDownloadQueue() {
 function normalizeName(name) {
     if (!name) return '';
     let str = name.toLowerCase();
-    
+
     // Remove brackets and their content, e.g. [HD], (US), |UK|
     str = str.replace(/[\[\(\{\|\<].*?[\]\)\}\|\>]/g, ' ');
-    
+
     // Remove common prefixes/suffixes/badges and quality terms
     const termsToRemove = [
         'hd', 'uhd', 'fhd', 'sd', '4k', '1080p', '720p', 'hevc', 'h264', 'h.264', '50fps', '60fps',
@@ -131,16 +131,16 @@ function normalizeName(name) {
         'backup', 'back', 'main', 'tv', 'ch', 'channel', 'premium', 'vip', 'east', 'west', 'direct',
         'fhd', '1080', '720', 'live', 'air'
     ];
-    
+
     // Replace non-alphanumeric with space
     str = str.replace(/[^a-z0-9]/g, ' ');
-    
+
     // Remove terms as words
     termsToRemove.forEach(term => {
         const regex = new RegExp(`\\b${term}\\b`, 'g');
         str = str.replace(regex, ' ');
     });
-    
+
     // Convert word numbers to digits
     const wordToDigit = {
         'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4',
@@ -149,10 +149,10 @@ function normalizeName(name) {
     for (const [word, digit] of Object.entries(wordToDigit)) {
         str = str.replace(new RegExp(`\\b${word}\\b`, 'g'), digit);
     }
-    
+
     // Replace multiple spaces with a single space
     str = str.replace(/\s+/g, ' ').trim();
-    
+
     return str;
 }
 
@@ -509,7 +509,7 @@ function createWindow() {
     mainWindow.once('ready-to-show', () => {
         isMainReadyToShow = true;
         checkAndShowMainWindow();
-        
+
         // Fallback in case of an issue playing the stream
         setTimeout(showMainWindowAndHideSplash, 3000);
     });
@@ -1031,26 +1031,26 @@ function initMpv() {
     // Create an invisible borderless child window exactly over the HTML div
     playerWindow = new BrowserWindow({
         parent: mainWindow,
-        x: -10000, 
+        x: -10000,
         y: -10000,
         width: 10,
         height: 10,
-        opacity: 0, 
+        opacity: 0,
         frame: false,
         hasShadow: false,
-        thickFrame: false, 
-        resizable: false,  
+        thickFrame: false,
+        resizable: false,
         backgroundColor: '#000000',
-        skipTaskbar: true, 
+        skipTaskbar: true,
         title: 'AIVue Player',
     });
-    
+
     playerWindow.setIgnoreMouseEvents(true);
     playerWindow.focus();
 
     const handle = playerWindow.getNativeWindowHandle();
     let wid;
-    
+
     if (process.platform === 'win32' || process.platform === 'linux') {
         wid = handle.readUInt32LE(0);
         playerWindowHwnd = wid;
@@ -1067,15 +1067,15 @@ function initMpv() {
     const mpvPath = process.platform === 'win32' ? path.join(baseDir, 'bin', 'mpv.exe') : 'mpv';
     const binDir = path.join(baseDir, 'bin');
     const luaScript = path.join(binDir, 'scripts', 'aivue.lua');
-    
+
     const mpvArgs = [
         `--wid=${wid}`,
         `--input-ipc-server=${ipcPath}`,
         `--no-border`,
-        `--force-window=yes`,   
-        `--hwdec=auto-safe`,    
-        `--profile=fast`,       
-        `--cache=yes`,          
+        `--force-window=yes`,
+        `--hwdec=auto-safe`,
+        `--profile=fast`,
+        `--cache=yes`,
         `--cache-secs=10`,
         `--demuxer-readahead-secs=5`,
         `--vd-lavc-dr=no`,
@@ -1084,13 +1084,13 @@ function initMpv() {
         `--demuxer-max-back-bytes=50M`,
         `--framedrop=vo`,
         `--video-sync=audio`,
-        `--config-dir=${binDir}`, 
-        `--load-scripts=no`,    
+        `--config-dir=${binDir}`,
+        `--load-scripts=no`,
         `--script=${luaScript}`,
         `--script-opts=aivue-osc_on_start=yes,aivue-bottomhover=no,aivue-window_controls=yes,aivue-playlist_button=no,aivue-info_button=no,aivue-ontop_button=no,aivue-jump_buttons=no,aivue-chapter_skip_buttons=no,aivue-track_nextprev_buttons=yes,aivue-fullscreen_button=no`,
-        `--input-cursor=yes`,   
-        `--input-vo-keyboard=yes`, 
-        `--osc=no`,             
+        `--input-cursor=yes`,
+        `--input-vo-keyboard=yes`,
+        `--osc=no`,
         `--demuxer-lavf-analyzeduration=20`,
         `--demuxer-lavf-probescore=100`,
         `--demuxer-lavf-o-add=fflags=+genpts`,
@@ -1107,7 +1107,7 @@ function initMpv() {
     console.log('[MPV] Spawning MPV process ONCE with args:', mpvArgs);
     mpvProcess = spawn(mpvPath, mpvArgs, { windowsHide: true });
 
-    setTimeout(connectIPC, 1000); 
+    setTimeout(connectIPC, 1000);
 
     mpvProcess.stdout.on('data', (data) => {
         // MPV stdout parsing removed. We now rely strictly on IPC property-change events 
@@ -1191,7 +1191,7 @@ function initMpv() {
 
 function connectIPC() {
     if (!mpvProcess || mpvProcess.exitCode !== null) return;
-    
+
     if (ipcConnectionAttempts === 0) {
         console.log('[MPV IPC] Attempting to connect to', ipcPath);
     }
@@ -1203,7 +1203,7 @@ function connectIPC() {
     }
     ipcClient = net.createConnection(ipcPath);
     let localConnected = false;
-    
+
     ipcClient.on('connect', () => {
         localConnected = true;
         ipcConnectionAttempts = 0;
@@ -1226,7 +1226,7 @@ function connectIPC() {
         ipcClient.write(JSON.stringify({ command: ["observe_property", 14, "sid"] }) + '\n');
         ipcClient.write(JSON.stringify({ command: ["request_log_messages", "v"] }) + '\n');
     });
-    
+
     let buffer = '';
     ipcClient.on('data', (chunk) => {
         buffer += chunk.toString();
@@ -1295,7 +1295,7 @@ function connectIPC() {
                         showPremiumTrackSelectorWindow('sub');
                     }
                 }
-                
+
                 if (['file-loaded', 'start-file', 'tracks-changed'].includes(msg.event)) {
                     console.log(`[MPV LIFECYCLE EVENT] ${msg.event}`, msg);
                     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1321,7 +1321,7 @@ function connectIPC() {
                 if (msg.event === 'log-message') {
                     if (msg.level === 'error' || msg.level === 'warn') console.log(`[MPV LOG] ${msg.text.trim()}`);
                 }
-            } catch (e) {}
+            } catch (e) { }
         }
     });
 
@@ -1388,7 +1388,7 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
             mac = inlineMacMatch[1];
         }
     }
-    
+
     let session = null;
     let portalUrl = '';
     if (mac) {
@@ -1413,7 +1413,7 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
         if (ipcClient && !ipcClient.destroyed) {
             let ua = 'VLC/3.0.9 LibVLC/3.0.9'; // Premium default User-Agent to prevent 403 / I/O reconnect errors
             let headersVal = [];
-            
+
             if (data.headers) {
                 if (data.headers['User-Agent']) ua = data.headers['User-Agent'];
                 for (const [k, v] of Object.entries(data.headers)) {
@@ -1423,7 +1423,7 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
                 }
                 console.log('[MPV HEADER INJECT] Injecting custom headers from PlaybackSource:', JSON.stringify(headersVal));
             } else if (mac) {
-                ua = 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
+                ua = 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 4 rev: 2116 Mobile Safari/533.3';
                 let referer = '';
                 if (portalUrl) {
                     referer = portalUrl.replace('/server/load.php', '/c/index.html').replace('/portal.php', '/c/index.html');
@@ -1431,7 +1431,8 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
                     referer = urlStr.split('/play/')[0] + '/c/index.html';
                 }
                 const sessionPHPSessId = session ? session.phpSessionId : '';
-                const cookies = `mac=${mac}; stb_lang=en; timezone=GMT` + (sessionPHPSessId ? `; PHPSESSID=${sessionPHPSessId}` : '');
+                const sn = crypto.createHash('md5').update(mac + 'sn').digest('hex');
+                const cookies = `mac=${mac}; stb_lang=en; timezone=GMT; sn=${sn}` + (sessionPHPSessId ? `; PHPSESSID=${sessionPHPSessId}` : '');
                 headersVal = [
                     'X-User-Agent: Model: MAG250; Link: Ethernet',
                     `Cookie: ${cookies}`,
@@ -1444,15 +1445,15 @@ ipcMain.on('play-mpv-embedded', (event, data) => {
             } else {
                 console.log('[MPV HEADER INJECT] Using default VLC User-Agent and clearing custom headers.');
             }
-            
+
             ipcClient.write(JSON.stringify({ command: ["set_property", "user-agent", ua] }) + '\n');
             ipcClient.write(JSON.stringify({ command: ["set_property", "http-header-fields", headersVal.join(',')] }) + '\n');
-            
+
             // Ensure player always starts unmuted and unpaused
             console.log('[MPV IPC SEND] Unmuting and unpausing stream');
             ipcClient.write(JSON.stringify({ command: ["set_property", "mute", "no"] }) + '\n');
             ipcClient.write(JSON.stringify({ command: ["set_property", "pause", "no"] }) + '\n');
-            
+
             console.log('[MPV IPC SEND]', JSON.stringify({ command: ["loadfile", data.url, "replace"] }));
             ipcClient.write(JSON.stringify({ command: ["loadfile", data.url, "replace"] }) + '\n');
         }
@@ -1543,6 +1544,12 @@ ipcMain.on('set-confirm-toast-active', (event, active) => {
 });
 
 ipcMain.on('window-close', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.close();
+    }
+});
+
+ipcMain.on('app-exit', () => {
     isQuitting = true;
     app.quit();
 });
@@ -1578,7 +1585,7 @@ function runParser(args, options, callback) {
     const env = Object.assign({}, process.env, options.env || {});
     const scriptPath = path.join(baseDir, 'backend', 'parser.py');
     const exePath = path.join(baseDir, 'backend', 'parser.exe');
-    
+
     if (process.platform === 'win32') {
         if (fs.existsSync(exePath)) {
             console.log(`[Parser] Running compiled parser.exe: ${exePath}`);
@@ -1595,10 +1602,11 @@ function runParser(args, options, callback) {
             console.log(`[Parser] Compiled parser.exe not found at: ${exePath}`);
         }
     }
-    
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-    console.log(`[Parser] Running script with fallback: ${pythonCmd} ${args.join(' ')}`);
-    return execFile(pythonCmd, args, { ...options, env }, (err, stdout, stderr) => {
+
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3'; // Use 'python' or 'python3' as the command
+    const pythonArgs = [scriptPath, ...args.slice(1)]; // First arg is script path, rest are script's args
+    console.log(`[Parser] Running script with fallback: ${pythonCmd} ${pythonArgs.join(' ')}`);
+    return execFile(pythonCmd, pythonArgs, { ...options, env }, (err, stdout, stderr) => {
         if (err) {
             console.error(`[Parser Error] Fallback parser run failed: ${err.message}`);
             console.error(`  - Script path: ${scriptPath} (exists: ${fs.existsSync(scriptPath)})`);
@@ -1622,13 +1630,13 @@ ipcMain.handle('parse-m3u', async (event, source, epgSource, mappings, forceRefr
     return new Promise((resolve) => {
         const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
         const scriptPath = path.join(baseDir, 'backend', 'parser.py');
-        
+
         const args = [scriptPath, source];
         if (epgSource !== undefined && epgSource !== null) args.push(epgSource);
         else args.push('');
         if (mappings !== undefined && mappings !== null) args.push(mappings);
 
-        const env = Object.assign({}, process.env, { 
+        const env = Object.assign({}, process.env, {
             AIVUE_CACHE_DIR: cacheDir,
             AIVUE_FORCE_REFRESH: forceRefresh ? '1' : '0'
         });
@@ -1649,22 +1657,22 @@ ipcMain.handle('parse-m3u', async (event, source, epgSource, mappings, forceRefr
                 console.error(`  - User Data Path: ${app.getPath('userData')}`);
                 console.error(`  - App Installation / Resources Path: ${baseDir}`);
                 console.error(`  - System Path environment: ${process.env.PATH}`);
-                
-                return resolve({ 
+
+                return resolve({
                     error: `Python Parser failed to execute.\n\n` +
-                           `Error: ${error.message}\n\n` +
-                           `Diagnostics:\n` +
-                           `  - Tried compiled exe: ${exePath} (exists: ${fs.existsSync(exePath)})\n` +
-                           `  - Tried script path: ${scriptPath} (exists: ${fs.existsSync(scriptPath)})\n` +
-                           `  - App installation folder: ${baseDir}\n` +
-                           `  - Logs/User data folder: ${app.getPath('userData')}\n\n` +
-                           `Ensure Python is installed on your system (or compiled parser.exe is in the resources folder), and added to PATH.`
+                        `Error: ${error.message}\n\n` +
+                        `Diagnostics:\n` +
+                        `  - Tried compiled exe: ${exePath} (exists: ${fs.existsSync(exePath)})\n` +
+                        `  - Tried script path: ${scriptPath} (exists: ${fs.existsSync(scriptPath)})\n` +
+                        `  - App installation folder: ${baseDir}\n` +
+                        `  - Logs/User data folder: ${app.getPath('userData')}\n\n` +
+                        `Ensure Python is installed on your system (or compiled parser.exe is in the resources folder), and added to PATH.`
                 });
             }
             if (!stdout || stdout.trim() === '') {
                 return resolve({ error: "Python executed but returned absolutely nothing. Ensure 'backend/parser.py' is not empty, and that the Microsoft Store Python alias isn't intercepting the command." });
             }
-            try { resolve(JSON.parse(stdout)); } 
+            try { resolve(JSON.parse(stdout)); }
             catch (e) { resolve({ error: `Failed to parse Python output. Raw: ${stdout.substring(0, 100)}` }); }
         });
     });
@@ -1683,18 +1691,18 @@ ipcMain.handle('get-epg-dict', async (event, epgSources, filterIds) => {
     return new Promise((resolve) => {
         const baseDir = app.isPackaged ? process.resourcesPath : __dirname;
         const scriptPath = path.join(baseDir, 'backend', 'parser.py');
-        
+
         const args = [scriptPath, '--epg-dict', epgSources || '', filterIds || ''];
 
         const env = Object.assign({}, process.env, { AIVUE_CACHE_DIR: cacheDir, AIVUE_FORCE_REFRESH: '0' });
 
         runParser(args, { maxBuffer: 1024 * 1024 * 500, windowsHide: true, timeout: 60000, env }, (error, stdout) => {
             if (error) return resolve({});
-            try { 
+            try {
                 cachedEpgDict = JSON.parse(stdout);
                 cachedEpgDictKey = cacheKey;
-                resolve(cachedEpgDict); 
-            } 
+                resolve(cachedEpgDict);
+            }
             catch (e) { resolve({}); }
         });
     });
@@ -1741,10 +1749,10 @@ async function populateEpgLogosIfEmpty() {
         const row = await db.prepare('SELECT COUNT(*) as count FROM epg_logos').get();
         if (row && row.count === 0) {
             console.log('[DB] epg_logos table is empty. Attempting background population from existing EPG sources...');
-            
+
             const playlists = await db.prepare('SELECT epg_url FROM playlists').all();
             const extEpgs = await db.prepare('SELECT source_url FROM external_epgs').all();
-            
+
             const sources = new Set();
             playlists.forEach(p => {
                 const url = p.epg_url;
@@ -1757,12 +1765,12 @@ async function populateEpgLogosIfEmpty() {
                     sources.add(e.source_url);
                 }
             });
-            
+
             if (sources.size === 0) {
                 console.log('[DB] No active EPG sources found to populate epg_logos.');
                 return;
             }
-            
+
             // Populate in background
             (async () => {
                 for (const source of sources) {
@@ -1796,18 +1804,18 @@ async function populateEpgLogosIfEmpty() {
 ipcMain.handle('get-epg-channels', async (event, epgSources) => {
     console.log('[IPC HANDLE] get-epg-channels', { epgSources });
     if (!epgSources) return [];
-    
+
     if (epgChannelsCache[epgSources]) {
         console.log('[CACHE HIT] Returning cached EPG channels');
         return epgChannelsCache[epgSources];
     }
-    
+
     const sources = epgSources.split(',').map(s => s.trim()).filter(s => s);
     const stalkerSources = sources.filter(s => s.startsWith('stalker:'));
     const otherSources = sources.filter(s => !s.startsWith('stalker:'));
-    
+
     let allEpgChannels = [];
-    
+
     // 1. Get other EPG channels using SQLite database
     if (otherSources.length > 0 && db) {
         for (const otherSrc of otherSources) {
@@ -1817,7 +1825,7 @@ ipcMain.handle('get-epg-channels', async (event, epgSources) => {
                     FROM epg_logos
                     WHERE source_url = ?
                 `).all(otherSrc);
-                
+
                 const otherChannels = rows.map(r => ({
                     id: r.id,
                     name: r.name,
@@ -1830,7 +1838,7 @@ ipcMain.handle('get-epg-channels', async (event, epgSources) => {
             }
         }
     }
-    
+
     // 2. Get Stalker EPG channels from SQLite database
     if (stalkerSources.length > 0 && db) {
         for (const stalkerSrc of stalkerSources) {
@@ -1841,7 +1849,7 @@ ipcMain.handle('get-epg-channels', async (event, epgSources) => {
                     LEFT JOIN channels c ON e.channel_id = c.tvg_id
                     WHERE e.source_url = ?
                 `).all(stalkerSrc);
-                
+
                 const stalkerChannels = rows.map(r => ({
                     id: r.channel_id,
                     name: r.name,
@@ -1853,7 +1861,7 @@ ipcMain.handle('get-epg-channels', async (event, epgSources) => {
             }
         }
     }
-    
+
     epgChannelsCache[epgSources] = allEpgChannels;
     return allEpgChannels;
 });
@@ -1882,7 +1890,7 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                         const server = credParts[0];
                         const username = credParts[1];
                         const password = credParts[2];
-                        
+
                         const res = await xtreamFetch(server, username, password, 'get_simple_data_table');
                         if (res && res.epg_data) {
                             const deleteOld = db.prepare('DELETE FROM epg WHERE source_url = ?');
@@ -1890,7 +1898,7 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                                 INSERT INTO epg (channel_id, start_time, stop_time, title, description, source_url)
                                 VALUES (@channel_id, @start, @stop, @title, @desc, @source)
                             `);
-                            
+
                             const saveTx = db.transaction(async (epgDict) => {
                                 await deleteOld.run(source);
                                 let insertCount = 0;
@@ -1921,7 +1929,7 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                                 console.log(`[XTREAM EPG] Saved ${insertCount} EPG entries to database.`);
                             });
                             await saveTx(res.epg_data);
-                            scanAndScheduleSeriesRecordings().catch(() => {});
+                            scanAndScheduleSeriesRecordings().catch(() => { });
                             mainWindow.webContents.send('epg-update-finished', { sourceUrl: source, status: 'success' });
                         }
                     }
@@ -1933,7 +1941,7 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
         } else if (source.startsWith('stalker:')) {
             const mac = source.substring(8);
             console.log(`[STALKER EPG] Fetching EPG for MAC: ${mac}`);
-            
+
             (async () => {
                 try {
                     const playlistRow = await db.prepare('SELECT source_url FROM playlists WHERE epg_url = ?').get(source);
@@ -1941,7 +1949,7 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                         console.warn(`[STALKER EPG] No playlist found in DB for EPG source: ${source}`);
                         return;
                     }
-                    
+
                     const baseUrl = playlistRow.source_url;
                     let stalkerChannels = [];
                     try {
@@ -1950,7 +1958,7 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                     } catch (err) {
                         console.error('[STALKER EPG] Failed to fetch all channels from portal:', err);
                     }
-                    
+
                     if (!stalkerChannels || stalkerChannels.length === 0) {
                         try {
                             const rows = await db.prepare(`
@@ -1963,12 +1971,12 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                             console.error('[STALKER EPG] DB fallback failed:', dbErr);
                         }
                     }
-                    
+
                     if (!stalkerChannels || stalkerChannels.length === 0) {
                         console.log(`[STALKER EPG] No channels found to fetch EPG for: ${source}`);
                         return;
                     }
-                    
+
                     let filteredStalkerChannels = [];
                     try {
                         const mappedEpgIds = new Set();
@@ -1977,7 +1985,7 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
 
                         let unmappedCount = 0;
                         const UNMAPPED_LIMIT = 100;
-                        
+
                         for (const ch of stalkerChannels) {
                             const chId = String(chooseStalkerChannelId(ch));
                             if (mappedEpgIds.has(chId)) {
@@ -1994,7 +2002,7 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                     }
 
                     console.log(`[STALKER EPG] Fetching EPG for ${stalkerChannels.length} channels...`);
-                    
+
                     const stalkerEpgDict = {};
                     const chunkSize = 12;
                     for (let i = 0; i < stalkerChannels.length; i += chunkSize) {
@@ -2002,16 +2010,16 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                         await Promise.all(chunk.map(async (ch) => {
                             const chId = chooseStalkerChannelId(ch);
                             if (!chId) return;
-                            
+
                             try {
                                 let epgRes = await stalkerRequest(baseUrl, mac, 'get_short_epg', { type: 'itv', ch_id: chId, size: '48', limit: 100, period: 72 });
                                 let events = extractStalkerEpgItems(epgRes);
-                                
+
                                 if (!events || events.length === 0) {
                                     epgRes = await stalkerRequest(baseUrl, mac, 'get_epg_info', { type: 'itv', ch_id: chId, period: 72 });
                                     events = extractStalkerEpgItems(epgRes);
                                 }
-                                
+
                                 if (events && events.length > 0) {
                                     const normalized = normalizeStalkerEpgItems(events);
                                     if (normalized.length > 0) {
@@ -2023,13 +2031,13 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                             }
                         }));
                     }
-                    
+
                     const deleteOld = db.prepare('DELETE FROM epg WHERE source_url = ?');
                     const insert = db.prepare(`
                         INSERT INTO epg (channel_id, start_time, stop_time, title, description, source_url)
                         VALUES (@channel_id, @start, @stop, @title, @desc, @source)
                     `);
-                    
+
                     const saveTx = db.transaction(async (epgDict) => {
                         await deleteOld.run(source);
                         let insertCount = 0;
@@ -2048,9 +2056,9 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                         }
                         console.log(`[STALKER EPG] Inserted ${insertCount} EPG entries for ${source}`);
                     });
-                    
+
                     await saveTx(stalkerEpgDict);
-                    scanAndScheduleSeriesRecordings().catch(() => {});
+                    scanAndScheduleSeriesRecordings().catch(() => { });
                     mainWindow.webContents.send('epg-update-finished', { sourceUrl: source, status: 'success' });
                 } catch (err) {
                     console.error(`[STALKER EPG] Failed to update for ${source}:`, err);
@@ -2098,13 +2106,13 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                     try {
                         const row = await db.prepare("SELECT etag, last_modified, programme_count FROM epg_metadata WHERE source_url = ?").get(source);
                         if (row) {
-                            cachedMeta = { 
-                                etag: row.etag, 
-                                lastModified: row.last_modified, 
-                                programme_count: row.programme_count || 0 
+                            cachedMeta = {
+                                etag: row.etag,
+                                lastModified: row.last_modified,
+                                programme_count: row.programme_count || 0
                             };
                         }
-                    } catch (e) {}
+                    } catch (e) { }
 
                     const dbPath = path.join(app.getPath('userData'), 'iptv.db');
                     const workerPath = path.join(__dirname, 'epg-worker.js');
@@ -2145,8 +2153,8 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                                 INSERT OR REPLACE INTO epg_logos (epg_id, name, logo_url, source_url)
                                 VALUES (?, ?, ?, ?)
                             `)
-                            .run(msg.channel.id, msg.channel.name, msg.channel.logo, source)
-                            .catch(() => {});
+                                .run(msg.channel.id, msg.channel.name, msg.channel.logo, source)
+                                .catch(() => { });
                         } else if (msg.type === 'progress') {
                             if (mainWindow && !mainWindow.isDestroyed()) {
                                 mainWindow.webContents.send('epg-progressive-update', {
@@ -2157,19 +2165,19 @@ ipcMain.on('start-epg-update', async (event, epgSources, filterIds, forceRefresh
                         } else if (msg.type === 'done') {
                             console.log(`[EPG Main] Worker finished parsing ${source}. Count: ${msg.count}`);
                             activeEpgWorkers.delete(source);
-                            
+
                             // Prune old EPG
                             const retentionStart = Math.floor(Date.now() / 1000) - 24 * 3600;
-                            await db.prepare("DELETE FROM epg WHERE stop_time < ?").run(retentionStart).catch(() => {});
-                            
+                            await db.prepare("DELETE FROM epg WHERE stop_time < ?").run(retentionStart).catch(() => { });
+
                             // Update metadata in SQLite
                             await db.prepare(`
                                 INSERT OR REPLACE INTO epg_metadata (source_url, etag, last_modified, last_update, programme_count)
                                 VALUES (?, ?, ?, ?, ?)
-                            `).run(source, msg.etag || null, msg.lastModified || null, Date.now(), msg.count).catch(() => {});
+                            `).run(source, msg.etag || null, msg.lastModified || null, Date.now(), msg.count).catch(() => { });
 
                             // Scan series recording rules in background
-                            scanAndScheduleSeriesRecordings().catch(() => {});
+                            scanAndScheduleSeriesRecordings().catch(() => { });
 
                             if (mainWindow && !mainWindow.isDestroyed()) {
                                 mainWindow.webContents.send('epg-update-finished', {
@@ -2251,7 +2259,7 @@ async function getEpgDataFromDb(channelIds, startLimit, endLimit) {
         for (let i = 0; i < safeChannelIds.length; i += chunkSize) {
             const chunk = safeChannelIds.slice(i, i + chunkSize);
             const placeholders = chunk.map(() => '?').join(',');
-            
+
             let query, params;
             if (startLimit && endLimit) {
                 const startEpoch = (typeof startLimit === 'string' && startLimit.trim().length >= 14)
@@ -2260,16 +2268,16 @@ async function getEpgDataFromDb(channelIds, startLimit, endLimit) {
                 const endEpoch = (typeof endLimit === 'string' && endLimit.trim().length >= 14)
                     ? convertEpgStringToEpoch(endLimit)
                     : parseInt(endLimit, 10);
-                
+
                 query = `SELECT channel_id, start_time, stop_time, title, description FROM epg WHERE channel_id IN (${placeholders}) AND stop_time >= ? AND start_time <= ? ORDER BY start_time ASC`;
                 params = [...chunk, startEpoch, endEpoch];
             } else {
                 query = `SELECT channel_id, start_time, stop_time, title, description FROM epg WHERE channel_id IN (${placeholders}) ORDER BY start_time ASC`;
                 params = [...chunk];
             }
-            
+
             const rows = await db.prepare(query).all(...params);
-            
+
             for (const row of rows) {
                 if (!result[row.channel_id]) result[row.channel_id] = [];
                 result[row.channel_id].push({
@@ -2357,7 +2365,7 @@ async function saveChannelsToDb(playlists) {
             });
 
             await clearChannels.run(p.id.toString());
-            
+
             if (p.channels && p.channels.length > 0) {
                 // Bulk insert channels to prevent UI hang from event loop saturation
                 await new Promise((resolve, reject) => {
@@ -2366,10 +2374,10 @@ async function saveChannelsToDb(playlists) {
                             INSERT INTO channels (playlist_id, tvg_id, tvg_name, title, logo, group_name, stream_url, is_favourite, is_disabled, type)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         `);
-                        
+
                         let errorOccurred = false;
                         let opsRemaining = p.channels.length;
-                        
+
                         for (const c of p.channels) {
                             stmt.run([
                                 p.id.toString(),
@@ -2382,7 +2390,7 @@ async function saveChannelsToDb(playlists) {
                                 c.favourite ? 1 : 0,
                                 c.disabled ? 1 : 0,
                                 c.type || 'live'
-                            ], function(err) {
+                            ], function (err) {
                                 if (err && !errorOccurred) {
                                     errorOccurred = true;
                                     stmt.finalize();
@@ -2408,7 +2416,7 @@ async function saveChannelsToDb(playlists) {
         console.timeEnd('saveChannelsToDb');
         throw e;
     }
-    
+
     console.timeEnd('saveChannelsToDb');
     console.log('[DB] Saving channels to database END.');
     return true;
@@ -2436,12 +2444,12 @@ ipcMain.handle('delete-playlist', async (event, playlistId) => {
     try {
         const deleteChannels = db.prepare('DELETE FROM channels WHERE playlist_id = ?');
         const deletePlaylist = db.prepare('DELETE FROM playlists WHERE id = ?');
-        
+
         const deleteTx = db.transaction(async (id) => {
             await deleteChannels.run(id);
             await deletePlaylist.run(id);
         });
-        
+
         await deleteTx(playlistId.toString());
         console.timeEnd('delete-playlist');
         console.log('[IPC HANDLE] delete-playlist END');
@@ -2513,7 +2521,7 @@ async function loadChannelsFromDb() {
     try {
         if (!db) return [];
         const oldFilePath = path.join(app.getPath('userData'), 'saved_channels.json');
-        
+
         const dbCount = await db.prepare(`SELECT COUNT(*) as count FROM playlists`).get();
         if (dbCount.count === 0 && fs.existsSync(oldFilePath)) {
             console.log("[DB] Starting with a blank database, deleting old JSON data...");
@@ -2523,7 +2531,7 @@ async function loadChannelsFromDb() {
 
         const playlists = await db.prepare(`SELECT * FROM playlists`).all();
         const getChannels = db.prepare(`SELECT * FROM channels WHERE playlist_id = ?`);
-        
+
         // Load mappings
         const mappings = {};
         try {
@@ -2583,19 +2591,19 @@ async function loadChannelsFromDb() {
         for (const p of playlists) {
             const pChannels = await getChannels.all(p.id);
             const mappedChannels = [];
-            
+
             for (const c of pChannels) {
                 let effectiveLogo = c.logo;
-                
+
                 // Treat Stalker portal paths (/logo/...) and other non-absolute URLs as missing logos.
                 // Only real HTTP(S) URLs or our cached aivue-logo:// protocol are valid for display.
                 const isValidLogoUrl = effectiveLogo &&
                     (effectiveLogo.startsWith('http://') || effectiveLogo.startsWith('https://') || effectiveLogo.startsWith('aivue-logo://'));
-                
+
                 if (!isValidLogoUrl) {
                     effectiveLogo = ''; // Reset to empty so EPG lookup triggers below
                     let matchedEpgId = mappings[c.title];
-                    
+
                     if (!matchedEpgId) {
                         const tvgIdLow = c.tvg_id ? String(c.tvg_id).toLowerCase() : '';
                         const tvgNameLow = c.tvg_name ? String(c.tvg_name).toLowerCase() : '';
@@ -2605,14 +2613,14 @@ async function loadChannelsFromDb() {
                             matchedEpgId = tvgNameLow;
                         }
                     }
-                    
+
                     if (!matchedEpgId && c.title) {
                         const normTitle = normalizeName(c.title);
                         if (normTitle && normalizedEpgLogoKeys[normTitle]) {
                             matchedEpgId = normalizedEpgLogoKeys[normTitle];
                         }
                     }
-                    
+
                     if (matchedEpgId) {
                         const logoUrl = epgLogos[matchedEpgId.toLowerCase()];
                         if (logoUrl) {
@@ -2622,7 +2630,7 @@ async function loadChannelsFromDb() {
                 }
 
                 // (Removed local caching of logos, relying on Chromium's built-in caching)
-                
+
                 mappedChannels.push({
                     tvg_id: c.tvg_id,
                     tvg_name: c.tvg_name,
@@ -2635,7 +2643,7 @@ async function loadChannelsFromDb() {
                     type: c.type || 'live'
                 });
             }
-            
+
             const logoCached = mappedChannels.filter(c => c.logo && c.logo.startsWith('aivue-logo://')).length;
             const logoRemote = mappedChannels.filter(c => c.logo && (c.logo.startsWith('http://') || c.logo.startsWith('https://'))).length;
             console.log(`[loadChannelsFromDb] Playlist "${p.name}": ${mappedChannels.length} channels, ${logoCached} cached locally, ${logoRemote} using remote URLs`);
@@ -2643,7 +2651,7 @@ async function loadChannelsFromDb() {
             // Queue background downloads for any logos not yet cached locally
             // We track which epg_id's were actually used so we only download needed ones
             const usedEpgIds = new Set();
-            
+
             // Pre-compute reverse lookup for epgLogoRemote (url -> {key, info}) to avoid O(N*M) loop
             const epgLogoRemoteByUrl = {};
             for (const [key, info] of Object.entries(epgLogoRemote)) {
@@ -2676,7 +2684,7 @@ async function loadChannelsFromDb() {
                 password: p.stalker_password,
                 channels: mappedChannels
             });
-            
+
             if (p.epg_url && p.epg_url.startsWith('stalker:')) {
                 const mac = p.epg_url.substring(8);
                 const baseUrl = getStalkerUrl(p.source_url);
@@ -2780,7 +2788,7 @@ function safeInt(x) {
 function formatDateToEpgString(date) {
     if (!date || !(date instanceof Date) || isNaN(date.getTime())) return '';
     const pad = n => n.toString().padStart(2, '0');
-    return `${date.getUTCFullYear()}${pad(date.getUTCMonth()+1)}${pad(date.getUTCDate())}${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())} +0000`;
+    return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())} +0000`;
 }
 
 function normalizeStalkerEpgItems(items) {
@@ -2788,13 +2796,13 @@ function normalizeStalkerEpgItems(items) {
     const norm = [];
     for (const it of items) {
         if (!it || typeof it !== 'object') continue;
-        
+
         const title = (firstNonEmpty(it, ["name", "title", "progname", "program"]) || 'No Title').trim();
-        
+
         // Timestamps
         const start_ts = safeInt(it.start) || safeInt(it.start_timestamp) || safeInt(it.from);
         const end_ts = safeInt(it.end) || safeInt(it.stop_timestamp) || safeInt(it.to);
-        
+
         let start_dt = null;
         if (start_ts) {
             start_dt = parseEpochToDate(start_ts);
@@ -2802,7 +2810,7 @@ function normalizeStalkerEpgItems(items) {
             const start_dt_str = firstNonEmpty(it, ["time", "start_time"]);
             start_dt = parseDtStr(start_dt_str);
         }
-        
+
         let end_dt = null;
         if (end_ts) {
             end_dt = parseEpochToDate(end_ts);
@@ -2810,7 +2818,7 @@ function normalizeStalkerEpgItems(items) {
             const end_dt_str = firstNonEmpty(it, ["time_to", "end_time"]);
             end_dt = parseDtStr(end_dt_str);
         }
-        
+
         // Duration
         let duration = safeInt(firstNonEmpty(it, ["duration", "prog_duration", "length"]));
         if (!duration && start_ts && end_ts && start_dt && end_dt) {
@@ -2819,14 +2827,14 @@ function normalizeStalkerEpgItems(items) {
                 duration = delta;
             }
         }
-        
+
         // If end_dt is not present but start_dt and duration are, derive end_dt
         if (!end_dt && start_dt && duration && duration < 24 * 3600) {
             end_dt = new Date(start_dt.getTime() + duration * 1000);
         }
-        
+
         const desc = (firstNonEmpty(it, ["descr", "description", "desc", "short_description", "long_description", "plot", "overview"]) || '').trim();
-        
+
         if (start_dt && end_dt) {
             norm.push({
                 start: formatDateToEpgString(start_dt),
@@ -2837,10 +2845,10 @@ function normalizeStalkerEpgItems(items) {
             });
         }
     }
-    
+
     // Sort normalized items by start_ms
     norm.sort((a, b) => a.start_ms - b.start_ms);
-    
+
     // Clean up the temporary start_ms field
     return norm.map(item => ({
         start: item.start,
@@ -2851,16 +2859,16 @@ function normalizeStalkerEpgItems(items) {
 }
 
 function getStalkerUrl(baseUrl) {
-    return baseUrl.trim().includes('/c/') ? baseUrl.trim().replace('/c/', '/portal.php') : 
-           (baseUrl.trim().includes('/c') ? baseUrl.trim().replace('/c', '/portal.php') : 
-           (baseUrl.trim().endsWith('.php') ? baseUrl.trim() : (baseUrl.trim().endsWith('/') ? baseUrl.trim() + 'portal.php' : baseUrl.trim() + '/portal.php')));
+    return baseUrl.trim().includes('/c/') ? baseUrl.trim().replace('/c/', '/portal.php') :
+        (baseUrl.trim().includes('/c') ? baseUrl.trim().replace('/c', '/portal.php') :
+            (baseUrl.trim().endsWith('.php') ? baseUrl.trim() : (baseUrl.trim().endsWith('/') ? baseUrl.trim() + 'portal.php' : baseUrl.trim() + '/portal.php')));
 }
 
 function formatStalkerDate(rawTime, timestamp) {
     if (timestamp) {
         const date = new Date(timestamp * 1000);
         const pad = n => n.toString().padStart(2, '0');
-        return `${date.getUTCFullYear()}${pad(date.getUTCMonth()+1)}${pad(date.getUTCDate())}${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())} +0000`;
+        return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())} +0000`;
     }
     if (typeof rawTime === 'string') {
         const clean = rawTime.replace(/[-:\s]/g, '');
@@ -2988,7 +2996,7 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
         const hlsUrl = `${cleanServer}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.m3u8`;
         const tsUrl = `${cleanServer}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.ts`;
         const customUrl = `${cleanServer}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${ext}`;
-        
+
         if (preferredFormat === 'hls') {
             if (!candidates.includes(hlsUrl)) candidates.push(hlsUrl);
             if (ext !== 'm3u8' && !candidates.includes(customUrl)) candidates.push(customUrl);
@@ -3002,7 +3010,7 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
         const ext = extension || 'mp4';
         const primaryUrl = `${cleanServer}/${type === 'movie' ? 'movie' : 'series'}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${ext}`;
         if (!candidates.includes(primaryUrl)) candidates.push(primaryUrl);
-        
+
         const formats = ['mp4', 'mkv', 'avi'];
         if (preferredFormat && formats.includes(preferredFormat) && preferredFormat !== ext) {
             const prefUrl = `${cleanServer}/${type === 'movie' ? 'movie' : 'series'}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.${preferredFormat}`;
@@ -3026,7 +3034,7 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
     for (const urlCandidate of candidates) {
         try {
             console.log('[XTREAM RESOLVER] Probing candidate URL:', urlCandidate.replace(/\/[^/]+\/[^/]+\/(\d+)/, '/****/****/$1'));
-            
+
             let currentUrl = urlCandidate;
             let redirects = 0;
             let headResponse = null;
@@ -3063,7 +3071,7 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
             const status = headResponse.status;
             if (status === 200 || status === 206 || status === 302) {
                 console.log(`[XTREAM RESOLVER] Success! Verified stream URL with HTTP ${status}`);
-                
+
                 // Determine format dynamically from Content-Type
                 const contentType = (headResponse.headers.get('content-type') || '').toLowerCase();
                 let format = 'ts';
@@ -3108,7 +3116,7 @@ async function resolveXtreamLink(server, username, password, streamId, type, ext
 
     // Absolute fallback: return the primary candidate if validation completely timed out or errored out
     console.log(`[XTREAM RESOLVER] All probes failed or timed out. Returning primary candidate as fallback.`);
-    
+
     const newFailures = (profile ? (profile.token_failures || 0) : 0) + 1;
     await updatePortalProfile(cleanServer, {
         token_failures: newFailures
@@ -3128,7 +3136,7 @@ const stalkerCredentialsMap = new Map();
 async function authenticateStalker(baseUrl, mac, forceFresh = false) {
     const url = getStalkerUrl(baseUrl);
     const cacheKey = `${url}|${mac}`;
-    
+
     if (!forceFresh && stalkerTokens.has(cacheKey)) {
         const cached = stalkerTokens.get(cacheKey);
         if (Date.now() - cached.timestamp < 3600000) {
@@ -3149,7 +3157,7 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
         const deviceId = crypto.createHash('sha256').update(mac + 'device1').digest('hex').toUpperCase();
         const deviceId2 = crypto.createHash('sha256').update(mac + 'device2').digest('hex').toUpperCase();
         const stbType = 'MAG250';
-        
+
         const handshakeUrl = `${url}?type=stb&action=handshake&key=&js=true`;
         const headers = {
             'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 4 rev: 2116 Mobile Safari/533.3',
@@ -3161,7 +3169,7 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
 
         let phpSessionId = '';
         let token = '';
-        
+
         const extractPhpSessionId = (res) => {
             const setCookie = res.headers.get('set-cookie');
             if (setCookie) {
@@ -3182,7 +3190,7 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
         try {
             const response = await fetch(handshakeUrl, { headers, signal: AbortSignal.timeout(15000) });
             extractPhpSessionId(response);
-            
+
             const text = await response.text();
             if (text && text.trim()) {
                 try {
@@ -3193,11 +3201,11 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
         } catch (e) {
             console.error('[STALKER ERR] Handshake network failed:', e.message);
         }
-        
+
         let cookieHeader = `mac=${mac}; stb_lang=en; timezone=GMT; sn=${sn}` + (phpSessionId ? `; PHPSESSID=${phpSessionId}` : '');
         let authHeaders = { ...headers, 'Cookie': cookieHeader };
         if (token) authHeaders['Authorization'] = `Bearer ${token}`;
-        
+
         const profileUrl = `${url}?type=stb&action=get_profile&mac=${encodeURIComponent(mac)}&sn=${sn}&stb_type=${stbType}&device_id=${deviceId}&device_id2=${deviceId2}&hd=1&auth_second_step=1`;
         try {
             const response = await fetch(profileUrl, { headers: authHeaders, signal: AbortSignal.timeout(15000) });
@@ -3210,7 +3218,7 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
         } catch (e) {
             console.error('[STALKER ERR] Profile auth failed:', e.message);
         }
-        
+
         if (username && password) {
             try {
                 cookieHeader = `mac=${mac}; stb_lang=en; timezone=GMT; sn=${sn}` + (phpSessionId ? `; PHPSESSID=${phpSessionId}` : '');
@@ -3237,7 +3245,7 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
                     signal: AbortSignal.timeout(15000)
                 });
                 extractPhpSessionId(response);
-                
+
                 const authData = await response.json();
                 if (authData.js?.token) {
                     token = authData.js.token;
@@ -3246,7 +3254,7 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
                 console.error('[STALKER ERR] do_auth step failed:', e.message);
             }
         }
-        
+
         const session = { phpSessionId, token, timestamp: Date.now() };
         stalkerTokens.set(cacheKey, session);
         stalkerAuthPromises.delete(cacheKey);
@@ -3258,46 +3266,79 @@ async function authenticateStalker(baseUrl, mac, forceFresh = false) {
 }
 
 async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = false, forceFresh = false) {
+    if (!mac || mac.length !== 17 || mac === 'igured') {
+        console.log(`[STALKER] Invalid MAC "${mac}" passed to stalkerRequest for ${action}. Resolving from database...`);
+        try {
+            const normUrl = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
+            const playlistRow = await db.prepare('SELECT id, epg_url FROM playlists WHERE source_url = ? OR source_url = ?').get(baseUrl, normUrl);
+            if (playlistRow) {
+                let resolvedMac = null;
+                if (playlistRow.epg_url && playlistRow.epg_url.startsWith('stalker:') && playlistRow.epg_url.length === 25) {
+                    resolvedMac = playlistRow.epg_url.substring(8);
+                    console.log(`[STALKER] Resolved MAC from epg_url: ${resolvedMac}`);
+                } else {
+                    const channelRows = await db.prepare('SELECT stream_url FROM channels WHERE playlist_id = ? AND stream_url LIKE "%mac=%" LIMIT 10').all(playlistRow.id);
+                    for (const row of channelRows) {
+                        const match = row.stream_url.match(/mac=([0-9a-fA-F:]{17})/i);
+                        if (match) {
+                            resolvedMac = match[1];
+                            console.log(`[STALKER] Resolved MAC from channel stream_url: ${resolvedMac}`);
+                            break;
+                        }
+                    }
+                }
+                if (resolvedMac) {
+                    mac = resolvedMac;
+                    // Update database to heal playlist epg_url configuration
+                    await db.prepare('UPDATE playlists SET epg_url = ? WHERE id = ?').run(`stalker:${mac}`, playlistRow.id).catch(() => {});
+                    console.log(`[STALKER] Permanently healed epg_url in playlists table to: stalker:${mac}`);
+                }
+            }
+        } catch (dbErr) {
+            console.error('[STALKER] Failed to resolve MAC from db:', dbErr.message);
+        }
+    }
+
     const session = await authenticateStalker(baseUrl, mac, forceFresh);
     const url = session.activeUrl || getStalkerUrl(baseUrl);
     const cacheKey = `${getStalkerUrl(baseUrl)}|${mac}`;
-    
+
     const headers = {
         'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
         'X-User-Agent': 'Model: MAG250; Link: Ethernet',
         'Accept': '*/*',
         'Referer': url.replace('/server/load.php', '/c/index.html').replace('/portal.php', '/c/index.html')
     };
-    
+
     const cookieHeader = `mac=${mac}; stb_lang=en; timezone=GMT` + (session.phpSessionId ? `; PHPSESSID=${session.phpSessionId}` : '');
     const reqHeaders = {
         ...headers,
         'Cookie': cookieHeader,
         ...(session.token ? { 'Authorization': `Bearer ${session.token}` } : {})
     };
-    
+
     let queryParams = `type=${extraParams.type || 'itv'}&action=${action}&mac=${encodeURIComponent(mac)}&JsHttpRequest=1-xml`;
     for (const [k, v] of Object.entries(extraParams)) {
         if (k !== 'type') queryParams += `&${k}=${encodeURIComponent(v)}`;
     }
-    
+
     const requestUrl = `${url}?${queryParams}`;
     if (action === 'create_link') {
         console.log('[CREATE LINK REQUEST URL]', requestUrl);
         console.log('[CREATE LINK TOKEN]', session.token);
         console.log('[CREATE LINK CMD PARAM]', extraParams.cmd);
     }
-    
+
     try {
         const response = await fetch(requestUrl, { headers: reqHeaders, signal: AbortSignal.timeout(15000) });
-        
+
         // Auto-heal on Unauthorized/Forbidden status codes
         if ((response.status === 401 || response.status === 403) && !isRetry) {
             console.warn(`[STALKER] Session invalid/expired (HTTP ${response.status}). Re-authenticating and retrying ${action}...`);
             stalkerTokens.delete(cacheKey);
             return stalkerRequest(baseUrl, mac, action, extraParams, true);
         }
-        
+
         // Capture PHPSESSID dynamic updates
         let newPhpSessionId = '';
         const setCookie = response.headers.get('set-cookie');
@@ -3320,12 +3361,12 @@ async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = 
             session.phpSessionId = newPhpSessionId;
             stalkerTokens.set(cacheKey, { ...session, phpSessionId: newPhpSessionId });
         }
-        
+
         const text = await response.text();
         if (action === 'create_link') {
             console.log('[CREATE LINK RAW]', text.substring(0, 500));
         }
-        
+
         if (!text || !text.trim()) {
             console.warn(`[STALKER] Empty response for ${action}`, requestUrl);
             if (!isRetry) {
@@ -3337,7 +3378,7 @@ async function stalkerRequest(baseUrl, mac, action, extraParams = {}, isRetry = 
             }
             return {};
         }
-        
+
         try {
             const parsed = JSON.parse(text);
             // Handle portal-specific JSON error blocks
@@ -3390,27 +3431,27 @@ async function fetchAllStalkerPages(baseUrl, mac, action, extraParams) {
     let allItems = [...data];
     let totalItems = firstPageRes.js?.total_items ? parseInt(firstPageRes.js.total_items, 10) : 0;
     let itemsPerPage = data.length;
-    
+
     if (totalItems > 0 && itemsPerPage > 0) {
         let totalPages = Math.ceil(totalItems / itemsPerPage);
-        
+
         // Prevent pagination flooding on seasons/episodes queries (sub-queries for a specific movie_id or season_id).
         // Some portals mistakenly return the total VOD/category item count under total_items for these sub-queries,
         // which results in thousands of concurrent page requests that trigger portal rate-limiting.
         const isSubQuery = extraParams && (
-            extraParams.movie_id !== undefined || 
+            extraParams.movie_id !== undefined ||
             extraParams.season_id !== undefined ||
             extraParams.series_id !== undefined ||
             extraParams.season_num !== undefined ||
             extraParams.season_number !== undefined ||
             extraParams.episode_id !== undefined
         );
-        
+
         if (isSubQuery && totalPages > 5) {
             console.log(`[STALKER] Sub-query detected with high page count (${totalPages}). Capping to 5 pages to prevent rate-limiting.`);
             totalPages = 5;
         }
-        
+
         if (totalPages > 1) {
             console.log(`[STALKER] Fetching ${totalPages - 1} additional pages for ${action} (${totalItems} total items)...`);
             const chunkSize = 5; // Reduced from 10 to 5 to protect overloaded Stalker portals from aggressive concurrency rate-limiting
@@ -3439,7 +3480,7 @@ async function fetchAllStalkerPages(baseUrl, mac, action, extraParams) {
             }
         }
     }
-    
+
     const uniqueItems = [];
     const seenIds = new Set();
     for (const item of allItems) {
@@ -3451,14 +3492,14 @@ async function fetchAllStalkerPages(baseUrl, mac, action, extraParams) {
             uniqueItems.push(item);
         }
     }
-    
+
     return uniqueItems;
 }
 
 async function resolveStalkerLinkInternal({ url, mac, type, cmd, series }) {
     try {
         console.log('[STALKER INTERNAL] Resolving link for:', { url, mac, type, cmd, series });
-        
+
         let originalCmd = cmd || '';
         if (originalCmd.startsWith('ffmpeg ')) {
             originalCmd = originalCmd.substring(7).trim();
@@ -3485,19 +3526,19 @@ async function resolveStalkerLinkInternal({ url, mac, type, cmd, series }) {
         if (series !== undefined && series !== null) {
             probes.push({ type: 'vod', cmd: originalCmd, series });
         }
-        
+
         probes.push({ type, cmd: originalCmd });
 
         // Create variations of the cmd to bypass common Stalker portal quirks
         let parsedObj = null;
         if (typeof originalCmd === 'string') {
             if (originalCmd.startsWith('{')) {
-                try { parsedObj = JSON.parse(originalCmd); } catch (e) {}
+                try { parsedObj = JSON.parse(originalCmd); } catch (e) { }
             } else {
                 try {
                     const decoded = Buffer.from(originalCmd, 'base64').toString('utf8');
                     if (decoded.startsWith('{')) parsedObj = JSON.parse(decoded);
-                } catch (e) {}
+                } catch (e) { }
             }
         }
 
@@ -3508,10 +3549,10 @@ async function resolveStalkerLinkInternal({ url, mac, type, cmd, series }) {
 
             const asJson = JSON.stringify(altObj);
             const asBase64 = Buffer.from(asJson).toString('base64');
-            
+
             if (originalCmd !== asJson) probes.push({ type, cmd: asJson, ...(series !== undefined ? { series } : {}) });
             if (originalCmd !== asBase64) probes.push({ type, cmd: asBase64, ...(series !== undefined ? { series } : {}) });
-            
+
             if (type === 'series') {
                 probes.push({ type: 'vod', cmd: asBase64, ...(series !== undefined ? { series } : {}) });
                 probes.push({ type: 'vod', cmd: asJson, ...(series !== undefined ? { series } : {}) });
@@ -3519,12 +3560,12 @@ async function resolveStalkerLinkInternal({ url, mac, type, cmd, series }) {
         }
 
         let finalUrl = '';
-        
+
         for (const probe of probes) {
             console.log('[CREATE LINK PROBE]', probe);
             const res = await stalkerRequest(url, mac, 'create_link', probe, false, true);
             console.log('[CREATE LINK RAW]', JSON.stringify(res));
-            
+
             const candidates = [
                 res?.js?.cmd,
                 res?.js?.url,
@@ -3553,7 +3594,7 @@ async function resolveStalkerLinkInternal({ url, mac, type, cmd, series }) {
                 break;
             }
         }
-        
+
         if (!finalUrl) {
             console.error('[STALKER INTERNAL] Could not find stream URL in response across all probes.');
             return null;
@@ -3563,13 +3604,13 @@ async function resolveStalkerLinkInternal({ url, mac, type, cmd, series }) {
         if (finalUrl.toLowerCase().startsWith('ffmpeg ')) {
             finalUrl = finalUrl.substring(7).trim();
         }
-        
+
         // Re-construct into absolute URLs if the portal provides an incomplete route
         if (finalUrl && !finalUrl.startsWith('http')) {
             try {
                 const parsed = new URL(url);
                 finalUrl = `${parsed.protocol}//${parsed.host}${finalUrl.startsWith('/') ? '' : '/'}${finalUrl}`;
-            } catch (err) {}
+            } catch (err) { }
         } else if (finalUrl) {
             try {
                 const parsedFinal = new URL(finalUrl);
@@ -3578,9 +3619,9 @@ async function resolveStalkerLinkInternal({ url, mac, type, cmd, series }) {
                     parsedFinal.hostname = parsedPortal.hostname;
                     finalUrl = parsedFinal.toString();
                 }
-            } catch (err) {}
+            } catch (err) { }
         }
-        
+
         return finalUrl;
     } catch (e) {
         console.error('[STALKER INTERNAL] Resolving link failed:', e);
@@ -3593,14 +3634,14 @@ ipcMain.handle('resolve-stalker-link', async (event, { url, mac, type, cmd, seri
 });
 
 const COUNTRY_CODES = new Set([
-    "US", "USA", "UK", "GBR", "CA", "CAN", "FR", "FRA", "DE", "DEU", "ES", "ESP", "IT", "ITA", 
-    "AR", "ARG", "MX", "MEX", "IN", "IND", "BR", "BRA", "PT", "PRT", "TR", "TUR", "RU", "RUS", 
-    "NL", "NLD", "PL", "POL", "BE", "BEL", "SE", "SWE", "NO", "NOR", "DK", "DNK", "FI", "FIN", 
-    "PK", "PAK", "AU", "AUS", "NZ", "NZL", "ZA", "ZAF", "CH", "CHE", "AT", "AUT", "IE", "IRL", 
-    "GR", "GRC", "CN", "CHN", "JP", "JPN", "KR", "KOR", "EN", "ENG", "LAT", "SPA", "GER", 
-    "POR", "ARA", "ARAB", "HE", "ISR", "IT", "RO", "ROM", "BG", "BGR", "HU", "HUN", "CZ", "CZE", 
-    "SK", "SVK", "HR", "HRV", "RS", "SRB", "SI", "SVN", "UA", "UKR", "KZ", "KAZ", "UZ", "UZB", 
-    "AL", "ALB", "MK", "MKD", "TH", "THA", "VN", "VNM", "PH", "PHL", "MY", "MYS", "ID", "IDN", 
+    "US", "USA", "UK", "GBR", "CA", "CAN", "FR", "FRA", "DE", "DEU", "ES", "ESP", "IT", "ITA",
+    "AR", "ARG", "MX", "MEX", "IN", "IND", "BR", "BRA", "PT", "PRT", "TR", "TUR", "RU", "RUS",
+    "NL", "NLD", "PL", "POL", "BE", "BEL", "SE", "SWE", "NO", "NOR", "DK", "DNK", "FI", "FIN",
+    "PK", "PAK", "AU", "AUS", "NZ", "NZL", "ZA", "ZAF", "CH", "CHE", "AT", "AUT", "IE", "IRL",
+    "GR", "GRC", "CN", "CHN", "JP", "JPN", "KR", "KOR", "EN", "ENG", "LAT", "SPA", "GER",
+    "POR", "ARA", "ARAB", "HE", "ISR", "IT", "RO", "ROM", "BG", "BGR", "HU", "HUN", "CZ", "CZE",
+    "SK", "SVK", "HR", "HRV", "RS", "SRB", "SI", "SVN", "UA", "UKR", "KZ", "KAZ", "UZ", "UZB",
+    "AL", "ALB", "MK", "MKD", "TH", "THA", "VN", "VNM", "PH", "PHL", "MY", "MYS", "ID", "IDN",
     "SG", "SGP", "HK", "HKG", "TW", "TWN"
 ]);
 
@@ -3622,13 +3663,13 @@ function trimCountryPrefix(text) {
 ipcMain.handle('parse-stalker', async (event, { url, mac, username, password }) => {
     try {
         console.log('[STALKER IPC] Starting Stalker parsing for url:', url, 'mac:', mac);
-        
+
         const baseUrl = getStalkerUrl(url);
         stalkerCredentialsMap.set(`${baseUrl}|${mac}`, { username: username || '', password: password || '' });
-        
+
         let allParsed = [];
         let expireDate = null;
-        
+
         // 0. Fetch profile for expiry date
         try {
             const profileRes = await stalkerRequest(url, mac, 'get_profile', { type: 'stb' });
@@ -3646,7 +3687,7 @@ ipcMain.handle('parse-stalker', async (event, { url, mac, username, password }) 
                     expireDate = expire;
                 }
             }
-        } catch(e) {
+        } catch (e) {
             console.error('[STALKER] Failed to load profile:', e);
         }
 
@@ -3656,7 +3697,7 @@ ipcMain.handle('parse-stalker', async (event, { url, mac, username, password }) 
             const catRes = await stalkerRequest(url, mac, 'get_genres', { type: 'itv' });
             const catData = catRes.js?.data || (Array.isArray(catRes.js) ? catRes.js : []);
             itvCategories = catData.map(c => ({ id: c.id, name: trimCountryPrefix(c.title || c.name || 'Live TV') }));
-            
+
             itvCategories.forEach(c => {
                 allParsed.push({
                     tvg_id: c.id,
@@ -3687,7 +3728,7 @@ ipcMain.handle('parse-stalker', async (event, { url, mac, username, password }) 
         try {
             const catRes = await stalkerRequest(url, mac, 'get_categories', { type: 'vod' });
             const catData = catRes.js?.data || (Array.isArray(catRes.js) ? catRes.js : []);
-            
+
             catData.forEach(cat => {
                 const rawName = cat.title || cat.name || cat.category_name || 'VOD';
                 const name = trimCountryPrefix(rawName);
@@ -3723,7 +3764,7 @@ ipcMain.handle('parse-stalker', async (event, { url, mac, username, password }) 
             console.log('[STALKER] Attempting to load dedicated Series categories...');
             const seriesCatRes = await stalkerRequest(url, mac, 'get_categories', { type: 'series' });
             const seriesCatData = seriesCatRes.js?.data || (Array.isArray(seriesCatRes.js) ? seriesCatRes.js : []);
-            
+
             seriesCatData.forEach(cat => {
                 const name = trimCountryPrefix(cat.title || cat.name || cat.category_name || 'Series');
                 allParsed.push({
@@ -3739,7 +3780,7 @@ ipcMain.handle('parse-stalker', async (event, { url, mac, username, password }) 
         } catch (e) {
             console.warn('[STALKER] Portal does not support dedicated series categories, falling back to mixed VOD.', e.message);
         }
-        
+
         // Remove duplicates
         const uniqueParsed = [];
         const seenSet = new Set();
@@ -3750,7 +3791,7 @@ ipcMain.handle('parse-stalker', async (event, { url, mac, username, password }) 
                 uniqueParsed.push(item);
             }
         }
-        
+
         if (uniqueParsed.length === 0) {
             return { error: "Authentication failed or no channels found for the provided MAC address." };
         }
@@ -3767,12 +3808,12 @@ async function executeLoadStalkerCategory({ url, mac, categoryId, isSeries, cate
     const startTime = Date.now();
     const isSeriesFolder = categoryType === 'series' || isSeries;
     const typeLabel = isSeriesFolder ? 'Series' : 'Movies';
-    
+
     try {
         console.log(`\n=================== [PERF ANALYSIS START: ${typeLabel.toUpperCase()} FOLDER] ===================`);
         console.log(`[PERF] Folder Name: "${categoryName || 'Unknown'}" (ID: ${categoryId})`);
         console.log(`[PERF] MAC: ${mac} | URL: ${url}`);
-        
+
         let action = 'get_ordered_list';
         let params = {};
 
@@ -3792,12 +3833,12 @@ async function executeLoadStalkerCategory({ url, mac, categoryId, isSeries, cate
         }
 
         console.log(`[PERF] Initial Stalker query: action="${action}", params=`, JSON.stringify(params));
-        
+
         const fetchStart = Date.now();
         let itemList = await fetchAllStalkerPages(url, mac, action, params);
         let fetchDuration = Date.now() - fetchStart;
         console.log(`[PERF] Initial Page Fetch Phase completed in ${fetchDuration}ms. Items returned: ${itemList.length}`);
-        
+
         // Fallback for series on mixed VOD portals
         if (isSeriesFolder && itemList.length === 0) {
             console.log(`[PERF] No items found with type: 'series'. Falling back and retrying with type: 'vod'...`);
@@ -3808,7 +3849,7 @@ async function executeLoadStalkerCategory({ url, mac, categoryId, isSeries, cate
             fetchDuration += fallbackDuration;
             console.log(`[PERF] Fallback Page Fetch Phase completed in ${fallbackDuration}ms. Items returned: ${itemList.length}`);
         }
-        
+
 
 
         const parseStart = Date.now();
@@ -3864,14 +3905,14 @@ async function executeLoadStalkerCategory({ url, mac, categoryId, isSeries, cate
                 }
             });
         }
-        
+
         const parseDuration = Date.now() - parseStart;
         const totalDuration = Date.now() - startTime;
-        
+
         console.log(`[PERF] Filter and mapping phase took ${parseDuration}ms. Output items: ${result.length}`);
         console.log(`[PERF SUCCESS] Total Folder Load Time for ${typeLabel}: ${totalDuration}ms`);
         console.log(`=================== [PERF ANALYSIS END] ===================\n`);
-        
+
         return result;
     } catch (e) {
         console.error(`[PERF FAILURE] Error loading stalker category:`, e);
@@ -3887,7 +3928,7 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
     const startTime = Date.now();
     console.log(`\n=================== [PERF ANALYSIS START: SERIES EPISODES] ===================`);
     console.log(`[PERF] Loading Episodes for Series ID: ${seriesId}`);
-    
+
     // Ensure seriesId is a valid string to prevent empty array [] corruption
     const cleanSeriesId = Array.isArray(seriesId) ? (seriesId[0] || '') : String(seriesId);
     console.log(`[PERF] Series ID: ${cleanSeriesId}`);
@@ -3896,7 +3937,7 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
     const parseSeasonAndEpisode = (item, index) => {
         let season = parseInt(item.season_number || item.season || 0);
         let episodeNum = parseInt(item.series_number || item.episode || item.episode_number || 0);
-        
+
         const name = (item.name || '').trim();
         if (!season || !episodeNum) {
             // Try S01E02 or S1E2 or S01 E02 pattern
@@ -3910,7 +3951,7 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                 if (epMatch) {
                     if (!episodeNum) episodeNum = parseInt(epMatch[1]);
                 }
-                
+
                 // Try "Season X" or "S X" pattern
                 const sMatch = name.match(/(?:season|s)\s*(\d+)/i);
                 if (sMatch) {
@@ -3918,7 +3959,7 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                 }
             }
         }
-        
+
         // Try to match just a plain number in the name if episodeNum is still 0
         if (!episodeNum) {
             const numMatch = name.match(/^\d+$/);
@@ -3926,17 +3967,17 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                 episodeNum = parseInt(name);
             }
         }
-        
+
         // Fallbacks
         if (!season) season = 1;
         if (!episodeNum) episodeNum = index + 1;
-        
+
         return { season, episodeNum };
     };
-    
+
     try {
         const strippedId = cleanSeriesId.includes(':') ? cleanSeriesId.split(':')[0] : cleanSeriesId;
-        
+
         console.log(`[PERF] Step 1: Running diagnostic probes to find correct season/episode query parameters...`);
         const seasonsFetchStart = Date.now();
         const probes = [
@@ -3947,7 +3988,7 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
 
         let rawData = [];
         let winningParams = { type: 'vod', movie_id: seriesId }; // fallback
-        
+
         for (const probe of probes) {
             console.log(`\n[${probe.name}] Requesting:`, probe.params);
             try {
@@ -3955,12 +3996,12 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                 const res = await stalkerRequest(url, mac, 'get_ordered_list', { ...probe.params, p: 1 });
                 const data = res.js?.data || (Array.isArray(res.js) ? res.js : []);
                 const totalItems = res.js?.total_items ? parseInt(res.js.total_items, 10) : data.length;
-                
+
                 console.log(`[${probe.name}] Total Items reported: ${totalItems}, Array length: ${data.length}`);
                 if (data.length > 0) {
                     console.log(`[${probe.name}] First item preview:`, JSON.stringify(data[0], null, 2));
                 }
-                
+
                 // If it returns a reasonable number of items (not the entire 20k catalog), consider it a valid candidate
                 if (totalItems > 0 && totalItems < 5000 && data.length > 0) {
                     console.log(`[${probe.name}] Looks like a valid response! Fetching all pages...`);
@@ -3974,23 +4015,23 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                 console.log(`[${probe.name}] Error:`, e.message);
             }
         }
-        
+
         const seasonsFetchDuration = Date.now() - seasonsFetchStart;
         console.log(`\n[PERF] Probes completed in ${seasonsFetchDuration}ms. Found ${rawData.length} items using params:`, winningParams);
-        
+
         if (!rawData || rawData.length === 0) {
             console.log(`[PERF SUCCESS] No seasons or episodes found using any probe.`);
             console.log(`=================== [PERF ANALYSIS END] ===================\n`);
             return [];
         }
-        
+
         // Check if rawData is actually a flat list of direct episodes
         const isFlatList = rawData.some(item => {
             if (!item) return false;
             const name = (item.name || '').toLowerCase();
             return item.file || item.url || name.includes('episode') || name.includes('ep.') || /\bep\b/.test(name) || /s\d+\s*e\d+/.test(name);
         });
-        
+
         if (isFlatList) {
             console.log(`[PERF] Smart check detected flat list of episodes. Mapping directly...`);
             const mapped = rawData.map((e, index) => {
@@ -3999,10 +4040,10 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                 if (!cmdVal && e.id) {
                     cmdVal = `/media/file_${e.id}.mpg`;
                 }
-                
+
                 let linkType = winningParams.type || 'vod';
                 if (e.cmd && typeof e.cmd === 'string' && e.cmd.includes('"type":"series"')) linkType = 'series';
-                
+
                 return {
                     ...e,
                     id: e.id,
@@ -4014,13 +4055,13 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                     url: `stalker-cmd:${linkType}|${cmdVal}`
                 };
             });
-            
+
             const totalDuration = Date.now() - startTime;
             console.log(`[PERF SUCCESS] Total Episodes Load Time (Direct Flat list): ${totalDuration}ms. Count: ${mapped.length}`);
             console.log(`=================== [PERF ANALYSIS END] ===================\n`);
             return mapped;
         }
-        
+
         console.log('================ RAW SEASONS ================');
         rawData.forEach((s, i) => {
             console.log(`[${i}]`, {
@@ -4032,7 +4073,7 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                 cmd: s.cmd
             });
         });
-        
+
         const seasonsData = rawData.filter(s => {
             if (!s) return false;
             if (s.is_season === true || s.is_season === 1 || s.is_season === '1' || String(s.is_season).toLowerCase() === 'true') return true;
@@ -4040,11 +4081,11 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
             if (s.id && String(s.id).includes(':') && Array.isArray(s.series)) return true;
             return false;
         });
-        
+
         // Step 2: Fetch episodes for each season
         console.log(`[PERF] Step 2: Fetching episodes for all ${seasonsData.length} true seasons...`);
         const epFetchStart = Date.now();
-        
+
         const allEpisodes = [];
         const chunkSize = 4;
         for (let i = 0; i < seasonsData.length; i += chunkSize) {
@@ -4053,14 +4094,14 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                 const actualIndex = i + index;
                 const seasonId = season.id || season.season_id;
                 const sNum = season.season_number || season.series_number || (actualIndex + 1);
-                
+
                 let reqObj = {
                     type: winningParams.type,
                     movie_id: winningParams.movie_id,
                     season_id: String(seasonId),
                     episode_id: '0'
                 };
-                
+
                 let decodedCmd = {};
                 if (season.cmd) {
                     try {
@@ -4079,9 +4120,9 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                         console.log(`[SEASON CMD DECODE ERROR]`, e.message);
                     }
                 }
-                
+
                 const hasInlineEpisodes = Array.isArray(season.series) && season.series.length > 0 && typeof season.series[0] !== 'object';
-                
+
                 let eps = [];
                 if (hasInlineEpisodes) {
                     console.log(`[PERF] Season already contains episode numbers. Skipping redundant network request.`);
@@ -4094,16 +4135,16 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                     }
                     console.log('[EP RESPONSE]', eps ? eps.slice(0, 3) : []);
                     console.log('[EP CHECK]', eps[0]?.id, eps[0]?.name, Array.isArray(eps[0]?.series) ? `Array(${eps[0].series.length})` : eps[0]?.series);
-                    
+
                     // Detection: If the portal ignored our episode query and just returned the seasons list again
                     if (eps && eps.length > 0 && (eps[0].is_season || /^season\s+\d+/i.test(eps[0].name) || eps[0].id === seasonId)) {
                         console.log(`[PERF] Portal returned seasons instead of episodes! Discarding bogus response.`);
                         eps = [];
                     }
                 }
-                
+
                 console.log('[EP RESPONSE]', eps ? eps.slice(0, 3) : []);
-                
+
                 if (!eps || eps.length === 0) {
                     // Fallback: Check if season object has a 'series' array with episode numbers
                     if (Array.isArray(season.series) && season.series.length > 0) {
@@ -4122,11 +4163,11 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                         return [];
                     }
                 }
-                
+
                 return eps.map((e, epIndex) => {
                     const { season: parsedSeason, episodeNum } = parseSeasonAndEpisode(e, epIndex);
                     const finalSeason = (parsedSeason === 1 && sNum !== 1) ? sNum : parsedSeason;
-                    
+
                     if (e.is_inline_episode) {
                         return {
                             ...e,
@@ -4139,17 +4180,17 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                             url: `stalker-series-ep:${e.cmd}|${episodeNum}`
                         };
                     }
-                    
+
                     let cmdVal = e.cmd || '';
                     if (!cmdVal && e.id) {
                         cmdVal = `/media/file_${e.id}.mpg`;
                     }
-                    
+
                     let linkType = 'vod';
                     if (reqObj.type === 'series') linkType = 'series';
                     if (decodedCmd.type) linkType = decodedCmd.type;
                     if (e.cmd && typeof e.cmd === 'string' && e.cmd.includes('"type":"series"')) linkType = 'series';
-                    
+
                     return {
                         ...e,
                         id: e.id,
@@ -4162,43 +4203,43 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                     };
                 });
             });
-            
+
             const results = await Promise.all(chunkPromises);
             allEpisodes.push(...results.flat());
-            
+
             if (i + chunkSize < seasonsData.length) {
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
         }
-        
+
         const epFetchDuration = Date.now() - epFetchStart;
         const totalDuration = Date.now() - startTime;
-        
+
         console.log(`[PERF] Season-based Episodes Fetch took ${epFetchDuration}ms. Total episodes collected: ${allEpisodes.length}`);
         console.log(`[PERF SUCCESS] Total Episodes Load Time: ${totalDuration}ms`);
         console.log(`=================== [PERF ANALYSIS END] ===================\n`);
-        
+
         if (allEpisodes.length > 0) {
             return allEpisodes;
         }
-        
+
         // Step 3: Fallback if no episodes found inside seasons
         console.log(`[PERF] Fallback - Fetching all episodes directly as VOD fallback...`);
         let episodes = [];
         try {
             episodes = await fetchAllStalkerPages(url, mac, 'get_ordered_list', { type: winningParams.type, movie_id: winningParams.movie_id });
-        } catch (e) {}
-        
+        } catch (e) { }
+
         const mapped = episodes.map((e, index) => {
             const { season, episodeNum } = parseSeasonAndEpisode(e, index);
             let cmdVal = e.cmd || '';
             if (!cmdVal && e.id) {
                 cmdVal = `/media/file_${e.id}.mpg`;
             }
-            
+
             let linkType = winningParams.type || 'vod';
             if (e.cmd && typeof e.cmd === 'string' && e.cmd.includes('"type":"series"')) linkType = 'series';
-            
+
             return {
                 ...e,
                 id: e.id,
@@ -4210,7 +4251,7 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
                 url: `stalker-cmd:${linkType}|${cmdVal}`
             };
         });
-        
+
         return mapped;
     } catch (e) {
         console.error(`[PERF FAILURE] Error loading stalker episodes:`, e);
@@ -4221,7 +4262,7 @@ ipcMain.handle('get-stalker-episodes', async (event, { url, mac, seriesId }) => 
 ipcMain.handle('parse-xtream', async (event, { name, server, username, password }) => {
     try {
         console.log('[XTREAM IPC] Starting Xtream Codes parsing for:', server, 'user:', username);
-        
+
         // 1. Verify Credentials
         const loginInfo = await xtreamFetch(server, username, password);
         if (!loginInfo || !loginInfo.user_info || loginInfo.user_info.auth !== 1) {
@@ -4238,11 +4279,11 @@ ipcMain.handle('parse-xtream', async (event, { name, server, username, password 
         try {
             liveCats = await xtreamFetch(server, username, password, 'get_live_categories');
         } catch (e) { console.error('[XTREAM] Failed to load live categories:', e.message); }
-        
+
         try {
             movieCats = await xtreamFetch(server, username, password, 'get_vod_categories');
         } catch (e) { console.error('[XTREAM] Failed to load movie categories:', e.message); }
-        
+
         try {
             seriesCats = await xtreamFetch(server, username, password, 'get_series_categories');
         } catch (e) { console.error('[XTREAM] Failed to load series categories:', e.message); }
@@ -4258,11 +4299,11 @@ ipcMain.handle('parse-xtream', async (event, { name, server, username, password 
         try {
             liveStreams = await xtreamFetch(server, username, password, 'get_live_streams');
         } catch (e) { console.error('[XTREAM] Failed to load live streams:', e.message); }
-        
+
         try {
             movieStreams = await xtreamFetch(server, username, password, 'get_vod_streams');
         } catch (e) { console.error('[XTREAM] Failed to load movie streams:', e.message); }
-        
+
         try {
             seriesStreams = await xtreamFetch(server, username, password, 'get_series');
         } catch (e) { console.error('[XTREAM] Failed to load series streams:', e.message); }
@@ -4355,7 +4396,7 @@ ipcMain.handle('get-xtream-episodes', async (event, { server, username, password
     try {
         console.log(`[XTREAM EPISODES] Loading episodes for Series ID: ${seriesId}`);
         const res = await xtreamFetch(server, username, password, 'get_series_info', { series_id: seriesId });
-        
+
         const episodes = [];
         if (res && res.episodes) {
             for (const [seasonNum, epList] of Object.entries(res.episodes)) {
@@ -4398,15 +4439,15 @@ ipcMain.handle('get-telemetry-diagnostics', async (event, portalUrl) => {
 ipcMain.handle('clear-cache', async (event, url) => {
     console.log('[IPC HANDLE] clear-cache', { url });
     if (!url) return false;
-    
+
     // Invalidate in-memory cache
     epgChannelsCache = {};
     epgLogosCache = {};
     cachedEpgDict = null;
     cachedEpgDictKey = '';
-    
+
     if (db) {
-        try { await db.prepare('DELETE FROM epg WHERE source_url = ?').run(url); } 
+        try { await db.prepare('DELETE FROM epg WHERE source_url = ?').run(url); }
         catch (e) { console.error(e); }
     }
 
@@ -4444,24 +4485,24 @@ async function autoTriggerEpgUpdateForMappedIds(mappedEpgIds) {
     try {
         const idsToCheck = mappedEpgIds.map(id => String(id).toLowerCase().trim()).filter(id => id);
         if (idsToCheck.length === 0) return;
-        
+
         const placeholders = idsToCheck.map(() => '?').join(',');
         const rowsWithProgs = await db.prepare(`
             SELECT DISTINCT channel_id FROM epg WHERE channel_id IN (${placeholders})
         `).all(...idsToCheck);
-        
+
         const hasProgs = new Set(rowsWithProgs.map(r => r.channel_id.toLowerCase().trim()));
         const missingIds = idsToCheck.filter(id => !hasProgs.has(id));
-        
+
         if (missingIds.length === 0) {
             return;
         }
-        
+
         const missingPlaceholders = missingIds.map(() => '?').join(',');
         const sourceRows = await db.prepare(`
             SELECT DISTINCT source_url FROM epg_logos WHERE epg_id IN (${missingPlaceholders})
         `).all(...missingIds);
-        
+
         const sourcesToUpdate = sourceRows.map(r => r.source_url).filter(s => s);
         if (sourcesToUpdate.length > 0) {
             console.log('[EPG AutoUpdate] Auto-triggering background EPG update for sources:', sourcesToUpdate);
@@ -4482,7 +4523,7 @@ ipcMain.handle('save-mapping', async (event, title, epgId) => {
                 VALUES (@title, @epg)
                 ON CONFLICT(channel_title) DO UPDATE SET epg_id = @epg
             `).run({ title, epg: String(epgId).toLowerCase() });
-            
+
             // Auto-trigger background EPG update
             autoTriggerEpgUpdateForMappedIds([epgId]);
         } else {
@@ -4506,7 +4547,7 @@ ipcMain.handle('save-mappings-bulk', async (event, mappingsArray) => {
             ON CONFLICT(channel_title) DO UPDATE SET epg_id = @epg
         `);
         const deleteStmt = db.prepare('DELETE FROM mappings WHERE channel_title = ?');
-        
+
         const transaction = db.transaction(async (mappings) => {
             for (const { title, epgId } of mappings) {
                 if (epgId) {
@@ -4516,15 +4557,15 @@ ipcMain.handle('save-mappings-bulk', async (event, mappingsArray) => {
                 }
             }
         });
-        
+
         await transaction(mappingsArray);
-        
+
         // Auto-trigger background EPG update for all newly mapped bulk IDs
         const mappedIds = mappingsArray.map(m => m.epgId).filter(id => id);
         if (mappedIds.length > 0) {
             autoTriggerEpgUpdateForMappedIds(mappedIds);
         }
-        
+
         console.log('[IPC HANDLE] save-mappings-bulk END');
         return true;
     } catch (e) {
@@ -4584,7 +4625,7 @@ ipcMain.handle('factory-reset', async () => {
         if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
         if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
         if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
-        
+
         const cacheDir = path.join(app.getPath('userData'), 'cache');
         if (fs.existsSync(cacheDir)) {
             try {
@@ -4593,7 +4634,7 @@ ipcMain.handle('factory-reset', async () => {
                 console.error("[DB ERR] Failed to delete cache folder:", cacheErr);
             }
         }
-        
+
         console.log('[IPC HANDLE] factory-reset END');
         app.relaunch();
         app.quit();
@@ -4641,15 +4682,90 @@ const { URL } = require('url');
 
 const activeRecordings = new Map();
 
+const resolveFinalUrlAndType = (urlStr, customHeaders) => {
+    return new Promise((resolve) => {
+        try {
+            const parsedUrl = new URL(urlStr);
+            const protocol = parsedUrl.protocol === 'https:' ? https : http;
+            const headers = {
+                'User-Agent': 'VLC/3.0.9 LibVLC/3.0.9'
+            };
+            if (customHeaders && Array.isArray(customHeaders)) {
+                customHeaders.forEach(h => {
+                    const colonIdx = h.indexOf(':');
+                    if (colonIdx > 0) {
+                        headers[h.substring(0, colonIdx).trim()] = h.substring(colonIdx + 1).trim();
+                    } else {
+                        const parts = h.split(':');
+                        if (parts.length >= 2) {
+                            headers[parts[0].trim()] = parts.slice(1).join(':').trim();
+                        }
+                    }
+                });
+            }
+
+            const req = protocol.get(parsedUrl, { headers, timeout: 20000 }, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    req.destroy();
+                    try {
+                        const redirectUrl = new URL(res.headers.location, urlStr).href;
+                        resolveFinalUrlAndType(redirectUrl, customHeaders).then(resolve);
+                    } catch (urlErr) {
+                        resolve({ finalUrl: urlStr, contentType: res.headers['content-type'] || '', statusCode: res.statusCode });
+                    }
+                    return;
+                }
+                const contentType = res.headers['content-type'] || '';
+                req.destroy();
+                resolve({
+                    finalUrl: urlStr,
+                    contentType: contentType.toLowerCase(),
+                    statusCode: res.statusCode
+                });
+            });
+
+            req.on('error', (err) => {
+                resolve({ finalUrl: urlStr, contentType: '', error: err.message });
+            });
+            req.on('timeout', () => {
+                req.destroy();
+                resolve({ finalUrl: urlStr, contentType: '', error: 'timeout' });
+            });
+        } catch (e) {
+            resolve({ finalUrl: urlStr, contentType: '', error: e.message });
+        }
+    });
+};
+
 function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone, onError) {
     console.log('[DVR DEBUG] URL=', urlStr);
     console.log('[DVR DEBUG] ABS=', /^https?:\/\//.test(urlStr));
-    
+    console.log('[DVR DEBUG] Custom Headers Count:', customHeaders ? customHeaders.length : 0);
+    if (customHeaders && customHeaders.length > 0) {
+        customHeaders.forEach((h, i) => {
+            // Mask sensitive values but show header names
+            const colonIdx = h.indexOf(':');
+            if (colonIdx > 0) {
+                const name = h.substring(0, colonIdx).trim();
+                const value = h.substring(colonIdx + 1).trim();
+                const masked = ['cookie', 'authorization', 'bearer'].some(s => name.toLowerCase().includes(s))
+                    ? value.substring(0, 10) + '...'
+                    : value;
+                console.log(`[DVR DEBUG] Header[${i}]: ${name}: ${masked}`);
+            } else {
+                console.log(`[DVR DEBUG] Header[${i}]: ${h}`);
+            }
+        });
+    } else {
+        console.log('[DVR DEBUG] WARNING: No custom headers provided! Stream may fail if authentication is required.');
+    }
+
     let ffmpegProcess = null;
     let requestInstance = null;
     let fileStream = null;
     let isCancelled = false;
-    
+    let isStopping = false;
+
     const cancel = () => {
         isCancelled = true;
         if (ffmpegProcess) {
@@ -4660,11 +4776,70 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
         if (fileStream) fileStream.end();
     };
 
-    const startDownload = (currentUrl) => {
+    // Gracefully stop recording: tells FFmpeg to finalize the file and exit cleanly.
+    // For HTTP downloads, ends the request and flushes the file stream, then calls onDone.
+    const stop = () => {
+        if (isStopping || isCancelled) return;
+        isStopping = true;
+        console.log('[DVR] Gracefully stopping recording...');
+        if (ffmpegProcess) {
+            // Send 'q' to FFmpeg's stdin — this tells it to stop recording,
+            // flush all buffered packets, finalize the container, and exit with code 0.
+            if (ffmpegProcess.stdin && ffmpegProcess.stdin.writable) {
+                console.log('[DVR] Sending quit command to FFmpeg stdin...');
+                ffmpegProcess.stdin.write('q');
+            } else {
+                // Fallback: SIGINT is the next best thing (Ctrl+C equivalent)
+                console.log('[DVR] FFmpeg stdin not writable, sending SIGINT...');
+                ffmpegProcess.kill('SIGINT');
+            }
+            // Safety timeout: if FFmpeg doesn't exit within 10 seconds, force kill
+            setTimeout(() => {
+                if (ffmpegProcess && !ffmpegProcess.killed) {
+                    console.log('[DVR] FFmpeg did not exit after 10s, force killing...');
+                    ffmpegProcess.kill('SIGKILL');
+                }
+            }, 10000);
+        } else if (requestInstance || fileStream) {
+            // HTTP download: destroy the request and flush the file
+            if (requestInstance) {
+                requestInstance.destroy();
+                requestInstance = null;
+            }
+            if (fileStream) {
+                fileStream.end(() => {
+                    console.log('[DVR] HTTP file stream flushed and closed.');
+                    // Validate the file has actual content
+                    try { //
+                        const fileSize = fs.statSync(destPath).size;
+                        if (fileSize < 1024) {
+                            console.error(`[DVR] HTTP recording file is only ${fileSize} bytes — treating as failed.`);
+                            onError(new Error(`Recording file is empty (${fileSize} bytes). The stream may require authentication or returned no data.`));
+                            return;
+                        }
+                        // Validate the file has actual content before declaring success
+                        if (fileSize < 1024 * 100) { // Check for at least 100KB of data
+                            console.error(`[DVR] HTTP recording file is only ${fileSize} bytes — treating as failed.`);
+                            onError(new Error(`Recording contains insufficient data (${fileSize} bytes). The stream may require authentication or returned no data.`));
+                            return;
+                        }
+                    } catch (e) { }
+                    onDone();
+                });
+                fileStream = null;
+            } else {
+                onDone();
+            }
+        } else {
+            onDone();
+        }
+    };
+
+    const startDownload = (currentUrl, contentType = '') => {
         if (isCancelled) return;
-        
-        console.log('[DVR] Attempting stream capture via FFmpeg...');
-        
+
+        console.log(`[DVR] Attempting stream capture via FFmpeg for URL: ${currentUrl}`);
+
         let headersString = '';
         if (customHeaders && Array.isArray(customHeaders)) {
             headersString = customHeaders.map(h => `${h}\r\n`).join('');
@@ -4677,21 +4852,30 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
         if (headersString) {
             args.push('-headers', headersString);
         }
-        // Add robust reconnect flags for HTTP/HTTPS/IPTV streams
-        args.push(
-            '-reconnect', '1',
-            '-reconnect_at_eof', '1',
-            '-reconnect_streamed', '1',
-            '-reconnect_delay_max', '5'
-        );
+        // Add robust reconnect flags for HTTP/HTTPS/IPTV streams.
+        // NOTE: We MUST avoid reconnect_at_eof for HLS streams since it blocks format probing EOF
+        // and prevents FFmpeg from recognizing HLS playlists.
+        const isHls = currentUrl.includes('.m3u8') || currentUrl.includes('.m3u') || 
+                      (contentType && (contentType.includes('mpegurl') || contentType.includes('x-mpegurl')));
+        if (!isHls) {
+            args.push(
+                '-reconnect', '1',
+                '-reconnect_at_eof', '1',
+                '-reconnect_streamed', '1',
+                '-reconnect_delay_max', '5'
+            );
+        }
         args.push('-i', currentUrl, '-c', 'copy', '-y', destPath);
 
         try {
+            console.log('[DVR] FFmpeg command: ffmpeg ' + args.map(a => a.includes(' ') || a.includes('\r') || a.includes('\n') ? `"${a.replace(/"/g, '\\"')}"` : a).join(' '));
             ffmpegProcess = spawn('ffmpeg', args);
             console.log('[DVR] Downloader: ffmpeg');
-            
-            let ffmpegStarted = false;
-            
+
+            let ffmpegConnected = false;
+            let ffmpegHasData = false;
+            let ffmpegStderrBuffer = '';
+
             ffmpegProcess.on('error', (err) => {
                 if (err.code === 'ENOENT') {
                     console.log('[DVR] FFmpeg not found on system PATH. Falling back to native Node HTTP capturing...');
@@ -4704,32 +4888,118 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
             ffmpegProcess.stderr.on('data', (data) => {
                 if (isCancelled) return;
                 const log = data.toString();
-                if (log.includes('Error') || log.includes('Failed') || log.includes('HTTP error') || log.includes('Server returned') || log.includes('corrupt')) {
-                    console.error('[DVR FFmpeg STDERR]', log.trim());
+                ffmpegStderrBuffer += log;
+                const trimmedLog = log.trim();
+                if (trimmedLog) {
+                    console.log('[DVR FFmpeg STDERR]', trimmedLog);
                 }
-                const sizeMatch = log.match(/size=\s*(\d+)\s*(kB|mB)/i);
+
+                if ( // Set ffmpegConnected if input is detected
+                    log.includes('Input #0') ||
+                    log.includes('Stream #0') ||
+                    log.includes('Press [q] to stop')
+                ) {
+                    ffmpegConnected = true;
+                }
+                const sizeMatch = trimmedLog.match(/size=\s*(\d+)\s*(k|m)i?b/i);
                 if (sizeMatch) {
-                    ffmpegStarted = true;
+                    ffmpegHasData = true;
                     let size = parseInt(sizeMatch[1]);
-                    if (sizeMatch[2].toLowerCase() === 'mb') size *= 1024;
+                    if (sizeMatch[2].toLowerCase() === 'm') size *= 1024;
                     if (onProgress) onProgress(size * 1024);
                 }
+            });
+
+            // Early detection: if FFmpeg hasn't captured any data within 30 seconds, fail fast
+            // instead of sitting idle for the entire recording duration with -reconnect enabled
+            const dataCheckTimeout = setTimeout(() => {
+                let hasDiskData = false;
+                try {
+                    if (fs.existsSync(destPath) && fs.statSync(destPath).size > 1024) {
+                        hasDiskData = true;
+                    }
+                } catch (e) {}
+
+                if (!ffmpegHasData && !hasDiskData && ffmpegProcess && !ffmpegProcess.killed && !isCancelled && !isStopping) {
+                    console.error('[DVR] FFmpeg has not captured any data after 30 seconds. Killing process.');
+                    console.error('[DVR FFmpeg Stderr at timeout]:\n', ffmpegStderrBuffer);
+                    // Force kill and let the close handler deal with it
+                    ffmpegProcess.kill('SIGKILL');
+                }
+            }, 30000);
+
+            // Clear the timeout if FFmpeg exits naturally
+            ffmpegProcess.on('close', () => {
+                clearTimeout(dataCheckTimeout);
             });
 
             ffmpegProcess.on('close', (code) => {
                 if (isCancelled) return;
                 if (code === 0) {
-                    console.log('[DVR] FFmpeg capture completed successfully with code 0.');
-                    onDone();
-                } else if (ffmpegStarted) {
-                    console.log(`[DVR] FFmpeg process exited with non-zero code ${code} after starting. Treating as error.`);
-                    onError(new Error(`FFmpeg exited with code ${code}`));
+                    const fileSize = fs.existsSync(destPath) ? fs.statSync(destPath).size : 0; // Get file size here
+                    console.log(`[DVR] FFmpeg exited with code: ${code}, file size: ${fileSize} bytes.`); //
+                    console.log(`[DVR] Final recording size: ${fileSize} bytes`);
+
+                    // Validate the output file has actual content before declaring success
+                    try {
+                        if (fileSize < 1024 * 100) { // Check for at least 100KB of data
+                            console.error(`[DVR] FFmpeg exited cleanly but output file is only ${fileSize} bytes — treating as failed.`);
+                            console.error('[DVR FFmpeg Full Stderr Output]:\n', ffmpegStderrBuffer);
+                            onError(new Error(`Recording file is empty (${fileSize} bytes). The stream may require authentication or returned no data.`));
+                            return;
+                        }
+                        console.log(`[DVR] FFmpeg capture completed successfully. File size: ${(fileSize / (1024 * 1024)).toFixed(2)} MB`);
+                    } catch (statErr) {
+                        console.error('[DVR] Could not check output file:', statErr);
+                    }
+                    onDone(); //
                 } else {
-                    console.log(`[DVR] FFmpeg process exited with code ${code} before starting. Trying HTTP fallback...`);
-                    startHttpDownload(currentUrl);
+                    console.error(`[DVR] FFmpeg process exited with non-zero code ${code}.`);
+                    console.error('[DVR FFmpeg Full Stderr Output]:\n', ffmpegStderrBuffer);
+
+                    // Expose last few lines or specific errors (e.g. 401 Unauthorized, Server returned, etc.)
+                    let errorMsg = `FFmpeg exited with code ${code}`;
+                    const lines = ffmpegStderrBuffer.split('\n');
+                    const relevantLines = lines.filter(l => l.includes('Server returned') || l.includes('HTTP error') || l.includes('Unable to open') || l.includes('Invalid data') || l.includes('401') || l.includes('403') || l.includes('404'));
+                    if (relevantLines.length > 0) {
+                        errorMsg += `: ${relevantLines[relevantLines.length - 1].trim()}`;
+                    } else if (lines.length > 0) {
+                        const lastLines = lines.map(l => l.trim()).filter(Boolean).slice(-3);
+                        if (lastLines.length > 0) {
+                            errorMsg += `: ${lastLines.join(' | ')}`;
+                        }
+                    }
+
+                    // Determine if the error is due to authentication/authorization failures.
+                    const authFailure =
+                        errorMsg.includes('401') ||
+                        errorMsg.includes('403') ||
+                        errorMsg.includes('Unauthorized') ||
+                        errorMsg.includes('Invalid data') ||
+                        errorMsg.includes('Server returned 401') ||
+                        errorMsg.includes('Server returned 403') ||
+                        errorMsg.includes('Server returned 5') ||
+                        errorMsg.includes('500');
+                    // Don't fall back to HTTP for HLS streams — native HTTP can't handle .m3u8 playlists
+                    const isHlsStream = currentUrl.includes('.m3u8') || currentUrl.includes('.m3u') ||
+                                        (contentType && (contentType.includes('mpegurl') || contentType.includes('x-mpegurl')));
+                    if (authFailure || isHlsStream) {
+                        if (isHlsStream) {
+                            console.error('[DVR] Stream is HLS — native HTTP cannot handle this. Reporting error directly.');
+                        }
+                        // Do not fallback to HTTP; propagate the error.
+                        onError(new Error(errorMsg));
+                        return;
+                    }
+                    if (ffmpegConnected) {
+                        onError(new Error(errorMsg));
+                    } else {
+                        console.log('[DVR] Trying HTTP fallback after FFmpeg failed to start...');
+                        startHttpDownload(currentUrl);
+                    }
                 }
             });
-            
+
         } catch (e) {
             console.log('[DVR] FFmpeg spawning threw exception. Falling back to native Node HTTP capturing...', e);
             startHttpDownload(currentUrl);
@@ -4738,11 +5008,17 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
 
     const startHttpDownload = (currentUrl) => {
         if (isCancelled) return;
+        const isHlsStream = currentUrl.includes('.m3u8') || currentUrl.includes('.m3u');
+        if (isHlsStream) {
+            console.error('[DVR] HTTP fallback URL is HLS (.m3u8) — native HTTP cannot handle this. Reporting error directly.');
+            onError(new Error('Cannot download HLS stream via native HTTP'));
+            return;
+        }
         console.log('[DVR] Downloader: native-http');
         try {
             const parsedUrl = new URL(currentUrl);
             const protocol = parsedUrl.protocol === 'https:' ? https : http;
-            
+
             const headers = {
                 'User-Agent': 'VLC/3.0.9 LibVLC/3.0.9'
             };
@@ -4764,6 +5040,11 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
                 if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                     const redirectUrl = new URL(res.headers.location, currentUrl).href;
                     console.log(`[DVR] Redirecting to: ${redirectUrl}`);
+                    if (redirectUrl.includes('.m3u8') || redirectUrl.includes('.m3u')) {
+                        console.error('[DVR] Redirected to HLS stream (.m3u8) in HTTP fallback — aborting.');
+                        onError(new Error('Cannot download HLS stream via native HTTP'));
+                        return;
+                    }
                     startHttpDownload(redirectUrl);
                     return;
                 }
@@ -4789,7 +5070,18 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
 
                 res.on('end', () => {
                     fileStream.end();
-                    if (!isCancelled) onDone();
+                    if (!isCancelled) {
+                        try {
+                            const finalSize = fs.statSync(destPath).size;
+                            console.log(`[DVR] Final recording size: ${finalSize} bytes`);
+                            if (finalSize < 1024 * 100) { // Check for at least 100KB of data
+                                console.error(`[DVR] HTTP recording file is only ${finalSize} bytes — treating as failed.`);
+                                onError(new Error(`Recording contains insufficient data (${finalSize} bytes). The stream may require authentication or returned no data.`));
+                                return;
+                            }
+                        } catch (e) { }
+                        onDone();
+                    }
                 });
 
                 res.on('error', (err) => {
@@ -4797,24 +5089,36 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
                     onError(err);
                 });
             });
-            
+
             requestInstance.on('error', (err) => {
                 onError(err);
             });
-            
+
             requestInstance.on('timeout', () => {
                 requestInstance.destroy();
                 onError(new Error('Connection timeout'));
             });
-            
+
         } catch (err) {
             onError(err);
         }
     };
 
-    startDownload(urlStr);
+    resolveFinalUrlAndType(urlStr, customHeaders).then(({ finalUrl, contentType, error }) => {
+        if (isCancelled) return;
+        if (error) {
+            console.warn(`[DVR] Warning: Redirect resolution failed: ${error}. Using original URL.`);
+        } else {
+            console.log(`[DVR] Resolved redirect URL to: ${finalUrl} (Content-Type: ${contentType || 'unknown'})`);
+        }
+        startDownload(finalUrl, contentType);
+    }).catch(err => {
+        if (isCancelled) return;
+        console.error(`[DVR] Redirect resolution error:`, err);
+        startDownload(urlStr);
+    });
 
-    return { cancel };
+    return { cancel, stop };
 }
 
 ipcMain.handle('get-recording-path', async () => {
@@ -4844,22 +5148,22 @@ ipcMain.handle('save-recording-path', async (event, targetPath) => {
 
 ipcMain.handle('start-recording', async (event, channelUrl, channelName, programName, headers = []) => {
     console.log('[DVR IPC] Start recording requested for:', channelName, '-- Program:', programName);
-    
+
     let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
     try {
         const row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
         if (row && row.value) folder = row.value;
-    } catch (e) {}
-    
+    } catch (e) { }
+
     if (!fs.existsSync(folder)) {
         fs.mkdirSync(folder, { recursive: true });
     }
-    
+
     const safeChannelName = channelName.replace(/[\/\\:\*\?"<>\|]/g, '_');
     const safeProgramName = programName.replace(/[\/\\:\*\?"<>\|]/g, '_');
     const filename = `${safeChannelName} - ${safeProgramName}.ts`;
     const destPath = path.join(folder, filename);
-    
+
     const recordingId = crypto.randomUUID();
     let headersVal = [];
     if (headers && Array.isArray(headers)) {
@@ -4871,7 +5175,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
     let sourceType = 'm3u';
     let stalkerMeta = null;
     let xtreamMeta = null;
-    
+
     headersVal.forEach(h => {
         if (h.startsWith('STALKER-METADATA:')) {
             try {
@@ -4879,14 +5183,14 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
                 if (stalkerMeta && stalkerMeta.sourceType) {
                     sourceType = stalkerMeta.sourceType;
                 }
-            } catch (e) {}
+            } catch (e) { }
         } else if (h.startsWith('XTREAM-METADATA:')) {
             try {
                 xtreamMeta = JSON.parse(h.substring(16));
                 if (xtreamMeta && xtreamMeta.sourceType) {
                     sourceType = xtreamMeta.sourceType;
                 }
-            } catch (e) {}
+            } catch (e) { }
         } else {
             cleanHeaders.push(h);
         }
@@ -4923,7 +5227,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
             const parts = activeUrl.substring(12).split('|');
             const type = parts[0];
             const cmd = parts.slice(1).join('|');
-            
+
             console.log(`[DVR IPC] Resolving fresh Stalker link for manual recording:`, stalkerMeta);
             const resolvedUrl = await resolveStalkerLinkInternal({
                 url: stalkerMeta.portalUrl,
@@ -4959,7 +5263,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
                     }
                     const sessionPHPSessId = session.phpSessionId || '';
                     const cookies = `mac=${stalkerMeta.mac}; stb_lang=en; timezone=GMT` + (sessionPHPSessId ? `; PHPSESSID=${sessionPHPSessId}` : '');
-                    
+
                     cleanHeaders.push(`User-Agent: ${ua}`);
                     cleanHeaders.push(`X-User-Agent: Model: MAG250; Link: Ethernet`);
                     cleanHeaders.push(`Cookie: ${cookies}`);
@@ -4993,7 +5297,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
         }
         activeUrl = fallbackUrl;
     }
-    
+
     const handleProgress = (bytes) => {
         const rec = activeRecordings.get(recordingId);
         if (rec) {
@@ -5011,7 +5315,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
             });
         }
     };
-    
+
     const handleDone = () => {
         console.log(`[DVR] Recording end time (Success): ${new Date().toISOString()}`);
         activeRecordings.delete(recordingId);
@@ -5027,7 +5331,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
             });
         }
     };
-    
+
     const handleError = (err) => {
         console.log(`[DVR] Recording end time (Failed): ${new Date().toISOString()}. Error: ${err.message}`);
         activeRecordings.delete(recordingId);
@@ -5045,10 +5349,10 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
             });
         }
     };
-    
+
     console.log(`[DVR] Starting capture at ${new Date().toISOString()}`);
     const download = downloadStream(activeUrl, destPath, cleanHeaders, handleProgress, handleDone, handleError);
-    
+
     activeRecordings.set(recordingId, {
         id: recordingId,
         channelName,
@@ -5056,6 +5360,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
         filename,
         destPath,
         cancel: download.cancel,
+        stop: download.stop,
         startTime: Date.now(),
         bytesWritten: 0,
         sourceType: sourceType === 'stalker' ? 'stalker' : null,
@@ -5063,7 +5368,7 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
     });
     buildTrayMenu();
     showTrayNotification('Recording Started', `Now recording "${programName}" on ${channelName}`);
-    
+
     return {
         id: recordingId,
         filename,
@@ -5075,8 +5380,15 @@ ipcMain.handle('stop-recording', (event, recordingId) => {
     console.log('[DVR IPC] Stop recording requested for id:', recordingId);
     const rec = activeRecordings.get(recordingId);
     if (rec) {
-        rec.cancel();
-        activeRecordings.delete(recordingId);
+        // Use stop() for graceful termination — this lets FFmpeg finalize the file
+        // so the recording is actually saved. cancel() would kill it abruptly.
+        if (rec.stop) {
+            rec.stop();
+        } else {
+            rec.cancel();
+        }
+        // Note: don't delete from activeRecordings here — the onDone/onError
+        // callback from the graceful stop will handle cleanup.
         buildTrayMenu();
         showTrayNotification('Recording Stopped', `Stopped recording "${rec.programName}" on ${rec.channelName}`);
         return true;
@@ -5104,22 +5416,48 @@ ipcMain.handle('get-recordings', async () => {
     try {
         const row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
         if (row && row.value) folder = row.value;
-    } catch (e) {}
-    
+    } catch (e) { }
+
     if (!fs.existsSync(folder)) {
         return [];
     }
-    
+
     try {
         const files = fs.readdirSync(folder);
         const list = [];
-        
+
         // Build a set of active recording filenames to filter them out
         const activeFilenames = new Set();
         for (const rec of activeRecordings.values()) {
             if (rec.filename) {
                 activeFilenames.add(rec.filename);
             }
+        }
+
+        // Fetch completed recordings from database to retrieve description and other metadata
+        const dbMap = new Map();
+        try {
+            if (db) {
+                const dbRecordings = await db.prepare("SELECT * FROM dvr_schedule WHERE status = 'completed'").all();
+                dbRecordings.forEach(row => {
+                    let meta = {};
+                    try {
+                        if (row.file_path) meta = JSON.parse(row.file_path);
+                    } catch (e) { }
+                    const safeChannelName = (meta.channelName || 'Scheduled').replace(/[\/\\:\*\?"<>\|]/g, '_');
+                    const safeProgramName = (meta.programName || 'Program').replace(/[\/\\:\*\?"<>\|]/g, '_');
+                    const filename = `${safeChannelName} - ${safeProgramName}.ts`;
+                    dbMap.set(filename, {
+                        channelName: meta.channelName || '',
+                        programName: meta.programName || '',
+                        description: meta.description || '',
+                        startTime: row.start_time,
+                        endTime: row.end_time
+                    });
+                });
+            }
+        } catch (dbErr) {
+            console.error('[DVR ERR] Failed to fetch completed recordings metadata:', dbErr);
         }
 
         files.forEach(f => {
@@ -5129,11 +5467,18 @@ ipcMain.handle('get-recordings', async () => {
                 }
                 const filePath = path.join(folder, f);
                 const stats = fs.statSync(filePath);
+                const dbInfo = dbMap.get(f) || {};
+                
                 list.push({
                     filename: f,
                     sizeBytes: stats.size,
                     createdTime: stats.birthtimeMs,
-                    absolutePath: filePath
+                    absolutePath: filePath,
+                    channelName: dbInfo.channelName || f.split(' - ')[0] || '',
+                    programName: dbInfo.programName || f.replace('.ts', '').split(' - ')[1] || f.replace('.ts', ''),
+                    description: dbInfo.description || '',
+                    startTime: dbInfo.startTime || null,
+                    endTime: dbInfo.endTime || null
                 });
             }
         });
@@ -5150,8 +5495,8 @@ ipcMain.handle('delete-recording', async (event, filename) => {
     try {
         const row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
         if (row && row.value) folder = row.value;
-    } catch (e) {}
-    
+    } catch (e) { }
+
     const filePath = path.join(folder, filename);
     try {
         if (fs.existsSync(filePath)) {
@@ -5178,11 +5523,11 @@ async function checkRecordingConflict(startTime, endTime) {
             AND start_time < ? 
             AND end_time > ?
         `).all(endTime, startTime);
-        
+
         if (rows.length > 0) {
             return rows.map(r => {
                 let meta = { channelName: 'Unknown', programName: 'Scheduled Program' };
-                try { if (r.file_path) meta = JSON.parse(r.file_path); } catch (e) {}
+                try { if (r.file_path) meta = JSON.parse(r.file_path); } catch (e) { }
                 return `${meta.programName} on ${meta.channelName}`;
             });
         }
@@ -5201,36 +5546,36 @@ async function scanAndScheduleSeriesRecordings() {
         if (rules.length === 0) return;
 
         const nowSec = Math.floor(Date.now() / 1000);
-        
+
         for (const rule of rules) {
             const pattern = `%${rule.title_pattern}%`;
-            
+
             // Resolve the channel_title to EPG channel_id
             const mappingRow = await db.prepare("SELECT epg_id FROM mappings WHERE channel_title = ?").get(rule.channel_title);
             const channelId = mappingRow ? mappingRow.epg_id : null;
             if (!channelId) continue;
-            
+
             const matches = await db.prepare(`
                 SELECT * FROM epg 
                 WHERE channel_id = ? 
                 AND title LIKE ? 
                 AND start_time > ?
             `).all(channelId, pattern, nowSec);
-            
+
             for (const match of matches) {
                 const startTimeIso = new Date(parseInt(match.start_time, 10) * 1000).toISOString();
                 const endTimeIso = new Date(parseInt(match.stop_time, 10) * 1000).toISOString();
-                
+
                 // Check if already scheduled
                 const existing = await db.prepare(`
                     SELECT id FROM dvr_schedule 
                     WHERE channel_url IN (SELECT url FROM channels WHERE title = ?) 
                     AND start_time = ?
                 `).get(rule.channel_title, startTimeIso);
-                
+
                 if (!existing) {
                     console.log(`[DVR Series Scanner] Auto-scheduling matched series: "${match.title}" on "${rule.channel_title}"`);
-                    
+
                     const chRow = await db.prepare("SELECT url FROM channels WHERE title = ?").get(rule.channel_title);
                     if (chRow) {
                         let headers = [];
@@ -5241,13 +5586,13 @@ async function scanAndScheduleSeriesRecordings() {
                                 headers.push(`STALKER-METADATA:${JSON.stringify({ portalUrl: creds[0], mac: creds[1], sourceType: 'stalker' })}`);
                             }
                         }
-                        
-                        const metadata = JSON.stringify({ 
-                            channelName: rule.channel_title, 
-                            programName: match.title, 
-                            headers 
+
+                        const metadata = JSON.stringify({
+                            channelName: rule.channel_title,
+                            programName: match.title,
+                            headers
                         });
-                        
+
                         await db.prepare(`
                             INSERT INTO dvr_schedule (channel_url, start_time, end_time, status, file_path)
                             VALUES (?, ?, ?, 'pending', ?)
@@ -5261,24 +5606,24 @@ async function scanAndScheduleSeriesRecordings() {
     }
 }
 
-ipcMain.handle('schedule-recording', async (event, channelUrl, channelName, programName, startTime, endTime, headers = [], force = false) => {
-    console.log('[DVR SCHEDULER IPC] schedule-recording:', channelName, '--', programName, '-- Start:', startTime, '-- Force:', force);
+ipcMain.handle('schedule-recording', async (event, channelUrl, channelName, programName, startTime, endTime, headers = [], force = false, description = '') => {
+    console.log('[DVR SCHEDULER IPC] schedule-recording:', channelName, '--', programName, '-- Start:', startTime, '-- Force:', force, '-- Desc:', description ? 'yes' : 'no');
     try {
         if (!db) return false;
-        
+
         if (!force) {
             const conflicts = await checkRecordingConflict(startTime, endTime);
             if (conflicts && conflicts.length > 0) {
                 return { conflict: true, msg: `Conflict detected with: ${conflicts.join(', ')}` };
             }
         }
-        
-        const metadata = JSON.stringify({ channelName, programName, headers });
+
+        const metadata = JSON.stringify({ channelName, programName, headers, description });
         const res = await db.prepare(`
             INSERT INTO dvr_schedule (channel_url, start_time, end_time, status, file_path)
             VALUES (?, ?, ?, 'pending', ?)
         `).run(channelUrl, startTime, endTime, metadata);
-        
+
         return { success: true, id: res.lastInsertRowid };
     } catch (e) {
         console.error('[DB ERR] Failed to schedule recording:', e);
@@ -5295,10 +5640,10 @@ ipcMain.handle('add-series-rule', async (event, channelTitle, titlePattern) => {
             INSERT INTO dvr_series_rules (channel_title, title_pattern)
             VALUES (?, ?)
         `).run(channelTitle, titlePattern);
-        
+
         // Scan EPG and auto-schedule matched episodes immediately in background
-        scanAndScheduleSeriesRecordings().catch(() => {});
-        
+        scanAndScheduleSeriesRecordings().catch(() => { });
+
         return res.lastInsertRowid;
     } catch (e) {
         console.error('[DB ERR] Failed to add series rule:', e);
@@ -5329,7 +5674,7 @@ ipcMain.handle('delete-series-rule', async (event, ruleId) => {
 });
 
 ipcMain.handle('trigger-series-scan', async () => {
-    await scanAndScheduleSeriesRecordings().catch(() => {});
+    await scanAndScheduleSeriesRecordings().catch(() => { });
     return true;
 });
 
@@ -5341,7 +5686,7 @@ ipcMain.handle('get-scheduled-recordings', async () => {
             let meta = { channelName: 'Unknown', programName: 'Scheduled Program', headers: [] };
             try {
                 if (r.file_path) meta = JSON.parse(r.file_path);
-            } catch (e) {}
+            } catch (e) { }
             return {
                 id: r.id,
                 channelUrl: r.channel_url,
@@ -5362,7 +5707,7 @@ ipcMain.handle('cancel-scheduled-recording', async (event, scheduleId) => {
     console.log('[DVR SCHEDULER IPC] cancel-scheduled-recording:', scheduleId);
     try {
         if (!db) return false;
-        
+
         const row = await db.prepare("SELECT * FROM dvr_schedule WHERE id = ?").get(scheduleId);
         if (row && row.status === 'recording') {
             const recordingId = activeScheduleRecordings.get(scheduleId);
@@ -5373,7 +5718,7 @@ ipcMain.handle('cancel-scheduled-recording', async (event, scheduleId) => {
             }
             activeScheduleRecordings.delete(scheduleId);
         }
-        
+
         await db.prepare("DELETE FROM dvr_schedule WHERE id = ?").run(scheduleId);
         return true;
     } catch (e) {
@@ -5386,9 +5731,9 @@ const activeScheduleRecordings = new Map();
 
 async function checkScheduledRecordings() {
     if (!db) return;
-    
+
     const nowIso = new Date().toISOString();
-    
+
     try {
         // 1. Start pending recordings whose time has arrived
         const pending = await db.prepare("SELECT * FROM dvr_schedule WHERE status = 'pending' AND start_time <= ?").all(nowIso);
@@ -5396,36 +5741,45 @@ async function checkScheduledRecordings() {
             let meta = { channelName: 'Scheduled', programName: 'Program', headers: [] };
             try {
                 if (row.file_path) meta = JSON.parse(row.file_path);
-            } catch (e) {}
-            
+            } catch (e) { }
+
+            // If the scheduled end time has already passed (e.g. system was down), mark it as error/missed and skip starting
+            if (row.end_time && row.end_time <= nowIso) {
+                console.log(`[DVR SCHEDULER] Scheduled recording id ${row.id} ("${meta.programName}") skipped because its scheduled end time (${row.end_time}) has already passed.`);
+                try {
+                    await db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id);
+                } catch (e) { }
+                continue;
+            }
+
             console.log(`[DVR SCHEDULER] Starting scheduled recording: ${meta.programName} on ${meta.channelName}`);
-            
+
             await db.prepare("UPDATE dvr_schedule SET status = 'recording' WHERE id = ?").run(row.id);
-            
+
             let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
             try {
                 const setting = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
                 if (setting && setting.value) folder = setting.value;
-            } catch (e) {}
-            
+            } catch (e) { }
+
             if (!fs.existsSync(folder)) {
                 fs.mkdirSync(folder, { recursive: true });
             }
-            
+
             const safeChannelName = meta.channelName.replace(/[\/\\:\*\?"<>\|]/g, '_');
             const safeProgramName = meta.programName.replace(/[\/\\:\*\?"<>\|]/g, '_');
             const filename = `${safeChannelName} - ${safeProgramName}.ts`;
             const destPath = path.join(folder, filename);
-            
+
             const recordingId = crypto.randomUUID();
-            
+
             const startScheduledDownload = async () => {
                 let activeUrl = row.channel_url;
                 let cleanHeaders = [];
                 let stalkerMeta = null;
                 let sourceType = 'm3u';
                 let xtreamMeta = null;
-                
+
                 if (meta.headers && Array.isArray(meta.headers)) {
                     meta.headers.forEach(h => {
                         if (h.startsWith('STALKER-METADATA:')) {
@@ -5434,20 +5788,20 @@ async function checkScheduledRecordings() {
                                 if (stalkerMeta && stalkerMeta.sourceType) {
                                     sourceType = stalkerMeta.sourceType;
                                 }
-                            } catch (e) {}
+                            } catch (e) { }
                         } else if (h.startsWith('XTREAM-METADATA:')) {
                             try {
                                 xtreamMeta = JSON.parse(h.substring(16));
                                 if (xtreamMeta && xtreamMeta.sourceType) {
                                     sourceType = xtreamMeta.sourceType;
                                 }
-                            } catch (e) {}
+                            } catch (e) { }
                         } else {
                             cleanHeaders.push(h);
                         }
                     });
                 }
-                
+
                 // Dynamically resolve Xtream Codes stream URL to fresh validated PlaybackSource at START time!
                 if (sourceType === 'xtream' && xtreamMeta) {
                     try {
@@ -5476,14 +5830,14 @@ async function checkScheduledRecordings() {
                         console.error('[DVR SCHEDULER] Error resolving Xtream Codes link on schedule start:', err);
                     }
                 }
-                
+
                 // Dynamically resolve Stalker command to fresh absolute stream link at START time!
                 if (sourceType === 'stalker' && stalkerMeta) {
                     try {
                         const parts = activeUrl.substring(12).split('|');
                         const type = parts[0];
                         const cmd = parts.slice(1).join('|');
-                        
+
                         console.log(`[DVR SCHEDULER] Resolving fresh Stalker link for scheduled recording:`, stalkerMeta);
                         const resolvedUrl = await resolveStalkerLinkInternal({
                             url: stalkerMeta.portalUrl,
@@ -5519,7 +5873,7 @@ async function checkScheduledRecordings() {
                                 }
                                 const sessionPHPSessId = session.phpSessionId || '';
                                 const cookies = `mac=${stalkerMeta.mac}; stb_lang=en; timezone=GMT` + (sessionPHPSessId ? `; PHPSESSID=${sessionPHPSessId}` : '');
-                                
+
                                 cleanHeaders.push(`User-Agent: ${ua}`);
                                 cleanHeaders.push(`X-User-Agent: Model: MAG250; Link: Ethernet`);
                                 cleanHeaders.push(`Cookie: ${cookies}`);
@@ -5545,11 +5899,11 @@ async function checkScheduledRecordings() {
                         console.error('[DVR SCHEDULER] Error resolving stalker link on schedule start:', err);
                     }
                 }
-                
+
                 try {
                     console.log(`[DVR] Starting scheduled capture at ${new Date().toISOString()}`);
                     const download = downloadStream(activeUrl, destPath, cleanHeaders, handleProgress, handleDone, handleError);
-                    
+
                     activeRecordings.set(recordingId, {
                         id: recordingId,
                         channelName: meta.channelName,
@@ -5557,22 +5911,23 @@ async function checkScheduledRecordings() {
                         filename,
                         destPath,
                         cancel: download.cancel,
+                        stop: download.stop,
                         startTime: Date.now(),
                         bytesWritten: 0,
                         sourceType: sourceType === 'stalker' ? 'stalker' : null,
                         stalkerMeta: sourceType === 'stalker' ? stalkerMeta : null
                     });
-                    
+
                     activeScheduleRecordings.set(row.id, recordingId);
                     buildTrayMenu();
                     showTrayNotification('Recording Started (Scheduled)', `Now recording "${meta.programName}" on ${meta.channelName}`);
                 } catch (err) {
                     console.error('[DVR SCHEDULER] Failed to start downloader:', err);
                     db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id);
-                    db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id).catch(() => {});
+                    db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id).catch(() => { });
                 }
             };
-            
+
             const handleProgress = (bytes) => {
                 const rec = activeRecordings.get(recordingId);
                 if (rec) rec.bytesWritten = bytes;
@@ -5588,7 +5943,7 @@ async function checkScheduledRecordings() {
                     });
                 }
             };
-            
+
             const handleDone = async () => {
                 console.log(`[DVR] Scheduled Recording end time (Success): ${new Date().toISOString()}`);
                 activeRecordings.delete(recordingId);
@@ -5597,7 +5952,7 @@ async function checkScheduledRecordings() {
                 showTrayNotification('Recording Completed (Scheduled)', `Saved "${meta.programName}" from ${meta.channelName}`);
                 try {
                     await db.prepare("UPDATE dvr_schedule SET status = 'completed' WHERE id = ?").run(row.id);
-                } catch (e) {}
+                } catch (e) { }
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('recording-status-change', {
                         id: recordingId,
@@ -5608,7 +5963,7 @@ async function checkScheduledRecordings() {
                     });
                 }
             };
-            
+
             const handleError = async (err) => {
                 console.log(`[DVR] Scheduled Recording end time (Failed): ${new Date().toISOString()}. Error: ${err.message}`);
                 activeRecordings.delete(recordingId);
@@ -5617,7 +5972,7 @@ async function checkScheduledRecordings() {
                 showTrayNotification('Recording Failed (Scheduled)', `Error on "${meta.programName}" from ${meta.channelName}: ${err.message}`);
                 try {
                     await db.prepare("UPDATE dvr_schedule SET status = 'error' WHERE id = ?").run(row.id);
-                } catch (e) {}
+                } catch (e) { }
                 console.error('[DVR SCHEDULER ERROR] Recording failed:', err.message);
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('recording-status-change', {
@@ -5630,27 +5985,61 @@ async function checkScheduledRecordings() {
                     });
                 }
             };
-            
+
             startScheduledDownload();
         }
-        
+
         // 2. Stop ongoing scheduled recordings whose end time has arrived
         const active = await db.prepare("SELECT * FROM dvr_schedule WHERE status = 'recording' AND end_time <= ?").all(nowIso);
         for (const row of active) {
             console.log(`[DVR SCHEDULER] Ending scheduled recording id ${row.id}`);
+            
+            // Immediately update the status in the database to prevent loop
+            try {
+                await db.prepare("UPDATE dvr_schedule SET status = 'completed' WHERE id = ?").run(row.id);
+            } catch (e) { }
+
             const recordingId = activeScheduleRecordings.get(row.id);
+            let isRecordingActive = false;
             if (recordingId) {
                 const rec = activeRecordings.get(recordingId);
                 if (rec) {
-                    rec.cancel();
+                    isRecordingActive = true;
+                    // Use stop() for graceful termination — this lets FFmpeg finalize
+                    // the output file. The onDone callback will handle status updates.
+                    if (rec.stop) {
+                        rec.stop();
+                    } else if (rec.cancel) {
+                        rec.cancel();
+                    }
                 }
-                activeRecordings.delete(recordingId);
             }
             activeScheduleRecordings.delete(row.id);
-            await db.prepare("UPDATE dvr_schedule SET status = 'completed' WHERE id = ?").run(row.id);
             buildTrayMenu();
+
+            // Only send IPC and show tray notification if the recording was NOT active.
+            // If it was active, handleDone will be called after stopping, which will send the status change.
+            if (!isRecordingActive) {
+                // Parse row.file_path to retrieve channel metadata
+                let meta = { channelName: 'Scheduled', programName: 'Program' };
+                try {
+                    if (row.file_path) meta = JSON.parse(row.file_path);
+                } catch (e) { }
+
+                // Send completed status to UI
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('recording-status-change', {
+                        id: recordingId || row.id,
+                        status: 'completed',
+                        channelName: meta.channelName,
+                        programName: meta.programName,
+                        filename: meta.channelName.replace(/[\/\\:\*\?"<>\|]/g, '_') + ' - ' + meta.programName.replace(/[\/\\:\*\?"<>\|]/g, '_') + '.ts'
+                    });
+                }
+                showTrayNotification('Recording Completed (Scheduled)', `Saved "${meta.programName}" from ${meta.channelName}`);
+            }
         }
-        
+
     } catch (e) {
         console.error('[DVR SCHEDULER LOOP ERROR]', e);
     }
@@ -5663,17 +6052,17 @@ setInterval(checkScheduledRecordings, 5000);
 // ----------------------------------------------------
 function showPremiumTrackSelectorWindow(type) {
     if (!playerWindow || playerWindow.isDestroyed()) return;
-    
+
     // Close any existing track selector window
     if (trackSelectorWindow && !trackSelectorWindow.isDestroyed()) {
         trackSelectorWindow.destroy();
     }
-    
+
     // Temporarily allow mouse events on the playerWindow so the child selector can be clicked!
     playerWindow.setIgnoreMouseEvents(false);
-    
+
     const bounds = playerWindow.getBounds();
-    
+
     trackSelectorWindow = new BrowserWindow({
         parent: playerWindow,
         show: false,
@@ -5706,7 +6095,7 @@ function showPremiumTrackSelectorWindow(type) {
 
     const url = `file://${__dirname}/track_selector.html?type=${type}&currentId=${currentId}&tracks=${encodeURIComponent(JSON.stringify(tracks))}`;
     trackSelectorWindow.loadURL(url);
-    
+
     trackSelectorWindow.once('ready-to-show', () => {
         trackSelectorWindow.showInactive();
     });
@@ -5746,11 +6135,11 @@ function createTray() {
         }
         tray = new Tray(iconPath);
         tray.setToolTip('AIVue Player');
-        
+
         tray.on('double-click', () => {
             restoreWindow();
         });
-        
+
         buildTrayMenu();
     } catch (err) {
         console.error('[TRAY ERROR] Failed to create system tray:', err);
@@ -5759,7 +6148,7 @@ function createTray() {
 
 function restoreWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    
+
     if (mainWindow.isMinimized()) {
         mainWindow.restore();
     }
@@ -5787,7 +6176,7 @@ function buildTrayMenu() {
     try {
         const activeCount = activeRecordings.size;
         const isStartupEnabled = app.getLoginItemSettings().openAtLogin;
-        
+
         const contextMenu = Menu.buildFromTemplate([
             {
                 label: 'Open Player',
@@ -5832,7 +6221,7 @@ function buildTrayMenu() {
                 click: async () => {
                     console.log('[TRAY] Quit requested. Cleaning up and exiting...');
                     isQuitting = true;
-                    
+
                     // Cancel all active recordings
                     for (const [id, rec] of activeRecordings.entries()) {
                         try {
@@ -5843,18 +6232,18 @@ function buildTrayMenu() {
                         }
                     }
                     activeRecordings.clear();
-                    
+
                     if (mpvProcess) {
                         try {
                             mpvProcess.kill();
-                        } catch (e) {}
+                        } catch (e) { }
                     }
-                    
+
                     app.quit();
                 }
             }
         ]);
-        
+
         tray.setContextMenu(contextMenu);
     } catch (err) {
         console.error('[TRAY ERROR] Failed to build tray menu:', err);

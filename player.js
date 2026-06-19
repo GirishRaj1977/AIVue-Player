@@ -251,6 +251,8 @@ async function embedStream(channel, scrollMode = 'start') {
     streamActive = true;
     window.currentPlaybackHeaders = null;
 
+    window.isSwitchingStream = true;
+
     try {
         window.iptvAPI.sendMpvCommand('stop');
     } catch (e) {
@@ -452,99 +454,141 @@ async function embedStream(channel, scrollMode = 'start') {
         }
     }
 
-    const parsedSeries = parseM3uSeriesName(channel.title);
-    const hasSeriesPattern = channel.title && (
-        /s\d+\s*e\d+/i.test(channel.title) ||
-        /season\s*\d+\s*episode\s*\d+/i.test(channel.title) ||
-        /\d+x\d+/i.test(channel.title)
-    );
-    const isMovieOrEpisode = channel.type === 'movie' ||
-        channel.type === 'series' ||
-        channel.type === 'episode' ||
-        hasSeriesPattern ||
-        (channel.url && (channel.url.startsWith('stalker-series') || channel.url.startsWith('stalker-cmd:vod')));
-
-    if (isMovieOrEpisode) {
-        loadAndRenderTmdbSynopsis(channel);
-        if (!window.activeDetailsStreamInfo) {
-            if (channel.type === 'episode') {
-                window.activeDetailsStreamInfo = {
-                    title: channel.seriesTitle || channel.title.split(' - ')[0],
-                    logo: channel.logo,
-                    playlistId: channel.playlistId,
-                    type: 'series',
-                    tmdbId: channel.tmdbId
-                };
-            } else {
-                window.activeDetailsStreamInfo = channel;
-            }
-        }
-    } else {
-        window.activeDetailsStreamInfo = null;
-        const mappedId = channelMappings[channel.title];
-        const epgIds = [mappedId, channel.tvg_id, channel.tvg_name].filter(Boolean);
-        console.log('[API] Calling getEpg for current stream.');
-        const epgData = await window.iptvAPI.getEpg(epgIds, null, null);
-        if (thisRequestId !== window.currentPlaybackRequestId) return;
-
-        let programmes = [];
-        for (const id of epgIds) {
-            const lowId = id.toLowerCase();
-            if (epgData[lowId] && epgData[lowId].length > 0) { programmes = epgData[lowId]; break; }
-        }
-
+    if (channel.type === 'recording') {
         const detailProgram = document.getElementById('detail-program');
         const detailTimeslot = document.getElementById('detail-timeslot');
         const detailDescription = document.getElementById('detail-description');
-        const currentProg = getCurrentProgram(programmes);
+
         if (detailProgram) {
-            if (currentProg) {
-                detailProgram.textContent = currentProg.title || 'No Title';
-                const pStart = parseEpgTime(currentProg.start);
-                const pEnd = parseEpgTime(currentProg.stop);
-                const timeStr = `${pStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${pEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-                if (detailTimeslot) {
-                    detailTimeslot.textContent = timeStr;
-                    detailTimeslot.style.display = 'block';
-                }
-                if (detailDescription) {
-                    detailDescription.textContent = currentProg.desc || 'No description available.';
-                    detailDescription.style.display = 'block';
-                }
-            } else {
-                detailProgram.textContent = 'No Information Available';
-                if (detailTimeslot) {
-                    detailTimeslot.textContent = '--';
-                }
-                if (detailDescription) {
-                    detailDescription.textContent = 'No EPG data available for this channel.';
-                }
+            detailProgram.textContent = channel.programName || channel.title || 'Recorded Stream';
+            
+            let timeStr = 'Recorded Program';
+            if (channel.startTime && channel.endTime) {
+                try {
+                    const pStart = new Date(channel.startTime);
+                    const pEnd = new Date(channel.endTime);
+                    timeStr = `${pStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${pEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                } catch (e) { }
+            }
+            
+            if (detailTimeslot) {
+                detailTimeslot.textContent = timeStr;
+                detailTimeslot.style.display = 'block';
+            }
+            if (detailDescription) {
+                detailDescription.textContent = channel.description || 'No program description was saved for this recording.';
+                detailDescription.style.display = 'block';
             }
         }
-
-        renderLiveEpgGrid();
-
-        // Setup pending EPG payload to send to MPV Lua script
-        let progTitle = '', progDesc = '', progTime = '';
-        if (currentProg) {
-            progTitle = currentProg.title || '';
-            progDesc = currentProg.desc || '';
-            const pStart = parseEpgTime(currentProg.start);
-            const pEnd = parseEpgTime(currentProg.stop);
-            progTime = `${pStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${pEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-        }
-
-        window.pendingEpgUpdate = {
-            title: channel.title || '',
-            progTitle: progTitle,
-            progDesc: progDesc,
-            progTime: progTime
+        
+        // Also update MPV EPG payload for the OSC!
+        const epgUpdatePayload = {
+            title: channel.programName || channel.title || 'Recorded Stream',
+            progTitle: channel.programName || channel.title || 'Recorded Stream',
+            progDesc: channel.description || 'Local Recording Playback',
+            progTime: channel.channelName || 'Saved Recording'
         };
+        if (window.hasStartedPlayback) {
+            const encoded = encodeURIComponent(JSON.stringify(epgUpdatePayload));
+            window.iptvAPI.sendMpvCommand(`script-message update-epg ${encoded}`);
+        } else {
+            window.pendingEpgUpdate = epgUpdatePayload;
+        }
+    } else {
+        const parsedSeries = parseM3uSeriesName(channel.title);
+        const hasSeriesPattern = channel.title && (
+            /s\d+\s*e\d+/i.test(channel.title) ||
+            /season\s*\d+\s*episode\s*\d+/i.test(channel.title) ||
+            /\d+x\d+/i.test(channel.title)
+        );
+        const isMovieOrEpisode = channel.type === 'movie' ||
+            channel.type === 'series' ||
+            channel.type === 'episode' ||
+            hasSeriesPattern ||
+            (channel.url && (channel.url.startsWith('stalker-series') || channel.url.startsWith('stalker-cmd:vod')));
 
-        // Periodically track EPG changes to dynamically update details card and OSC
-        window.activeEpgTrackingInterval = setInterval(() => {
-            updatePlayingChannelEpg(channel);
-        }, 30000);
+        if (isMovieOrEpisode) {
+            loadAndRenderTmdbSynopsis(channel);
+            if (!window.activeDetailsStreamInfo) {
+                if (channel.type === 'episode') {
+                    window.activeDetailsStreamInfo = {
+                        title: channel.seriesTitle || channel.title.split(' - ')[0],
+                        logo: channel.logo,
+                        playlistId: channel.playlistId,
+                        type: 'series',
+                        tmdbId: channel.tmdbId
+                    };
+                } else {
+                    window.activeDetailsStreamInfo = channel;
+                }
+            }
+        } else {
+            window.activeDetailsStreamInfo = null;
+            const mappedId = channelMappings[channel.title];
+            const epgIds = [mappedId, channel.tvg_id, channel.tvg_name].filter(Boolean);
+            console.log('[API] Calling getEpg for current stream.');
+            const epgData = await window.iptvAPI.getEpg(epgIds, null, null);
+            if (thisRequestId !== window.currentPlaybackRequestId) return;
+
+            let programmes = [];
+            for (const id of epgIds) {
+                const lowId = id.toLowerCase();
+                if (epgData[lowId] && epgData[lowId].length > 0) { programmes = epgData[lowId]; break; }
+            }
+
+            const detailProgram = document.getElementById('detail-program');
+            const detailTimeslot = document.getElementById('detail-timeslot');
+            const detailDescription = document.getElementById('detail-description');
+            const currentProg = getCurrentProgram(programmes);
+            if (detailProgram) {
+                if (currentProg) {
+                    detailProgram.textContent = currentProg.title || 'No Title';
+                    const pStart = parseEpgTime(currentProg.start);
+                    const pEnd = parseEpgTime(currentProg.stop);
+                    const timeStr = `${pStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${pEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                    if (detailTimeslot) {
+                        detailTimeslot.textContent = timeStr;
+                        detailTimeslot.style.display = 'block';
+                    }
+                    if (detailDescription) {
+                        detailDescription.textContent = currentProg.desc || 'No description available.';
+                        detailDescription.style.display = 'block';
+                    }
+                } else {
+                    detailProgram.textContent = 'No Information Available';
+                    if (detailTimeslot) {
+                        detailTimeslot.textContent = '--';
+                    }
+                    if (detailDescription) {
+                        detailDescription.textContent = 'No EPG data available for this channel.';
+                    }
+                }
+            }
+
+            renderLiveEpgGrid();
+
+            // Setup pending EPG payload to send to MPV Lua script
+            let progTitle = '', progDesc = '', progTime = '';
+            if (currentProg) {
+                progTitle = currentProg.title || '';
+                progDesc = currentProg.desc || '';
+                const pStart = parseEpgTime(currentProg.start);
+                const pEnd = parseEpgTime(currentProg.stop);
+                progTime = `${pStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${pEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+            }
+
+            window.pendingEpgUpdate = {
+                title: channel.title || '',
+                progTitle: progTitle,
+                progDesc: progDesc,
+                progTime: progTime
+            };
+
+            // Periodically track EPG changes to dynamically update details card and OSC
+            window.activeEpgTrackingInterval = setInterval(() => {
+                updatePlayingChannelEpg(channel);
+            }, 30000);
+        }
     }
 
 
