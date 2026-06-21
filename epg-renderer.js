@@ -492,7 +492,7 @@ async function renderLiveEpgGrid() {
                             handleSchedule(false);
                         } catch (err) {
                             console.error('Error scheduling recording:', err);
-                            showToast('Failed to schedule: ' + err.message, true);
+                            showToast('Failed to schedule. Check logs for details.', true);
                         }
                     };
                     resolveUrlAndSchedule();
@@ -1078,7 +1078,7 @@ async function renderFullEpg() {
                             handleSchedule(false);
                         } catch (err) {
                             console.error('Error scheduling recording:', err);
-                            showToast('Failed to schedule: ' + err.message, true);
+                            showToast('Failed to schedule. Check logs for details.', true);
                         }
                     };
                     resolveUrlAndSchedule();

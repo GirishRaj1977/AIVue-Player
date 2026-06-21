@@ -4868,7 +4868,7 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
                 '-reconnect_delay_max', '5'
             );
         }
-        args.push('-i', currentUrl, '-c', 'copy', '-y', destPath);
+        args.push('-analyzeduration', '0', '-probesize', '32', '-i', currentUrl, '-c', 'copy', '-y', destPath);
 
         try {
             console.log('[DVR] FFmpeg command: ffmpeg ' + args.map(a => a.includes(' ') || a.includes('\r') || a.includes('\n') ? `"${a.replace(/"/g, '\\"')}"` : a).join(' '));
@@ -6255,6 +6255,10 @@ function buildTrayMenu() {
 
 function showTrayNotification(title, message) {
     console.log(`[NOTIFICATION] ${title} - ${message}`);
+    // Only show native Windows notification if the main window is hidden (in tray) or minimized
+    if (mainWindow && mainWindow.isVisible() && !mainWindow.isMinimized()) {
+        return;
+    }
     try {
         if (Notification.isSupported()) {
             const notif = new Notification({

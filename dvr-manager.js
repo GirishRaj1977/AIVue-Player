@@ -190,7 +190,7 @@ try {
                 const finishedInfo = finished && finished.programName ? `"${finished.programName}"` : data.filename;
                 showToast(`Recording Completed: ${finishedInfo}`);
             } else if (data.status === 'error') {
-                showToast(`Recording Failed: ${data.error || 'Connection Lost'}`, true);
+                showToast('Recording Failed. Please check logs for details.', true);
             }
 
             if (window.currentPlaybackChannel && window.currentPlaybackChannel.title === data.channelName) {
