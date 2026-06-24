@@ -205,6 +205,13 @@ try {
             await db.exec("ALTER TABLE epg_logos ADD COLUMN source_url TEXT").catch(() => {});
             await db.exec("ALTER TABLE playlists ADD COLUMN stalker_username TEXT").catch(() => {});
             await db.exec("ALTER TABLE playlists ADD COLUMN stalker_password TEXT").catch(() => {});
+
+            // Schema Migration: Catch-up / archive support columns
+            await db.exec("ALTER TABLE channels ADD COLUMN catchup_type TEXT").catch(() => {});
+            await db.exec("ALTER TABLE channels ADD COLUMN catchup_days INTEGER").catch(() => {});
+            await db.exec("ALTER TABLE channels ADD COLUMN catchup_source TEXT").catch(() => {});
+            await db.exec("ALTER TABLE channels ADD COLUMN catchup_verified INTEGER DEFAULT 0").catch(() => {});
+            await db.exec("ALTER TABLE channels ADD COLUMN catchup_last_verified INTEGER").catch(() => {});
             
             // Clean up any malformed database rows from previous named parameter binding bugs
             await db.exec(`

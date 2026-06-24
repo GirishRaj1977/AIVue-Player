@@ -443,8 +443,8 @@ ipcMain.on('native-confirm-response', (event, response) => {
 function createWindow() {
     // Create a frameless, transparent splash window
     splashWindow = new BrowserWindow({
-        width: 700,
-        height: 700,
+        width: 800,
+        height: 450,
         transparent: true,
         frame: false,
         alwaysOnTop: true,
@@ -5127,7 +5127,10 @@ function downloadStream(urlStr, destPath, customHeaders = [], onProgress, onDone
 ipcMain.handle('get-recording-path', async () => {
     try {
         if (!db) return path.join(app.getPath('documents'), 'AIVueRecordings');
-        const row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        let row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        if (!row || !row.value) {
+            row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'dvr_path'").get();
+        }
         if (row && row.value) return row.value;
     } catch (e) {
         console.error('[DB ERR] Failed to read recording path settings:', e);
@@ -5139,6 +5142,7 @@ ipcMain.handle('save-recording-path', async (event, targetPath) => {
     try {
         if (!db) return false;
         await db.prepare("INSERT OR REPLACE INTO dvr_settings (key, value) VALUES ('recording_path', ?)").run(targetPath);
+        await db.prepare("INSERT OR REPLACE INTO dvr_settings (key, value) VALUES ('dvr_path', ?)").run(targetPath);
         if (!fs.existsSync(targetPath)) {
             fs.mkdirSync(targetPath, { recursive: true });
         }
@@ -5154,7 +5158,10 @@ ipcMain.handle('start-recording', async (event, channelUrl, channelName, program
 
     let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
     try {
-        const row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        let row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        if (!row || !row.value) {
+            row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'dvr_path'").get();
+        }
         if (row && row.value) folder = row.value;
     } catch (e) { }
 
@@ -5417,7 +5424,10 @@ ipcMain.handle('get-active-recordings', () => {
 ipcMain.handle('get-recordings', async () => {
     let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
     try {
-        const row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        let row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        if (!row || !row.value) {
+            row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'dvr_path'").get();
+        }
         if (row && row.value) folder = row.value;
     } catch (e) { }
 
@@ -5496,7 +5506,10 @@ ipcMain.handle('get-recordings', async () => {
 ipcMain.handle('delete-recording', async (event, filename) => {
     let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
     try {
-        const row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        let row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+        if (!row || !row.value) {
+            row = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'dvr_path'").get();
+        }
         if (row && row.value) folder = row.value;
     } catch (e) { }
 
@@ -5761,7 +5774,10 @@ async function checkScheduledRecordings() {
 
             let folder = path.join(app.getPath('documents'), 'AIVueRecordings');
             try {
-                const setting = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+                let setting = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'recording_path'").get();
+                if (!setting || !setting.value) {
+                    setting = await db.prepare("SELECT value FROM dvr_settings WHERE key = 'dvr_path'").get();
+                }
                 if (setting && setting.value) folder = setting.value;
             } catch (e) { }
 
