@@ -59,12 +59,12 @@ function initRemoteServer(options) {
 
             // Sync query parameters (token / deviceId) to cookies so that sub-pages/API calls are fully authorized in WebViews
             if (req.query.deviceId) {
-                res.cookie('aivue_device_id', req.query.deviceId, { maxAge: 31536000000, httpOnly: true });
+                res.cookie('aivue_device_id', req.query.deviceId, { maxAge: 31536000000, httpOnly: true, path: '/' });
                 req.headers.cookie = (req.headers.cookie || '') + `; aivue_device_id=${req.query.deviceId}`;
             }
             if (req.query.token && currentSettings.password && req.query.token === currentSettings.password) {
                 const expectedAuth = Buffer.from((currentSettings.username || 'aivue') + ':' + currentSettings.password).toString('base64');
-                res.cookie('aivue_auth', expectedAuth, { maxAge: 31536000000, httpOnly: true });
+                res.cookie('aivue_auth', expectedAuth, { maxAge: 31536000000, httpOnly: true, path: '/' });
                 req.headers.cookie = (req.headers.cookie || '') + `; aivue_auth=${expectedAuth}`;
             }
 
@@ -96,7 +96,7 @@ function initRemoteServer(options) {
             let deviceId = getCookie(req, 'aivue_device_id');
             if (!deviceId) {
                 deviceId = crypto.randomUUID();
-                res.cookie('aivue_device_id', deviceId, { maxAge: 31536000000, httpOnly: true });
+                res.cookie('aivue_device_id', deviceId, { maxAge: 31536000000, httpOnly: true, path: '/' });
             }
 
             console.log(`[REMOTE API] Current Device ID: ${deviceId} | Active Paired Device: ${currentSettings.activeDeviceId}`);
@@ -223,13 +223,13 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
             const { username, password } = req.body;
             if (username === currentSettings.username && password === currentSettings.password) {
                 const expectedAuth = Buffer.from(currentSettings.username + ':' + currentSettings.password).toString('base64');
-                res.cookie('aivue_auth', expectedAuth, { maxAge: 31536000000, httpOnly: true });
+                res.cookie('aivue_auth', expectedAuth, { maxAge: 31536000000, httpOnly: true, path: '/' });
 
                 // Pair this device on login
                 let deviceId = getCookie(req, 'aivue_device_id');
                 if (!deviceId) {
                     deviceId = crypto.randomUUID();
-                    res.cookie('aivue_device_id', deviceId, { maxAge: 31536000000, httpOnly: true });
+                    res.cookie('aivue_device_id', deviceId, { maxAge: 31536000000, httpOnly: true, path: '/' });
                 }
                 currentSettings.activeDeviceId = deviceId;
                 options.saveRemoteSettings(currentSettings);
@@ -706,7 +706,7 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
         });
 
         app.get('/player.png', (req, res) => {
-            res.sendFile(path.join(__dirname, 'assets', 'player.png'));
+            res.sendFile(path.join(__dirname, 'assets', 'Player.png'));
         });
 
         // ------------------ PWA Endpoints ------------------
