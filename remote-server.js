@@ -470,10 +470,37 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                 <html lang="en">
                 <head>
                     <script>
-                    if (window.location.username || window.location.password) {
-                        const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname + window.location.search + window.location.hash;
-                        window.location.replace(cleanUrl);
-                    }
+                    (function() {
+                        const params = new URLSearchParams(window.location.search);
+                        const token = params.get('token') || sessionStorage.getItem('aivue_token') || '';
+                        const deviceId = params.get('deviceId') || sessionStorage.getItem('aivue_device_id') || '';
+                        if (token) sessionStorage.setItem('aivue_token', token);
+                        if (deviceId) sessionStorage.setItem('aivue_device_id', deviceId);
+                        window.addAuthParams = function(url) {
+                            if (!token && !deviceId) return url;
+                            const sep = url.indexOf('?') !== -1 ? '&' : '?';
+                            let extra = '';
+                            if (token && url.indexOf('token=') === -1) extra += 'token=' + encodeURIComponent(token);
+                            if (deviceId && url.indexOf('deviceId=') === -1) {
+                                if (extra) extra += '&';
+                                extra += 'deviceId=' + encodeURIComponent(deviceId);
+                            }
+                            return extra ? (url + sep + extra) : url;
+                        };
+                        document.addEventListener('click', function(e) {
+                            const a = e.target.closest('a');
+                            if (a && a.href && a.hostname === window.location.hostname) {
+                                a.setAttribute('href', window.addAuthParams(a.getAttribute('href')));
+                            }
+                        }, true);
+                        const originalFetch = window.fetch;
+                        window.fetch = function(input, init) {
+                            if (typeof input === 'string' && (input.startsWith('/') || input.startsWith(window.location.origin))) {
+                                input = window.addAuthParams(input);
+                            }
+                            return originalFetch(input, init);
+                        };
+                    })();
                     </script>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -544,10 +571,37 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                 <html lang="en">
                 <head>
                     <script>
-                    if (window.location.username || window.location.password) {
-                        const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname + window.location.search + window.location.hash;
-                        window.location.replace(cleanUrl);
-                    }
+                    (function() {
+                        const params = new URLSearchParams(window.location.search);
+                        const token = params.get('token') || sessionStorage.getItem('aivue_token') || '';
+                        const deviceId = params.get('deviceId') || sessionStorage.getItem('aivue_device_id') || '';
+                        if (token) sessionStorage.setItem('aivue_token', token);
+                        if (deviceId) sessionStorage.setItem('aivue_device_id', deviceId);
+                        window.addAuthParams = function(url) {
+                            if (!token && !deviceId) return url;
+                            const sep = url.indexOf('?') !== -1 ? '&' : '?';
+                            let extra = '';
+                            if (token && url.indexOf('token=') === -1) extra += 'token=' + encodeURIComponent(token);
+                            if (deviceId && url.indexOf('deviceId=') === -1) {
+                                if (extra) extra += '&';
+                                extra += 'deviceId=' + encodeURIComponent(deviceId);
+                            }
+                            return extra ? (url + sep + extra) : url;
+                        };
+                        document.addEventListener('click', function(e) {
+                            const a = e.target.closest('a');
+                            if (a && a.href && a.hostname === window.location.hostname) {
+                                a.setAttribute('href', window.addAuthParams(a.getAttribute('href')));
+                            }
+                        }, true);
+                        const originalFetch = window.fetch;
+                        window.fetch = function(input, init) {
+                            if (typeof input === 'string' && (input.startsWith('/') || input.startsWith(window.location.origin))) {
+                                input = window.addAuthParams(input);
+                            }
+                            return originalFetch(input, init);
+                        };
+                    })();
                     </script>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -745,10 +799,37 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
 <html lang="en">
 <head>
 <script>
-if (window.location.username || window.location.password) {
-    const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname + window.location.search + window.location.hash;
-    window.location.replace(cleanUrl);
-}
+(function() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token') || sessionStorage.getItem('aivue_token') || '';
+    const deviceId = params.get('deviceId') || sessionStorage.getItem('aivue_device_id') || '';
+    if (token) sessionStorage.setItem('aivue_token', token);
+    if (deviceId) sessionStorage.setItem('aivue_device_id', deviceId);
+    window.addAuthParams = function(url) {
+        if (!token && !deviceId) return url;
+        const sep = url.indexOf('?') !== -1 ? '&' : '?';
+        let extra = '';
+        if (token && url.indexOf('token=') === -1) extra += 'token=' + encodeURIComponent(token);
+        if (deviceId && url.indexOf('deviceId=') === -1) {
+            if (extra) extra += '&';
+            extra += 'deviceId=' + encodeURIComponent(deviceId);
+        }
+        return extra ? (url + sep + extra) : url;
+    };
+    document.addEventListener('click', function(e) {
+        const a = e.target.closest('a');
+        if (a && a.href && a.hostname === window.location.hostname) {
+            a.setAttribute('href', window.addAuthParams(a.getAttribute('href')));
+        }
+    }, true);
+    const originalFetch = window.fetch;
+    window.fetch = function(input, init) {
+        if (typeof input === 'string' && (input.startsWith('/') || input.startsWith(window.location.origin))) {
+            input = window.addAuthParams(input);
+        }
+        return originalFetch(input, init);
+    };
+})();
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -864,13 +945,13 @@ button:active, a.top-btn:active { transform:scale(.95); background:#232A46; }
         <button class="top-btn" data-cmd="livetv" style="background:linear-gradient(135deg, #EF4444, #DC2626); display:flex; align-items:center; justify-content:center;">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M21,3H3C1.89,3 1,3.89 1,5V17A2,2 0 0,0 3,19H8V21H16V19H21A2,2 0 0,0 23,17V5C23,3.89 22.1,3 21,3M21,17H3V5H21V17Z"/></svg>
         </button>
-        <button class="top-btn" onclick="window.location.href='/movies'" style="background:linear-gradient(135deg, #22C55E, #16A34A); display:flex; align-items:center; justify-content:center;" title="Movies">
+        <button class="top-btn" onclick="window.location.href = window.addAuthParams('/movies')" style="background:linear-gradient(135deg, #22C55E, #16A34A); display:flex; align-items:center; justify-content:center;" title="Movies">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M18 4v1h-2V4c0-.55-.45-1-1-1H9c-.55 0-1 .45-1 1v1H6V4c0-.55-.45-1-1-1s-1 .45-1 1v16c0 .55.45 1 1 1s1-.45 1-1v-1h2v1c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-1h2v1c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1s-1 .45-1 1zM8 17H6v-2h2v2zm0-4H6v-2h2v2zm0-4H6V7h2v2zm10 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z"/></svg>
         </button>
-        <button class="top-btn" onclick="window.location.href='/series'" style="background:linear-gradient(135deg, #F59E0B, #D97706); display:flex; align-items:center; justify-content:center;" title="Series">
+        <button class="top-btn" onclick="window.location.href = window.addAuthParams('/series')" style="background:linear-gradient(135deg, #F59E0B, #D97706); display:flex; align-items:center; justify-content:center;" title="Series">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>
         </button>
-        <button class="top-btn" onclick="window.location.href='/epg'" style="background:linear-gradient(135deg, #3B82F6, #2563EB); display:flex; align-items:center; justify-content:center;" title="Guide">
+        <button class="top-btn" onclick="window.location.href = window.addAuthParams('/epg')" style="background:linear-gradient(135deg, #3B82F6, #2563EB); display:flex; align-items:center; justify-content:center;" title="Guide">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19,4H18V2H16V4H8V2H6V4H5C3.89,4 3.01,4.9 3.01,6L3,20A2,2 0 0,0 5,22H19A2,2 0 0,0 21,20V6A2,2 0 0,0 19,4M19,20H5V10H19V20M9,14H7V12H9V14M13,14H11V12H13V14M17,14H15V12H17V14M9,18H7V16H9V18M13,18H11V16H13V18M17,18H15V16H17V18Z"/></svg>
         </button>
         <button class="top-btn" data-cmd="home" style="background:#1A2035; display:flex; align-items:center; justify-content:center;">
