@@ -57,6 +57,17 @@ function initRemoteServer(options) {
                 return res.status(403).send('Remote control is disabled in Settings.');
             }
 
+            // Sync query parameters (token / deviceId) to cookies so that sub-pages/API calls are fully authorized in WebViews
+            if (req.query.deviceId) {
+                res.cookie('aivue_device_id', req.query.deviceId, { maxAge: 31536000000, httpOnly: true });
+                req.headers.cookie = (req.headers.cookie || '') + `; aivue_device_id=${req.query.deviceId}`;
+            }
+            if (req.query.token && currentSettings.password && req.query.token === currentSettings.password) {
+                const expectedAuth = Buffer.from((currentSettings.username || 'aivue') + ':' + currentSettings.password).toString('base64');
+                res.cookie('aivue_auth', expectedAuth, { maxAge: 31536000000, httpOnly: true });
+                req.headers.cookie = (req.headers.cookie || '') + `; aivue_auth=${expectedAuth}`;
+            }
+
             if (currentSettings.username && currentSettings.password) {
                 const expectedAuth = Buffer.from(currentSettings.username + ':' + currentSettings.password).toString('base64');
                 const authCookie = getCookie(req, 'aivue_auth');
@@ -726,6 +737,9 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
 
         // ------------------ Web UI Remote ------------------
         app.get('/remote', (req, res) => {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
             res.send(`
 <!DOCTYPE html>
 <html lang="en">
@@ -745,70 +759,153 @@ if (window.location.username || window.location.password) {
 <title>AIVue Remote</title>
 <style>
 *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body{ background:#0f172a; font-family:Arial,sans-serif; color:white; min-height:100vh; display:flex; justify-content:center; align-items:center; padding:10px; overflow-x:hidden; }
-.remote{ width:100%; max-width:420px; display:flex; flex-direction:column; gap:10px; margin:auto; }
-.row{ display:grid; gap:8px; }
+body{ background:#0B0F19; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:#E2E8F0; min-height:100vh; display:flex; justify-content:center; align-items:center; padding:16px; overflow-x:hidden; }
+.remote{ width:100%; max-width:390px; display:flex; flex-direction:column; gap:16px; margin:auto; }
+.row{ display:grid; gap:10px; }
 .row-4{ grid-template-columns:repeat(4,1fr); }
 .row-3{ grid-template-columns:repeat(3,1fr); }
 .row-2{ grid-template-columns:repeat(2,1fr); }
-button, a.top-btn { border:none; border-radius:12px; background:#1e293b; color:white; font-size:16px; font-weight:600; height:50px; cursor:pointer; transition:.15s; text-decoration:none; display:flex; align-items:center; justify-content:center; }
-button:active, a.top-btn:active { transform:scale(.95); }
-.top-btn{ height:45px; }
-.power{ background:#dc2626; }
-.guide{ background:#7c3aed; }
-.dpad{ display:flex; flex-direction:column; align-items:center; gap:8px; margin:5px 0; }
-.dpad button{ width:60px; height:60px; border-radius:50%; }
-.middle{ display:flex; align-items:center; gap:12px; }
-.ok{ width:75px !important; height:75px !important; border-radius:50%; background:#7c3aed; font-size:20px; }
-.playback button{ font-size:20px; }
-.secondary{ background:#334155; }
-.header-img{ display:block; margin:0 auto; max-height:120px; min-height:100px; max-width:100%; object-fit:contain; }
+button, a.top-btn { border:none; border-radius:16px; background:#1A2035; color:#E2E8F0; font-size:15px; font-weight:600; height:54px; cursor:pointer; transition:all 0.15s ease; text-decoration:none; display:flex; align-items:center; justify-content:center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.03); }
+button:active, a.top-btn:active { transform:scale(.95); background:#232A46; }
+.top-btn{ height:48px; border-radius:14px; }
+.power{ background:linear-gradient(135deg, #EF4444, #DC2626); color:white; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.25); }
+.power:active{ background:#B91C1C; }
+.secondary{ background:#2A334D; }
+.header-img{ display:block; margin:0 auto; max-height:100px; min-height:80px; max-width:100%; object-fit:contain; filter: drop-shadow(0 8px 16px rgba(124, 58, 237, 0.25)); }
+
+/* Circular D-Pad Styling */
+.dpad-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 10px 0;
+}
+.dpad-wheel {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    background: radial-gradient(circle, #1A2035 40%, #101424 100%);
+    border-radius: 50%;
+    border: 2px solid rgba(124, 58, 237, 0.35);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4), inset 0 2px 8px rgba(255,255,255,0.05);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.dpad-btn {
+    position: absolute;
+    background: transparent;
+    border: none;
+    color: #94A3B8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    box-shadow: none;
+    border-radius: 0;
+}
+.dpad-btn:active {
+    color: #A78BFA;
+    transform: scale(0.9);
+}
+.dpad-btn.up {
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 50px;
+}
+.dpad-btn.right {
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    width: 50px;
+    height: 60px;
+}
+.dpad-btn.down {
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 50px;
+}
+.dpad-btn.left {
+    top: 50%;
+    left: 12px;
+    transform: translateY(-50%);
+    width: 50px;
+    height: 60px;
+}
+.dpad-btn.ok {
+    position: relative;
+    width: 84px;
+    height: 84px;
+    background: linear-gradient(135deg, #7C3AED, #4F46E5);
+    color: white;
+    border-radius: 50%;
+    font-size: 18px;
+    font-weight: bold;
+    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.dpad-btn.ok:active {
+    transform: scale(0.95);
+    background: #6D28D9;
+}
 </style>
 </head>
 <body>
 <div class="remote">
-    <img src="/player.png" alt="AIVue Remote" class="header-img">
     <!-- Search -->
-    <input type="text" id="remoteSearchBox" placeholder="Search channels..." autocomplete="off" style="width:100%; padding:12px; border-radius:12px; border:none; background:#1e293b; color:white; font-size:16px; outline:none; text-align:center; margin-bottom: 5px;">
+    <input type="text" id="remoteSearchBox" placeholder="Search channels..." autocomplete="off" style="width:100%; padding:14px; border-radius:14px; border:none; background:#1A2035; color:white; font-size:16px; outline:none; text-align:center; margin-bottom: 2px; border: 1px solid rgba(255,255,255,0.03); box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
     <!-- Top Buttons -->
     <div class="row row-4">
-        <button class="top-btn" data-cmd="livetv" style="background:#ef4444; display:flex; align-items:center; justify-content:center;">
+        <button class="top-btn" data-cmd="livetv" style="background:linear-gradient(135deg, #EF4444, #DC2626); display:flex; align-items:center; justify-content:center;">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M21,3H3C1.89,3 1,3.89 1,5V17A2,2 0 0,0 3,19H8V21H16V19H21A2,2 0 0,0 23,17V5C23,3.89 22.1,3 21,3M21,17H3V5H21V17Z"/></svg>
         </button>
-        <button class="top-btn" onclick="window.location.href='/movies'" style="background:#22c55e; display:flex; align-items:center; justify-content:center;" title="Movies">
+        <button class="top-btn" onclick="window.location.href='/movies'" style="background:linear-gradient(135deg, #22C55E, #16A34A); display:flex; align-items:center; justify-content:center;" title="Movies">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M18 4v1h-2V4c0-.55-.45-1-1-1H9c-.55 0-1 .45-1 1v1H6V4c0-.55-.45-1-1-1s-1 .45-1 1v16c0 .55.45 1 1 1s1-.45 1-1v-1h2v1c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-1h2v1c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1s-1 .45-1 1zM8 17H6v-2h2v2zm0-4H6v-2h2v2zm0-4H6V7h2v2zm10 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z"/></svg>
         </button>
-        <button class="top-btn" onclick="window.location.href='/series'" style="background:#eab308; display:flex; align-items:center; justify-content:center;" title="Series">
+        <button class="top-btn" onclick="window.location.href='/series'" style="background:linear-gradient(135deg, #F59E0B, #D97706); display:flex; align-items:center; justify-content:center;" title="Series">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>
         </button>
-        <button class="top-btn" onclick="window.location.href='/epg'" style="background:#3b82f6; display:flex; align-items:center; justify-content:center;" title="Guide">
+        <button class="top-btn" onclick="window.location.href='/epg'" style="background:linear-gradient(135deg, #3B82F6, #2563EB); display:flex; align-items:center; justify-content:center;" title="Guide">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19,4H18V2H16V4H8V2H6V4H5C3.89,4 3.01,4.9 3.01,6L3,20A2,2 0 0,0 5,22H19A2,2 0 0,0 21,20V6A2,2 0 0,0 19,4M19,20H5V10H19V20M9,14H7V12H9V14M13,14H11V12H13V14M17,14H15V12H17V14M9,18H7V16H9V18M13,18H11V16H13V18M17,18H15V16H17V18Z"/></svg>
         </button>
-        <button class="top-btn" data-cmd="home" style="background:#334155; display:flex; align-items:center; justify-content:center;">
+        <button class="top-btn" data-cmd="home" style="background:#1A2035; display:flex; align-items:center; justify-content:center;">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
         </button>
-        <button class="top-btn" data-cmd="fullscreen" style="background:#334155; display:flex; align-items:center; justify-content:center; grid-column: span 2;" title="Fullscreen">
+        <button class="top-btn" data-cmd="fullscreen" style="background:#1A2035; display:flex; align-items:center; justify-content:center; grid-column: span 2;" title="Fullscreen">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
         </button>
-        <button class="top-btn" data-cmd="back" style="background:#334155; display:flex; align-items:center; justify-content:center;">
+        <button class="top-btn" data-cmd="back" style="background:#1A2035; display:flex; align-items:center; justify-content:center;">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
         </button>
     </div>
-    <!-- D-Pad -->
-    <div class="dpad">
-        <button data-cmd="up">▲</button>
-        <div class="middle">
-            <button data-cmd="left">◄</button>
-            <button class="ok" data-cmd="ok">OK</button>
-            <button data-cmd="right">►</button>
+    <!-- Circular D-Pad -->
+    <div class="dpad-container">
+        <div class="dpad-wheel">
+            <button class="dpad-btn up" data-cmd="up" aria-label="Up">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M7.41,15.41L12,10.83L16.59,15.41L18,14L12,8L6,14L7.41,15.41Z"/></svg>
+            </button>
+            <button class="dpad-btn right" data-cmd="right" aria-label="Right">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/></svg>
+            </button>
+            <button class="dpad-btn down" data-cmd="down" aria-label="Down">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z"/></svg>
+            </button>
+            <button class="dpad-btn left" data-cmd="left" aria-label="Left">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z"/></svg>
+            </button>
+            <button class="dpad-btn ok" data-cmd="ok" aria-label="OK">OK</button>
         </div>
-        <button data-cmd="down">▼</button>
     </div>
     <!-- Volume / Channel -->
     <div class="row row-2">
-        <button data-cmd="volup">VOL +</button>
+        <button data-cmd="volup" style="display:flex; gap:8px;"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.85 14,18.71V20.77C18,19.86 21,16.28 21,12C21,7.72 18,4.14 14,3.23M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.77 16.5,12M3,9V15H7L12,20V4L7,9H3Z"/></svg> VOL +</button>
         <button data-cmd="chup">CH +</button>
-        <button data-cmd="voldown">VOL −</button>
+        <button data-cmd="voldown" style="display:flex; gap:8px;"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12,4L7,9H3V15H7L12,20V4M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.77 16.5,12M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.85 14,18.71V20.77C18,19.86 21,16.28 21,12C21,7.72 18,4.14 14,3.23Z"/></svg> VOL −</button>
         <button data-cmd="chdown">CH −</button>
     </div>
     <!-- Extras -->

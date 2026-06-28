@@ -872,3 +872,22 @@ body.theme-green select option {
 body.theme-black select option {
     background-color: #0d0d0d !important;
 }
+
+/* ─── Floating window controls overlay (visible in fullscreen) ─── */
+.fs-win-controls {
+    position: fixed !important;
+    top: 12px !important;
+    right: 14px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 6px !important;
+    z-index: 99999 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: opacity 0.25s ease !important;
+    -webkit-app-region: no-drag !important;
+}
+.fs-win-controls.visible {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}

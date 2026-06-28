@@ -569,6 +569,8 @@ def resolve_stalker_stream(base_url, mac, cmd, username='', password=''):
                 candidates += [js_data.get('cmd'), js_data.get('url')]
             elif isinstance(js_data, list) and js_data:
                 candidates += [js_data[0].get('cmd'), js_data[0].get('url')]
+            elif isinstance(js_data, str):
+                candidates.append(js_data)
             candidates += [res.get('cmd'), res.get('url'), res.get('stream_url')]
             candidates.append(original_cmd)  # absolute fallback
 
@@ -594,18 +596,30 @@ def resolve_stalker_stream(base_url, mac, cmd, username='', password=''):
     if final_url.lower().startswith('ffmpeg '):
         final_url = final_url[7:].strip()
 
+    # Repair localhost URLs before urlparse to prevent parsing exceptions or failures with malformed characters
+    if 'localhost' in final_url or '127.0.0.1' in final_url:
+        try:
+            parsed_portal = urllib.parse.urlparse(url)
+            portal_netloc = parsed_portal.netloc
+            final_url = final_url.replace('localhost', portal_netloc).replace('127.0.0.1', portal_netloc)
+        except Exception:
+            pass
+
     # Repair relative URLs
     if not final_url.startswith('http'):
         parsed = urllib.parse.urlparse(url)
         final_url = f"{parsed.scheme}://{parsed.netloc}{'' if final_url.startswith('/') else '/'}{final_url}"
     else:
-        # Repair localhost URLs
-        parsed_final = urllib.parse.urlparse(final_url)
-        if parsed_final.hostname in ('localhost', '127.0.0.1'):
-            parsed_portal = urllib.parse.urlparse(url)
-            final_url = final_url.replace(
-                f"{parsed_final.scheme}://{parsed_final.netloc}",
-                f"{parsed_portal.scheme}://{parsed_portal.netloc}"
-            )
+        # Repair localhost URLs (fallback if not replaced above)
+        try:
+            parsed_final = urllib.parse.urlparse(final_url)
+            if parsed_final.hostname in ('localhost', '127.0.0.1'):
+                parsed_portal = urllib.parse.urlparse(url)
+                final_url = final_url.replace(
+                    f"{parsed_final.scheme}://{parsed_final.netloc}",
+                    f"{parsed_portal.scheme}://{parsed_portal.netloc}"
+                )
+        except Exception:
+            pass
 
     return final_url

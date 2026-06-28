@@ -4235,13 +4235,53 @@ function updateHeaderTime() {
 }
 
 let mouseHideTimer = null;
+
+/** Returns (creating on first call) the floating window-controls overlay shown in fullscreen. */
+function getFullscreenWinControls() {
+    let el = document.getElementById('fs-win-controls');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'fs-win-controls';
+        el.className = 'fs-win-controls';
+        el.innerHTML = `
+            <button class="win-btn win-minimize fs-win-btn" id="fs-win-btn-minimize" title="Minimize">
+                <svg viewBox="0 0 10.2 10.2"><line x1="1" y1="5.1" x2="9.2" y2="5.1"></line></svg>
+            </button>
+            <button class="win-btn win-maximize fs-win-btn" id="fs-win-btn-maximize" title="Maximize / Restore">
+                <svg viewBox="0 0 10.2 10.2"><rect x="1" y="1" width="8.2" height="8.2" rx="1"></rect></svg>
+            </button>
+            <button class="win-btn win-close fs-win-btn" id="fs-win-btn-close" title="Close App">
+                <svg viewBox="0 0 10.2 10.2"><line x1="1" y1="1" x2="9.2" y2="9.2"></line><line x1="9.2" y1="1" x2="1" y2="9.2"></line></svg>
+            </button>
+        `;
+        document.body.appendChild(el);
+
+        el.querySelector('#fs-win-btn-minimize').addEventListener('click', () => window.iptvAPI.minimizeWindow());
+        el.querySelector('#fs-win-btn-maximize').addEventListener('click', () => window.iptvAPI.maximizeWindow());
+        el.querySelector('#fs-win-btn-close').addEventListener('click', () => window.iptvAPI.closeWindow());
+
+        // Keep cursor & overlay visible while hovering over the overlay itself
+        el.addEventListener('mouseenter', () => {
+            if (mouseHideTimer) { clearTimeout(mouseHideTimer); mouseHideTimer = null; }
+            document.body.style.cursor = 'default';
+        });
+        el.addEventListener('mouseleave', () => handleFullscreenMouseCursor());
+    }
+    return el;
+}
+
 function handleFullscreenMouseCursor() {
     if (window.isAppFullscreen) {
         document.body.style.cursor = 'default';
+        // Show the floating window controls
+        const fsCtrl = getFullscreenWinControls();
+        fsCtrl.classList.add('visible');
         if (mouseHideTimer) clearTimeout(mouseHideTimer);
         mouseHideTimer = setTimeout(() => {
             if (window.isAppFullscreen) {
                 document.body.style.cursor = 'none';
+                // Hide the floating window controls
+                fsCtrl.classList.remove('visible');
             }
         }, 3000);
     } else {
@@ -4250,6 +4290,9 @@ function handleFullscreenMouseCursor() {
             mouseHideTimer = null;
         }
         document.body.style.cursor = 'default';
+        // Hide the overlay when not in fullscreen (in case it exists)
+        const fsCtrl = document.getElementById('fs-win-controls');
+        if (fsCtrl) fsCtrl.classList.remove('visible');
     }
 }
 window.addEventListener('mousemove', handleFullscreenMouseCursor);
