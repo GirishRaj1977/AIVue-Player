@@ -382,6 +382,55 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                     }));
                 }
             });
+            
+            if (movies.length === 0) {
+                movies = [
+                    {
+                        id: "mock_movie_1",
+                        title: "Sintel",
+                        logo: "https://upload.wikimedia.org/wikipedia/commons/d/d4/Sintel_poster.jpg",
+                        group: "Sci-Fi",
+                        type: "movie",
+                        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+                        playlistId: "mock_playlist",
+                        playlistName: "Mock Playlist",
+                        source: "m3u"
+                    },
+                    {
+                        id: "mock_movie_2",
+                        title: "Tears of Steel",
+                        logo: "https://upload.wikimedia.org/wikipedia/commons/6/69/Tears_of_Steel_poster.jpg",
+                        group: "Sci-Fi",
+                        type: "movie",
+                        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+                        playlistId: "mock_playlist",
+                        playlistName: "Mock Playlist",
+                        source: "m3u"
+                    },
+                    {
+                        id: "mock_movie_3",
+                        title: "Big Buck Bunny",
+                        logo: "https://upload.wikimedia.org/wikipedia/commons/c/c5/Big_Buck_Bunny_Poster.png",
+                        group: "Animation",
+                        type: "movie",
+                        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+                        playlistId: "mock_playlist",
+                        playlistName: "Mock Playlist",
+                        source: "m3u"
+                    },
+                    {
+                        id: "mock_movie_4",
+                        title: "Elephants Dream",
+                        logo: "https://upload.wikimedia.org/wikipedia/commons/e/e8/Elephants_Dream_poster.jpg",
+                        group: "Animation",
+                        type: "movie",
+                        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+                        playlistId: "mock_playlist",
+                        playlistName: "Mock Playlist",
+                        source: "m3u"
+                    }
+                ];
+            }
             res.json(movies);
         });
 
@@ -403,6 +452,33 @@ h2 { text-align:center; margin-top:0; color:#cbd5e1; font-size: 24px; margin-bot
                     }));
                 }
             });
+            
+            if (series.length === 0) {
+                series = [
+                    {
+                        id: "mock_series_1",
+                        title: "Cosmos: A Spacetime Odyssey",
+                        logo: "https://upload.wikimedia.org/wikipedia/commons/e/ea/Cosmos_a_spacetime_odyssey_logo.jpg",
+                        group: "Documentary",
+                        type: "series",
+                        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+                        playlistId: "mock_playlist",
+                        playlistName: "Mock Playlist",
+                        source: "m3u"
+                    },
+                    {
+                        id: "mock_series_2",
+                        title: "Planet Earth",
+                        logo: "https://upload.wikimedia.org/wikipedia/commons/7/7b/Planet_Earth_logo.jpg",
+                        group: "Documentary",
+                        type: "series",
+                        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+                        playlistId: "mock_playlist",
+                        playlistName: "Mock Playlist",
+                        source: "m3u"
+                    }
+                ];
+            }
             res.json(series);
         });
 
