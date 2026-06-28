@@ -162,7 +162,7 @@ function sendEnded() {
 function renderNextLog() {
     if (currentLogIndex >= startupLogs.length) {
         progressFill.style.width = '100%';
-        setTimeout(sendEnded, 2000); // 2s pause to match startup load
+        setTimeout(sendEnded, 3500); // 3.5s pause to match startup load
         return;
     }
     
@@ -186,12 +186,12 @@ function renderNextLog() {
     currentLogIndex++;
     
     // Organic-looking timing for the simulator
-    const nextTimeout = currentLogIndex === startupLogs.length - 1 ? 250 : Math.random() * 150 + 100;
+    const nextTimeout = currentLogIndex === startupLogs.length - 1 ? 400 : Math.random() * 200 + 150;
     setTimeout(renderNextLog, nextTimeout);
 }
 
 // Start simulation
-setTimeout(renderNextLog, 300);
+setTimeout(renderNextLog, 600);
 
 // Failsafe exit timer
 setTimeout(sendEnded, 8000);
